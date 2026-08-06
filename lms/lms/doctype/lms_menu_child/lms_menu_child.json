@@ -1,0 +1,36 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-06 11:22:55.542605",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "menu_item"
+ ],
+ "fields": [
+  {
+   "fieldname": "menu_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Menu Item",
+   "options": "LMS Menu Item",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-06 11:23:26.135611",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Menu Child",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
