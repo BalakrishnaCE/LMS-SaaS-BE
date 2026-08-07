@@ -1,44 +1,36 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:team_name",
- "creation": "2026-08-07 12:19:04.847581",
+ "autoname": "field:category_name",
+ "creation": "2026-08-07 13:03:06.934263",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "team_name",
-  "team_lead",
-  "is_active"
+  "category_name",
+  "description"
  ],
  "fields": [
   {
-   "fieldname": "team_name",
+   "fieldname": "category_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Team Name",
+   "label": "Category Name",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "team_lead",
-   "fieldtype": "Link",
-   "label": "Team Lead",
-   "options": "User"
-  },
-  {
-   "default": "1",
-   "fieldname": "is_active",
-   "fieldtype": "Check",
-   "label": "Is Active\t"
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 12:23:24.864670",
+ "modified": "2026-08-07 13:10:02.594423",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Team",
+ "name": "LMS Course Category",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [

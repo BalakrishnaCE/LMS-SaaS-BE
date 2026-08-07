@@ -1,0 +1,96 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:note_title",
+ "creation": "2026-08-07 15:42:15.055008",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "note_title",
+  "note_content",
+  "reference_module",
+  "reference_lesson",
+  "reference_chapter",
+  "is_private"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "note_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Note Title",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "note_content",
+   "fieldtype": "Text Editor",
+   "in_list_view": 1,
+   "label": "Note Content",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_module",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Reference Module",
+   "options": "LMS Module",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_lesson",
+   "fieldtype": "Link",
+   "label": "Reference Lesson",
+   "options": "LMS Lesson"
+  },
+  {
+   "fieldname": "reference_chapter",
+   "fieldtype": "Link",
+   "label": "Reference Chapter",
+   "options": "LMS Chapter"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_private",
+   "fieldtype": "Check",
+   "label": "Is Private"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-07 15:42:15.055008",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Learner Note",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

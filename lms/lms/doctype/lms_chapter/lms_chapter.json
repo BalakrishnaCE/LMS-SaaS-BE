@@ -1,44 +1,43 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:team_name",
- "creation": "2026-08-07 12:19:04.847581",
+ "autoname": "field:title",
+ "creation": "2026-08-07 12:54:25.063579",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "team_name",
-  "team_lead",
-  "is_active"
+  "title",
+  "scoring",
+  "contents"
  ],
  "fields": [
   {
-   "fieldname": "team_name",
+   "fieldname": "title",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Team Name",
+   "label": "Title",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "team_lead",
-   "fieldtype": "Link",
-   "label": "Team Lead",
-   "options": "User"
+   "fieldname": "scoring",
+   "fieldtype": "Float",
+   "label": "Scoring"
   },
   {
-   "default": "1",
-   "fieldname": "is_active",
-   "fieldtype": "Check",
-   "label": "Is Active\t"
+   "fieldname": "contents",
+   "fieldtype": "Table",
+   "label": "Contents",
+   "options": "LMS Chapter Content"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 12:23:24.864670",
+ "modified": "2026-08-07 12:57:06.453787",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Team",
+ "name": "LMS Chapter",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [

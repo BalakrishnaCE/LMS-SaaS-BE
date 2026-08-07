@@ -1,44 +1,43 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:team_name",
- "creation": "2026-08-07 12:19:04.847581",
+ "autoname": "field:lesson_name",
+ "creation": "2026-08-07 12:57:37.766543",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "team_name",
-  "team_lead",
-  "is_active"
+  "lesson_name",
+  "description",
+  "chapters"
  ],
  "fields": [
   {
-   "fieldname": "team_name",
+   "fieldname": "lesson_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Team Name",
+   "label": "Lesson Name",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "team_lead",
-   "fieldtype": "Link",
-   "label": "Team Lead",
-   "options": "User"
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
   },
   {
-   "default": "1",
-   "fieldname": "is_active",
-   "fieldtype": "Check",
-   "label": "Is Active\t"
+   "fieldname": "chapters",
+   "fieldtype": "Table",
+   "label": "Chapters",
+   "options": "LMS Lesson Chapter"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 12:23:24.864670",
+ "modified": "2026-08-07 12:59:45.640218",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Team",
+ "name": "LMS Lesson",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [

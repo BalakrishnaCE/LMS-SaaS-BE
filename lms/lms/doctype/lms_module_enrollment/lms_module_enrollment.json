@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "autoname": "autoincrement",
+ "creation": "2026-08-07 15:42:14.553153",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "module",
+  "assignment",
+  "status",
+  "progress_percentage",
+  "total_score",
+  "started_on",
+  "completed_on",
+  "lesson_progress",
+  "chapter_progress"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "module",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Module",
+   "options": "LMS Module",
+   "reqd": 1
+  },
+  {
+   "fieldname": "assignment",
+   "fieldtype": "Link",
+   "label": "Assignment",
+   "options": "LMS Module Assignment"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "In Progress\nCompleted\nFailed\nNot started",
+   "reqd": 1
+  },
+  {
+   "fieldname": "progress_percentage",
+   "fieldtype": "Float",
+   "label": "Progress Percentage"
+  },
+  {
+   "fieldname": "total_score",
+   "fieldtype": "Float",
+   "label": "Total Score"
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "label": "Started On"
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed On"
+  },
+  {
+   "fieldname": "lesson_progress",
+   "fieldtype": "Table",
+   "label": "Lesson Progress",
+   "options": "LMS Lesson Progress"
+  },
+  {
+   "fieldname": "chapter_progress",
+   "fieldtype": "Table",
+   "label": "Chapter Progress",
+   "options": "LMS Chapter Progress"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-07 15:42:14.553153",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Module Enrollment",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

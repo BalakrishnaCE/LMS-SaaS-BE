@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-07 15:42:12.703708",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "interaction_type",
+  "timeline_seconds",
+  "x_coordinate",
+  "y_coordinate",
+  "element_text",
+  "secondary_text",
+  "linked_record_type",
+  "linked_record_name",
+  "is_correct"
+ ],
+ "fields": [
+  {
+   "fieldname": "interaction_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Interaction Type",
+   "options": "Text Popup\nLink\nVideo Popup\nEmbedded Quiz\nDrag Item\nDrop Zone\nBranching Button\nFlashcard Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "timeline_seconds",
+   "fieldtype": "Float",
+   "label": "Timeline Timestamp"
+  },
+  {
+   "fieldname": "x_coordinate",
+   "fieldtype": "Float",
+   "label": "X Coordinate"
+  },
+  {
+   "fieldname": "y_coordinate",
+   "fieldtype": "Float",
+   "label": "Y Coordinate"
+  },
+  {
+   "fieldname": "element_text",
+   "fieldtype": "Text Editor",
+   "label": "Element Text"
+  },
+  {
+   "fieldname": "secondary_text",
+   "fieldtype": "Text Editor",
+   "label": "Secondary Text"
+  },
+  {
+   "fieldname": "linked_record_type",
+   "fieldtype": "Link",
+   "label": "Linked Record Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "linked_record_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Linked Record",
+   "options": "linked_record_type"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_correct",
+   "fieldtype": "Check",
+   "label": "Is Correct Answer"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-07 15:42:12.703708",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Interactive Element",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
