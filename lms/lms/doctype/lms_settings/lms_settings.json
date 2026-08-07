@@ -1,55 +1,49 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:team_name",
- "creation": "2026-08-07 12:19:04.847581",
+ "creation": "2026-08-07 15:42:15.476896",
  "doctype": "DocType",
+ "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "team_name",
-  "team_lead",
-  "is_active"
+  "brand_logo",
+  "primary_color",
+  "enable_discussions"
  ],
  "fields": [
   {
-   "fieldname": "team_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Team Name",
-   "reqd": 1,
-   "unique": 1
+   "fieldname": "brand_logo",
+   "fieldtype": "Attach Image",
+   "label": "Brand Logo"
   },
   {
-   "fieldname": "team_lead",
-   "fieldtype": "Link",
-   "label": "Team Lead",
-   "options": "User"
+   "fieldname": "primary_color",
+   "fieldtype": "Color",
+   "label": "Primary Color"
   },
   {
-   "default": "1",
-   "fieldname": "is_active",
+   "default": "0",
+   "fieldname": "enable_discussions",
    "fieldtype": "Check",
-   "label": "Is Active\t"
+   "label": "Enable Discussions"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
+ "issingle": 1,
  "links": [],
- "modified": "2026-08-07 12:23:24.864670",
+ "modified": "2026-08-07 15:42:15.476896",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Team",
- "naming_rule": "By fieldname",
+ "name": "LMS Settings",
  "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
    "delete": 1,
    "email": 1,
-   "export": 1,
    "print": 1,
    "read": 1,
-   "report": 1,
    "role": "System Manager",
    "share": 1,
    "write": 1

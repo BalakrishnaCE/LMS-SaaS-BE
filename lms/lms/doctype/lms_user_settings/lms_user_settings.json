@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:system_user",
+ "creation": "2026-08-07 12:25:28.578561",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "system_user",
+  "team",
+  "theme",
+  "section_break_zzos",
+  "notify_deadlines",
+  "notify_reminders",
+  "column_break_rrvr",
+  "notify_discussions",
+  "notify_messages"
+ ],
+ "fields": [
+  {
+   "fieldname": "system_user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "System User",
+   "options": "User",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "team",
+   "fieldtype": "Link",
+   "label": "Team",
+   "options": "LMS Team"
+  },
+  {
+   "fieldname": "theme",
+   "fieldtype": "Select",
+   "label": "Theme",
+   "options": "Light\nDark\nSystem"
+  },
+  {
+   "fieldname": "section_break_zzos",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "notify_deadlines",
+   "fieldtype": "Check",
+   "label": "Notify Deadlines"
+  },
+  {
+   "default": "1",
+   "fieldname": "notify_reminders",
+   "fieldtype": "Check",
+   "label": "Notify Reminders"
+  },
+  {
+   "fieldname": "column_break_rrvr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "notify_discussions",
+   "fieldtype": "Check",
+   "label": "\tNotify Discussions"
+  },
+  {
+   "default": "1",
+   "fieldname": "notify_messages",
+   "fieldtype": "Check",
+   "label": "Notify Messages"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-07 12:32:04.141781",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS User Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
