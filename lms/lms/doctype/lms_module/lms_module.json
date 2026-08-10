@@ -12,9 +12,14 @@
   "status",
   "description",
   "image",
+  "duration",
+  "order",
   "lessons",
+  "is_score_required",
+  "is_mandatory",
+  "complete_all_lessons",
+  "enable_certificate",
   "total_score",
-  "final_assessment",
   "final_assessments"
  ],
  "fields": [
@@ -51,21 +56,57 @@
    "label": "Image"
   },
   {
+   "description": "Expected number of days for a learner to complete this module. Used to calculate due dates in assignments.",
+   "fieldname": "duration",
+   "fieldtype": "Int",
+   "label": "Duration (Days)"
+  },
+  {
+   "description": "Display sequence of this module in the catalog",
+   "fieldname": "order",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Order",
+   "reqd": 1
+  },
+  {
    "fieldname": "lessons",
    "fieldtype": "Table",
    "label": "Lessons",
-   "options": "LMS Module Lesson"
+   "options": "LMS Module Lesson Child"
   },
   {
+   "default": "0",
+   "description": "If checked, total_score validation applies. Learner must meet the score to pass.",
+   "fieldname": "is_score_required",
+   "fieldtype": "Check",
+   "label": "Is Score Required"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "label": "Is Mandatory"
+  },
+  {
+   "default": "0",
+   "fieldname": "complete_all_lessons",
+   "fieldtype": "Check",
+   "label": "Complete All Lessons"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_certificate",
+   "fieldtype": "Check",
+   "label": "Enable Certificate"
+  },
+  {
+   "depends_on": "is_score_required",
+   "description": "Auto-calculated by backend from all scored content inside this module",
    "fieldname": "total_score",
    "fieldtype": "Float",
-   "label": "Total Score"
-  },
-  {
-   "fieldname": "final_assessment",
-   "fieldtype": "Link",
-   "label": "Final Assessment",
-   "options": "LMS Quiz"
+   "label": "Total Score",
+   "read_only": 1
   },
   {
    "fieldname": "final_assessments",
@@ -77,10 +118,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.215208",
+ "modified": "2026-08-10 12:03:14.852934",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

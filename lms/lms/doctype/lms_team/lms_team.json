@@ -7,9 +7,9 @@
  "engine": "InnoDB",
  "field_order": [
   "team_name",
-  "is_active",
   "team_leads",
-  "learners"
+  "learners",
+  "is_active"
  ],
  "fields": [
   {
@@ -42,7 +42,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:11:54.752417",
+ "modified": "2026-08-10 11:25:16.164014",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Team",

@@ -21,9 +21,9 @@
   },
   {
    "fieldname": "selected_option",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Selected Option",
-   "options": "LMS Quiz Option"
+   "description": "Stores the text of the option the learner selected. e.g., 'Policy on Sexual Harassment at Workplace'"
   },
   {
    "default": "0",

@@ -7,14 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "system_user",
-  "team",
   "theme",
-  "section_break_zzos",
-  "notify_deadlines",
-  "notify_reminders",
-  "column_break_rrvr",
-  "notify_discussions",
-  "notify_messages"
+  "notification_preferences"
  ],
  "fields": [
   {
@@ -27,54 +21,22 @@
    "unique": 1
   },
   {
-   "fieldname": "team",
-   "fieldtype": "Link",
-   "label": "Team",
-   "options": "LMS Team"
-  },
-  {
    "fieldname": "theme",
    "fieldtype": "Select",
    "label": "Theme",
    "options": "Light\nDark\nSystem"
   },
   {
-   "fieldname": "section_break_zzos",
-   "fieldtype": "Section Break"
-  },
-  {
-   "default": "1",
-   "fieldname": "notify_deadlines",
-   "fieldtype": "Check",
-   "label": "Notify Deadlines"
-  },
-  {
-   "default": "1",
-   "fieldname": "notify_reminders",
-   "fieldtype": "Check",
-   "label": "Notify Reminders"
-  },
-  {
-   "fieldname": "column_break_rrvr",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "1",
-   "fieldname": "notify_discussions",
-   "fieldtype": "Check",
-   "label": "\tNotify Discussions"
-  },
-  {
-   "default": "1",
-   "fieldname": "notify_messages",
-   "fieldtype": "Check",
-   "label": "Notify Messages"
+   "fieldname": "notification_preferences",
+   "fieldtype": "Table",
+   "label": "Notification Preferences",
+   "options": "LMS Notification Preference"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 12:32:04.141781",
+ "modified": "2026-08-10 06:13:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS User Settings",

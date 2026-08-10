@@ -1,13 +1,14 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:title",
- "creation": "2026-08-07 12:54:25.063579",
+ "creation": "2026-08-10 06:39:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "title",
-  "contents"
+  "is_assessment",
+  "track_progress",
+  "interactive_elements"
  ],
  "fields": [
   {
@@ -19,21 +20,36 @@
    "unique": 1
   },
   {
-   "fieldname": "contents",
+   "default": "0",
+   "fieldname": "is_assessment",
+   "fieldtype": "Check",
+   "label": "Is Assessment"
+  },
+  {
+   "default": "1",
+   "fieldname": "track_progress",
+   "fieldtype": "Check",
+   "label": "Track Progress"
+  },
+  {
+   "fieldname": "interactive_elements",
    "fieldtype": "Table",
-   "label": "Contents",
-   "options": "LMS Chapter Content"
+   "label": "Interactive Elements",
+   "options": "LMS Interactive Element"
   }
  ],
- "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 06:37:00.000000",
+ "modified": "2026-08-10 06:39:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Chapter",
+ "name": "LMS Flashcard Content",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
  "permissions": [
   {
    "create": 1,
@@ -48,9 +64,5 @@
    "write": 1
   }
  ],
- "row_format": "Dynamic",
- "rows_threshold_for_grid_search": 20,
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+ "autoname": "field:title"
 }

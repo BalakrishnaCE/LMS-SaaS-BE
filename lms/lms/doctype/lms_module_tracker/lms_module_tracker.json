@@ -8,7 +8,6 @@
  "field_order": [
   "user",
   "module",
-  "assignment",
   "status",
   "progress_percentage",
   "total_score",
@@ -34,12 +33,6 @@
    "label": "Module",
    "options": "LMS Module",
    "reqd": 1
-  },
-  {
-   "fieldname": "assignment",
-   "fieldtype": "Link",
-   "label": "Assignment",
-   "options": "LMS Module Assignment"
   },
   {
    "fieldname": "status",
@@ -91,7 +84,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.452460",
+ "modified": "2026-08-10 14:23:45.864835",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module Tracker",
