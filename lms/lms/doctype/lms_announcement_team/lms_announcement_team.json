@@ -1,33 +1,20 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2026-08-07 12:47:19.297520",
+ "creation": "2026-08-10 11:01:54.775194",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "content_type",
-  "content_data",
-  "order"
+  "team"
  ],
  "fields": [
   {
-   "fieldname": "content_type",
+   "fieldname": "team",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Content Type",
-   "options": "DocType",
-   "reqd": 1
-  },
-  {
-   "fieldname": "content_data",
-   "fieldtype": "Text Editor",
-   "label": "Content Data"
-  },
-  {
-   "fieldname": "order",
-   "fieldtype": "Int",
-   "label": "Order",
+   "label": "Team",
+   "options": "LMS Team",
    "reqd": 1
   }
  ],
@@ -35,10 +22,11 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.358771",
+ "modified": "2026-08-10 11:01:54.775194",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Chapter Content",
+ "name": "LMS Announcement Team",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",

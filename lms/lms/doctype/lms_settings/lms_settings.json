@@ -8,7 +8,8 @@
  "field_order": [
   "brand_logo",
   "primary_color",
-  "enable_discussions"
+  "enable_discussions",
+  "feature_toggles"
  ],
  "fields": [
   {
@@ -26,13 +27,19 @@
    "fieldname": "enable_discussions",
    "fieldtype": "Check",
    "label": "Enable Discussions"
+  },
+  {
+   "fieldname": "feature_toggles",
+   "fieldtype": "Table",
+   "label": "Feature Toggles",
+   "options": "LMS Feature Toggle"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-07 15:42:15.476896",
+ "modified": "2026-08-10 11:01:55.988976",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Settings",

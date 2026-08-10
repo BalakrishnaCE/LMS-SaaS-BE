@@ -15,7 +15,8 @@
   "started_on",
   "completed_on",
   "lesson_progress",
-  "chapter_progress"
+  "chapter_progress",
+  "content_progress"
  ],
  "fields": [
   {
@@ -79,15 +80,21 @@
    "fieldtype": "Table",
    "label": "Chapter Progress",
    "options": "LMS Chapter Progress"
+  },
+  {
+   "fieldname": "content_progress",
+   "fieldtype": "Table",
+   "label": "Content Progress",
+   "options": "LMS Content Progress"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:14.553153",
+ "modified": "2026-08-10 11:01:55.452460",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Module Enrollment",
+ "name": "LMS Module Tracker",
  "owner": "Administrator",
  "permissions": [
   {

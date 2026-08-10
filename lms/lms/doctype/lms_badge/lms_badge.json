@@ -1,0 +1,92 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:badge_name",
+ "creation": "2026-08-10 11:00:51.654481",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "badge_name",
+  "badge_image",
+  "description",
+  "criteria_type",
+  "module",
+  "minimum_score",
+  "is_active"
+ ],
+ "fields": [
+  {
+   "fieldname": "badge_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Badge Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "badge_image",
+   "fieldtype": "Attach Image",
+   "label": "Badge Image",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "criteria_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Criteria Type",
+   "options": "Module Completion\nScore Based\nManual Award",
+   "reqd": 1
+  },
+  {
+   "fieldname": "module",
+   "fieldtype": "Link",
+   "label": "Module",
+   "options": "LMS Module"
+  },
+  {
+   "fieldname": "minimum_score",
+   "fieldtype": "Float",
+   "label": "Minimum Score"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-10 11:00:51.654481",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Badge",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

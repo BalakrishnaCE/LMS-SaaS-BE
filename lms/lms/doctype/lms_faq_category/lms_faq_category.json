@@ -1,46 +1,32 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:question",
- "creation": "2026-08-07 15:42:15.398371",
+ "autoname": "field:category_name",
+ "creation": "2026-08-10 11:00:51.583343",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "question",
-  "answer",
-  "category"
+  "category_name"
  ],
  "fields": [
   {
-   "fieldname": "question",
+   "fieldname": "category_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Question",
+   "label": "Category Name",
    "reqd": 1,
    "unique": 1
-  },
-  {
-   "fieldname": "answer",
-   "fieldtype": "Text Editor",
-   "in_list_view": 1,
-   "label": "Answer",
-   "reqd": 1
-  },
-  {
-   "fieldname": "category",
-   "fieldtype": "Link",
-   "label": "Category",
-   "options": "LMS FAQ Category"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.884662",
+ "modified": "2026-08-10 11:00:51.583343",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS FAQ",
+ "name": "LMS FAQ Category",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

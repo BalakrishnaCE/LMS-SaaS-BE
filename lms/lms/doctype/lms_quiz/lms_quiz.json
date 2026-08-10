@@ -12,7 +12,9 @@
   "total_score",
   "randomize_questions",
   "time_limit_mins",
-  "questions"
+  "questions",
+  "is_passing_required",
+  "passing_percentage"
  ],
  "fields": [
   {
@@ -49,12 +51,24 @@
    "fieldtype": "Table",
    "label": "Questions",
    "options": "LMS Quiz Child"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_passing_required",
+   "fieldtype": "Check",
+   "label": "Is Passing Required"
+  },
+  {
+   "depends_on": "eval:doc.is_passing_required==1",
+   "fieldname": "passing_percentage",
+   "fieldtype": "Float",
+   "label": "Passing Percentage"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:13.733663",
+ "modified": "2026-08-10 11:01:55.609568",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Quiz",

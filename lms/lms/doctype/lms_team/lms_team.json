@@ -7,8 +7,9 @@
  "engine": "InnoDB",
  "field_order": [
   "team_name",
-  "team_lead",
-  "is_active"
+  "is_active",
+  "team_leads",
+  "learners"
  ],
  "fields": [
   {
@@ -20,22 +21,28 @@
    "unique": 1
   },
   {
-   "fieldname": "team_lead",
-   "fieldtype": "Link",
-   "label": "Team Lead",
-   "options": "User"
-  },
-  {
    "default": "1",
    "fieldname": "is_active",
    "fieldtype": "Check",
    "label": "Is Active\t"
+  },
+  {
+   "fieldname": "team_leads",
+   "fieldtype": "Table",
+   "label": "Team Leads",
+   "options": "LMS Team Lead"
+  },
+  {
+   "fieldname": "learners",
+   "fieldtype": "Table",
+   "label": "Learners",
+   "options": "LMS Team Member"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 12:23:24.864670",
+ "modified": "2026-08-10 11:11:54.752417",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Team",

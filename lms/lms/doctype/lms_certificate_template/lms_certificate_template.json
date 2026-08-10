@@ -1,46 +1,53 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:question",
- "creation": "2026-08-07 15:42:15.398371",
+ "autoname": "field:template_name",
+ "creation": "2026-08-10 11:00:51.739057",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "question",
-  "answer",
-  "category"
+  "template_name",
+  "html_template",
+  "preview_image",
+  "is_active"
  ],
  "fields": [
   {
-   "fieldname": "question",
+   "fieldname": "template_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Question",
+   "label": "Template Name",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "answer",
+   "fieldname": "html_template",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
-   "label": "Answer",
+   "label": "HTML Template",
    "reqd": 1
   },
   {
-   "fieldname": "category",
-   "fieldtype": "Link",
-   "label": "Category",
-   "options": "LMS FAQ Category"
+   "fieldname": "preview_image",
+   "fieldtype": "Attach Image",
+   "label": "Preview Image"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.884662",
+ "modified": "2026-08-10 11:00:51.739057",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS FAQ",
+ "name": "LMS Certificate Template",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
