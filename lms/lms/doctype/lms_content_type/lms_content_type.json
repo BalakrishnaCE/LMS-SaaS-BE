@@ -1,46 +1,29 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:question",
- "creation": "2026-08-07 15:42:15.398371",
+ "creation": "2026-08-10 11:00:51.319211",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "question",
-  "answer",
-  "category"
+  "is_assessment"
  ],
  "fields": [
   {
-   "fieldname": "question",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Question",
-   "reqd": 1,
-   "unique": 1
-  },
-  {
-   "fieldname": "answer",
-   "fieldtype": "Text Editor",
-   "in_list_view": 1,
-   "label": "Answer",
-   "reqd": 1
-  },
-  {
-   "fieldname": "category",
-   "fieldtype": "Link",
-   "label": "Category",
-   "options": "LMS FAQ Category"
+   "default": "0",
+   "fieldname": "is_assessment",
+   "fieldtype": "Check",
+   "label": "Is Assessment"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.884662",
+ "modified": "2026-08-10 11:00:51.319211",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS FAQ",
+ "name": "LMS Content Type",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [
   {

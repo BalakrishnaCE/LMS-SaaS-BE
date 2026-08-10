@@ -5,5 +5,5 @@
 from frappe.tests.utils import FrappeTestCase
 
 
-class TestLMSModuleEnrollment(FrappeTestCase):
+class TestLMSContentType(FrappeTestCase):
 	pass

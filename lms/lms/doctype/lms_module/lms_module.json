@@ -14,7 +14,8 @@
   "image",
   "lessons",
   "total_score",
-  "final_assessment"
+  "final_assessment",
+  "final_assessments"
  ],
  "fields": [
   {
@@ -65,12 +66,18 @@
    "fieldtype": "Link",
    "label": "Final Assessment",
    "options": "LMS Quiz"
+  },
+  {
+   "fieldname": "final_assessments",
+   "fieldtype": "Table",
+   "label": "Final Assessments",
+   "options": "LMS Module Assessment"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:13.863992",
+ "modified": "2026-08-10 11:01:55.215208",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module",
