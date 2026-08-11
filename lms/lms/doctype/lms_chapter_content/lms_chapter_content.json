@@ -12,7 +12,7 @@
  ],
  "fields": [
   {
-   "description": "Select the exact content type. This controls which record list appears in Content Reference.",
+   "description": "Identifies which DocType the content_reference points to.",
    "fieldname": "content_type",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -21,7 +21,7 @@
    "reqd": 1
   },
   {
-   "description": "Resolves to the specific content record based on content_type selection.",
+   "description": "Resolves to the specific content record based on content_type.",
    "fieldname": "content_reference",
    "fieldtype": "Dynamic Link",
    "in_list_view": 1,
@@ -34,7 +34,8 @@
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Order",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Controls the playback/display sequence"
   }
  ],
  "grid_page_length": 50,

@@ -23,31 +23,32 @@
    "in_list_view": 1,
    "label": "Interaction Type",
    "options": "LMS Interactive Type",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Interactive Type."
   },
   {
    "fieldname": "timeline_seconds",
    "fieldtype": "Float",
    "label": "Timeline Timestamp",
-   "description": "Used for Interactive Video. e.g., 120.5 pauses the video at 2:00"
+   "description": "Used for Interactive Video. Example: 120.5 pauses the video at 2:00"
   },
   {
    "fieldname": "x_coordinate",
    "fieldtype": "Float",
    "label": "X Coordinate",
-   "description": "Percentage X-axis position. Used for Images, Videos, Drag & Drop"
+   "description": "Percentage X-axis. Used for Images, Videos, Drag & Drop"
   },
   {
    "fieldname": "y_coordinate",
    "fieldtype": "Float",
    "label": "Y Coordinate",
-   "description": "Percentage Y-axis position. Used for Images, Videos, Drag & Drop"
+   "description": "Percentage Y-axis. Used for Images, Videos, Drag & Drop"
   },
   {
    "fieldname": "element_text",
    "fieldtype": "Text Editor",
    "label": "Element Text",
-   "description": "Text shown in popup, front of a flashcard, or label of a drag item"
+   "description": "Text shown in the popup, front of a flashcard, or label of a drag item"
   },
   {
    "fieldname": "secondary_text",
@@ -60,21 +61,21 @@
    "fieldtype": "Link",
    "label": "Linked Record Type",
    "options": "DocType",
-   "description": "Admin picks which DocType to embed. e.g., LMS Quiz. Powers the Dynamic Link below."
+   "description": "Admin picks which DocType to embed. e.g., \"LMS Quiz\""
   },
   {
    "fieldname": "linked_record_name",
    "fieldtype": "Dynamic Link",
    "label": "Linked Record",
    "options": "linked_record_type",
-   "description": "Links to the specific embedded record."
+   "description": "Links to the specific Quiz or Node ID"
   },
   {
    "default": "0",
    "fieldname": "is_correct",
    "fieldtype": "Check",
    "label": "Is Correct Answer",
-   "description": "Used for Drag & Drop validation, Poll correct option, Fill in the Blank answer flagging"
+   "description": "Used for Drag & Drop validation or Poll logic"
   }
  ],
  "grid_page_length": 50,

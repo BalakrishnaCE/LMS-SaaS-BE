@@ -18,20 +18,23 @@
    "in_list_view": 1,
    "label": "Question",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the question."
   },
   {
    "fieldname": "answer",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Answer",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Enter the answer."
   },
   {
    "fieldname": "category",
    "fieldtype": "Link",
    "label": "Category",
-   "options": "LMS FAQ Category"
+   "options": "LMS FAQ Category",
+   "description": "CHANGED from plain Data to Link \u2192 LMS FAQ Category. Allows dynamic category management."
   }
  ],
  "grid_page_length": 50,

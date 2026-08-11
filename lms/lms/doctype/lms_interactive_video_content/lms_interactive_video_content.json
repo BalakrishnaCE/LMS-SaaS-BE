@@ -21,24 +21,27 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the title."
   },
   {
    "fieldname": "base_media",
    "fieldtype": "Attach",
-   "label": "Base Media"
+   "label": "Base Media",
+   "description": "Upload the base media file."
   },
   {
    "fieldname": "video_url",
    "fieldtype": "Data",
    "label": "Video URL",
-   "description": "External URL e.g., YouTube, Vimeo. Used if not uploading via base_media."
+   "description": "External URL if not uploading via base_media."
   },
   {
    "default": "0",
    "fieldname": "is_assessment",
    "fieldtype": "Check",
-   "label": "Is Assessment"
+   "label": "Is Assessment",
+   "description": "Toggle to enable or disable is assessment."
   },
   {
    "default": "0",
@@ -59,13 +62,15 @@
    "default": "1",
    "fieldname": "track_progress",
    "fieldtype": "Check",
-   "label": "Track Progress"
+   "label": "Track Progress",
+   "description": "Toggle to enable or disable track progress."
   },
   {
    "fieldname": "interactive_elements",
    "fieldtype": "Table",
    "label": "Interactive Elements",
-   "options": "LMS Interactive Element"
+   "options": "LMS Interactive Element",
+   "description": "Stores timeline popups, embedded quizzes etc."
   }
  ],
  "index_web_pages_for_search": 1,

@@ -15,13 +15,15 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Feature Name",
-   "reqd": 1
+   "reqd": 1,
+   "description": "e.g., \"Discussions\", \"Notes\", \"FAQ\", \"Live Sessions\", \"Leaderboard\""
   },
   {
    "default": "1",
    "fieldname": "enabled",
    "fieldtype": "Check",
-   "label": "Enabled"
+   "label": "Enabled",
+   "description": "Whether this feature is active for the tenant"
   }
  ],
  "grid_page_length": 50,

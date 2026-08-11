@@ -22,7 +22,8 @@
    "in_list_view": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding User."
   },
   {
    "fieldname": "note_title",
@@ -30,14 +31,16 @@
    "in_list_view": 1,
    "label": "Note Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the note title."
   },
   {
    "fieldname": "note_content",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Note Content",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Enter the note content."
   },
   {
    "fieldname": "reference_module",
@@ -45,25 +48,29 @@
    "in_list_view": 1,
    "label": "Reference Module",
    "options": "LMS Module",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Module."
   },
   {
    "fieldname": "reference_lesson",
    "fieldtype": "Link",
    "label": "Reference Lesson",
-   "options": "LMS Lesson"
+   "options": "LMS Lesson",
+   "description": "Link to the corresponding LMS Lesson."
   },
   {
    "fieldname": "reference_chapter",
    "fieldtype": "Link",
    "label": "Reference Chapter",
-   "options": "LMS Chapter"
+   "options": "LMS Chapter",
+   "description": "Link to the corresponding LMS Chapter."
   },
   {
    "default": "1",
    "fieldname": "is_private",
    "fieldtype": "Check",
-   "label": "Is Private"
+   "label": "Is Private",
+   "description": "Toggle to enable or disable is private."
   }
  ],
  "grid_page_length": 50,

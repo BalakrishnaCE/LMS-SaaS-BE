@@ -20,18 +20,21 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the title."
   },
   {
    "fieldname": "base_media",
    "fieldtype": "Attach Image",
-   "label": "Base Media"
+   "label": "Base Media",
+   "description": "Background image with the drop zones drawn on it."
   },
   {
    "default": "0",
    "fieldname": "is_assessment",
    "fieldtype": "Check",
-   "label": "Is Assessment"
+   "label": "Is Assessment",
+   "description": "Toggle to enable or disable is assessment."
   },
   {
    "default": "0",
@@ -52,13 +55,15 @@
    "default": "1",
    "fieldname": "track_progress",
    "fieldtype": "Check",
-   "label": "Track Progress"
+   "label": "Track Progress",
+   "description": "Toggle to enable or disable track progress."
   },
   {
    "fieldname": "interactive_elements",
    "fieldtype": "Table",
    "label": "Interactive Elements",
-   "options": "LMS Interactive Element"
+   "options": "LMS Interactive Element",
+   "description": "Rows store Drag Items and Drop Zones with X/Y coordinates."
   }
  ],
  "index_web_pages_for_search": 1,

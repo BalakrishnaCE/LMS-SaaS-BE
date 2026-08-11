@@ -16,12 +16,13 @@
    "label": "Type Name",
    "reqd": 1,
    "unique": 1,
-   "description": "e.g., Text Popup, Video Popup, Hotspot, Drag Item, Drop Zone, Flashcard, Branching Button, Embedded Quiz"
+   "description": "e.g., \"Text Popup\", \"Video Popup\", \"Hotspot\", \"Drag Item\", \"Drop Zone\", \"Flashcard\", \"Branching Button\", \"Embedded Quiz\". This is also the document name."
   },
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description"
+   "label": "Description",
+   "description": "Explanation of what this interaction type does"
   }
  ],
  "index_web_pages_for_search": 1,

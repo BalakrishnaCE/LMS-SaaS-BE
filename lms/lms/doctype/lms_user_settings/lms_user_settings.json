@@ -18,19 +18,22 @@
    "label": "System User",
    "options": "User",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Link to the corresponding User."
   },
   {
    "fieldname": "theme",
    "fieldtype": "Select",
    "label": "Theme",
-   "options": "Light\nDark\nSystem"
+   "options": "Light\nDark\nSystem",
+   "description": "Select the theme from the dropdown options."
   },
   {
    "fieldname": "notification_preferences",
    "fieldtype": "Table",
    "label": "Notification Preferences",
-   "options": "LMS Notification Preference"
+   "options": "LMS Notification Preference",
+   "description": "Child table for LMS Notification Preference."
   }
  ],
  "grid_page_length": 50,

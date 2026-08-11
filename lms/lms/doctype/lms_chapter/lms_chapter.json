@@ -16,13 +16,15 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the title."
   },
   {
    "fieldname": "contents",
    "fieldtype": "Table",
    "label": "Contents",
-   "options": "LMS Chapter Content"
+   "options": "LMS Chapter Content",
+   "description": "Ordered child table linking to individual content records"
   }
  ],
  "grid_page_length": 50,

@@ -16,12 +16,14 @@
    "in_list_view": 1,
    "label": "Category Name",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the category name."
   },
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description"
+   "label": "Description",
+   "description": "Enter the description."
   }
  ],
  "grid_page_length": 50,

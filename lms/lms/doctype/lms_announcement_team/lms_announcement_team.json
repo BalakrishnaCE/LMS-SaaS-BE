@@ -15,7 +15,8 @@
    "in_list_view": 1,
    "label": "Team",
    "options": "LMS Team",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Team."
   }
  ],
  "grid_page_length": 50,

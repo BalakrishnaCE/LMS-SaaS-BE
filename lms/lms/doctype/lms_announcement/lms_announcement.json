@@ -22,14 +22,16 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the title."
   },
   {
    "fieldname": "message",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Message",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Enter the message."
   },
   {
    "fieldname": "target_audience",
@@ -37,32 +39,37 @@
    "in_list_view": 1,
    "label": "Target Audience",
    "options": "All Users\nSpecific Team",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the target audience from the dropdown options."
   },
   {
    "fieldname": "target_team",
    "fieldtype": "Link",
    "label": "Target Team",
-   "options": "LMS Team"
+   "options": "LMS Team",
+   "description": "Link to the corresponding LMS Team."
   },
   {
    "fieldname": "expires_on",
    "fieldtype": "Date",
-   "label": "Expires On"
+   "label": "Expires On",
+   "description": "Announcement auto-hides after this date"
   },
   {
    "depends_on": "eval:doc.target_audience=='Specific Team'",
    "fieldname": "target_teams",
    "fieldtype": "Table",
    "label": "Target Teams",
-   "options": "LMS Announcement Team"
+   "options": "LMS Announcement Team",
+   "description": "CHANGED from single Link to child table. Visible only when Target Audience is \"Specific Team\". Supports announcing to multiple teams at once."
   },
   {
    "depends_on": "eval:doc.target_audience=='Specific Members'",
    "fieldname": "target_members",
    "fieldtype": "Table",
    "label": "Target Members",
-   "options": "LMS Announcement Member"
+   "options": "LMS Announcement Member",
+   "description": "Visible only when Target Audience is \"Specific Members\". Announces to specific individuals."
   }
  ],
  "grid_page_length": 50,

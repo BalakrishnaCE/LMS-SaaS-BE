@@ -15,24 +15,28 @@
   {
    "fieldname": "brand_logo",
    "fieldtype": "Attach Image",
-   "label": "Brand Logo"
+   "label": "Brand Logo",
+   "description": "Upload the brand logo file."
   },
   {
    "fieldname": "primary_color",
    "fieldtype": "Color",
-   "label": "Primary Color"
+   "label": "Primary Color",
+   "description": "Allows React frontend to fetch the hex code and change themes"
   },
   {
    "default": "0",
    "fieldname": "enable_discussions",
    "fieldtype": "Check",
-   "label": "Enable Discussions"
+   "label": "Enable Discussions",
+   "description": "Toggle to enable or disable enable discussions."
   },
   {
    "fieldname": "feature_toggles",
    "fieldtype": "Table",
    "label": "Feature Toggles",
-   "options": "LMS Feature Toggle"
+   "options": "LMS Feature Toggle",
+   "description": "CHANGED from individual checkboxes to a child table. Allows new features to be toggled without schema changes"
   }
  ],
  "grid_page_length": 50,

@@ -19,7 +19,8 @@
    "in_list_view": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding User."
   },
   {
    "fieldname": "badge",
@@ -27,26 +28,30 @@
    "in_list_view": 1,
    "label": "Badge",
    "options": "LMS Badge",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Badge."
   },
   {
    "fieldname": "module",
    "fieldtype": "Link",
    "label": "Module",
-   "options": "LMS Module"
+   "options": "LMS Module",
+   "description": "The module that triggered this badge award."
   },
   {
    "fieldname": "awarded_on",
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Awarded On",
-   "reqd": 1
+   "reqd": 1,
+   "description": "The exact awarded on."
   },
   {
    "fieldname": "awarded_by",
    "fieldtype": "Link",
    "label": "Awarded By",
-   "options": "User"
+   "options": "User",
+   "description": "Filled when criteria_type is \"Manual Award\". Empty when auto-awarded by the system."
   }
  ],
  "grid_page_length": 50,

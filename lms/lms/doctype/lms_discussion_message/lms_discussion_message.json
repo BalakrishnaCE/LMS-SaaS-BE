@@ -18,27 +18,31 @@
    "in_list_view": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding User."
   },
   {
    "fieldname": "message",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Message",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Actual text typed by the user"
   },
   {
    "fieldname": "timestamp",
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Timestamp",
-   "reqd": 1
+   "reqd": 1,
+   "description": "When the message was typed"
   },
   {
    "fieldname": "reply_to",
    "fieldtype": "Link",
    "label": "Reply To",
-   "options": "LMS Discussion Message"
+   "options": "LMS Discussion Message",
+   "description": "Optional reference to a previous message"
   }
  ],
  "grid_page_length": 50,

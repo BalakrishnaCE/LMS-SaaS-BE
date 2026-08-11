@@ -16,14 +16,16 @@
    "in_list_view": 1,
    "label": "Assessment",
    "options": "LMS Quiz",
-   "reqd": 1
+   "reqd": 1,
+   "description": "The quiz or assessment linked as final evaluation"
   },
   {
    "fieldname": "order",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Order",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Execution order if multiple assessments exist"
   }
  ],
  "grid_page_length": 50,

@@ -14,14 +14,15 @@
    "in_list_view": 1,
    "label": "Type",
    "reqd": 1,
-   "description": "e.g., Deadline, Reminder, Discussion, Message"
+   "description": "e.g., \"Deadline\", \"Reminder\", \"Discussion\", \"Message\""
   },
   {
    "default": "1",
    "fieldname": "enabled",
    "fieldtype": "Check",
    "in_list_view": 1,
-   "label": "Enabled"
+   "label": "Enabled",
+   "description": "Toggle to enable or disable enabled."
   }
  ],
  "index_web_pages_for_search": 0,

@@ -18,7 +18,8 @@
    "in_list_view": 1,
    "label": "Content Type",
    "options": "DocType",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Identifies which content DocType this row tracks. e.g., \"LMS Video Content\""
   },
   {
    "fieldname": "content_reference",
@@ -26,7 +27,8 @@
    "in_list_view": 1,
    "label": "Content Reference",
    "options": "content_type",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Links to the specific content record being tracked."
   },
   {
    "fieldname": "status",
@@ -34,12 +36,14 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Not Started\nIn Progress\nCompleted",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the status from the dropdown options."
   },
   {
    "fieldname": "score",
    "fieldtype": "Float",
-   "label": "Score"
+   "label": "Score",
+   "description": "Score achieved on this content item if it is scored."
   }
  ],
  "grid_page_length": 50,

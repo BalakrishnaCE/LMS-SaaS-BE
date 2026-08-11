@@ -23,46 +23,54 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the title."
   },
   {
    "fieldname": "description",
    "fieldtype": "Text Editor",
-   "label": "Description"
+   "label": "Description",
+   "description": "Enter the description."
   },
   {
    "fieldname": "total_score",
    "fieldtype": "Float",
-   "label": "Total Score"
+   "label": "Total Score",
+   "description": "Numeric value for total score."
   },
   {
    "default": "0",
    "fieldname": "randomize_questions",
    "fieldtype": "Check",
-   "label": "Randomize Questions"
+   "label": "Randomize Questions",
+   "description": "Toggle to enable or disable randomize questions."
   },
   {
    "fieldname": "time_limit_mins",
    "fieldtype": "Int",
-   "label": "Time Limit"
+   "label": "Time Limit",
+   "description": "Time limit in minutes"
   },
   {
    "fieldname": "questions",
    "fieldtype": "Table",
    "label": "Questions",
-   "options": "LMS Quiz Child"
+   "options": "LMS Quiz Child",
+   "description": "Child table for LMS Quiz Child."
   },
   {
    "default": "0",
    "fieldname": "is_passing_required",
    "fieldtype": "Check",
-   "label": "Is Passing Required"
+   "label": "Is Passing Required",
+   "description": "NEW \u2014 If checked, learner must meet the passing percentage to mark this quiz as passed."
   },
   {
    "depends_on": "eval:doc.is_passing_required==1",
    "fieldname": "passing_percentage",
    "fieldtype": "Float",
-   "label": "Passing Percentage"
+   "label": "Passing Percentage",
+   "description": "NEW \u2014 Minimum % score to pass. e.g., 70.0 means learner needs 70% to pass. Visible only if is_passing_required is checked."
   }
  ],
  "grid_page_length": 50,

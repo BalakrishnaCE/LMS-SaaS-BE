@@ -21,7 +21,8 @@
    "in_list_view": 1,
    "label": "Module",
    "options": "LMS Module",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Module."
   },
   {
    "fieldname": "assignment_type",
@@ -29,14 +30,15 @@
    "in_list_view": 1,
    "label": "Assignment Type",
    "options": "Team\nManual",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the assignment type from the dropdown options."
   },
   {
    "fieldname": "assigned_teams",
    "fieldtype": "Table",
    "label": "Assigned Teams",
    "options": "LMS Assignment Team",
-   "description": "Visible only when Assignment Type is Team"
+   "description": "Visible only when Assignment Type is \"Team\""
   },
   {
    "fieldname": "learners",
@@ -55,7 +57,8 @@
    "default": "1",
    "fieldname": "is_mandatory",
    "fieldtype": "Check",
-   "label": "Is Mandatory"
+   "label": "Is Mandatory",
+   "description": "Toggle to enable or disable is mandatory."
   }
  ],
  "grid_page_length": 50,

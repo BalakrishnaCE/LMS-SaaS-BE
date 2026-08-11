@@ -24,7 +24,8 @@
    "in_list_view": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding User."
   },
   {
    "fieldname": "module",
@@ -32,7 +33,8 @@
    "in_list_view": 1,
    "label": "Module",
    "options": "LMS Module",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Module."
   },
   {
    "fieldname": "status",
@@ -40,45 +42,53 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "In Progress\nCompleted\nFailed\nNot started",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the status from the dropdown options."
   },
   {
    "fieldname": "progress_percentage",
    "fieldtype": "Float",
-   "label": "Progress Percentage"
+   "label": "Progress Percentage",
+   "description": "0.0 to 100.0"
   },
   {
    "fieldname": "total_score",
    "fieldtype": "Float",
-   "label": "Total Score"
+   "label": "Total Score",
+   "description": "Numeric value for total score."
   },
   {
    "fieldname": "started_on",
    "fieldtype": "Datetime",
-   "label": "Started On"
+   "label": "Started On",
+   "description": "The exact started on."
   },
   {
    "fieldname": "completed_on",
    "fieldtype": "Datetime",
-   "label": "Completed On"
+   "label": "Completed On",
+   "description": "The exact completed on."
   },
   {
    "fieldname": "lesson_progress",
    "fieldtype": "Table",
    "label": "Lesson Progress",
-   "options": "LMS Lesson Progress"
+   "options": "LMS Lesson Progress",
+   "description": "Child table tracking individual Lesson status"
   },
   {
    "fieldname": "chapter_progress",
    "fieldtype": "Table",
    "label": "Chapter Progress",
-   "options": "LMS Chapter Progress"
+   "options": "LMS Chapter Progress",
+   "description": "Child table tracking individual Chapter status"
   },
   {
    "fieldname": "content_progress",
    "fieldtype": "Table",
    "label": "Content Progress",
-   "options": "LMS Content Progress"
+   "options": "LMS Content Progress",
+   "description": "NEW \u2014 Child table tracking the granular completion status of each individual content item."
   }
  ],
  "grid_page_length": 50,

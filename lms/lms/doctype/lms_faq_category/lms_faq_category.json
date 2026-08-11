@@ -16,7 +16,8 @@
    "in_list_view": 1,
    "label": "Category Name",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "e.g., \"Billing\", \"Technical\", \"General\""
   }
  ],
  "grid_page_length": 50,

@@ -22,12 +22,14 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the title."
   },
   {
    "fieldname": "base_media",
    "fieldtype": "Attach",
-   "label": "Base Media"
+   "label": "Base Media",
+   "description": "Upload the MP4 file directly."
   },
   {
    "fieldname": "video_url",
@@ -38,13 +40,15 @@
   {
    "fieldname": "transcript",
    "fieldtype": "Text Editor",
-   "label": "Transcript"
+   "label": "Transcript",
+   "description": "Enter the transcript."
   },
   {
    "default": "0",
    "fieldname": "is_assessment",
    "fieldtype": "Check",
-   "label": "Is Assessment"
+   "label": "Is Assessment",
+   "description": "Toggle to enable or disable is assessment."
   },
   {
    "default": "0",
@@ -52,26 +56,28 @@
    "fieldtype": "Check",
    "label": "Is Scored",
    "depends_on": "is_assessment",
-   "description": "Visible only if Is Assessment is checked"
+   "description": "Visible only if is_assessment is checked."
   },
   {
    "fieldname": "score",
    "fieldtype": "Float",
    "label": "Score",
    "depends_on": "is_scored",
-   "description": "Points awarded for successful completion"
+   "description": "Visible only if is_scored is checked."
   },
   {
    "default": "1",
    "fieldname": "track_progress",
    "fieldtype": "Check",
-   "label": "Track Progress"
+   "label": "Track Progress",
+   "description": "Toggle to enable or disable track progress."
   },
   {
    "fieldname": "interactive_elements",
    "fieldtype": "Table",
    "label": "Interactive Elements",
-   "options": "LMS Interactive Element"
+   "options": "LMS Interactive Element",
+   "description": "Child table for LMS Interactive Element."
   }
  ],
  "index_web_pages_for_search": 1,

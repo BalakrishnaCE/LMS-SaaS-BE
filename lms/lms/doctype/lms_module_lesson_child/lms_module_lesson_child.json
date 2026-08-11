@@ -16,14 +16,16 @@
    "in_list_view": 1,
    "label": "Lesson",
    "options": "LMS Lesson",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Lesson."
   },
   {
    "fieldname": "order",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Order",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Numeric value for order."
   }
  ],
  "grid_page_length": 50,

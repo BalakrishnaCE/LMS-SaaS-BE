@@ -18,25 +18,29 @@
    "in_list_view": 1,
    "label": "Reference Module",
    "options": "LMS Module",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Module."
   },
   {
    "fieldname": "reference_lesson",
    "fieldtype": "Link",
    "label": "Reference Lesson",
-   "options": "LMS Lesson"
+   "options": "LMS Lesson",
+   "description": "Link to the corresponding LMS Lesson."
   },
   {
    "fieldname": "reference_chapter",
    "fieldtype": "Link",
    "label": "Reference Chapter",
-   "options": "LMS Chapter"
+   "options": "LMS Chapter",
+   "description": "Link to the corresponding LMS Chapter."
   },
   {
    "fieldname": "messages",
    "fieldtype": "Table",
    "label": "Messages",
-   "options": "LMS Discussion Message"
+   "options": "LMS Discussion Message",
+   "description": "Child table holding the actual chat log"
   }
  ],
  "grid_page_length": 50,

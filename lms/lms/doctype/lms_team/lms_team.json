@@ -18,25 +18,29 @@
    "in_list_view": 1,
    "label": "Team Name",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "e.g., \"Marketing\", \"Engineering\""
   },
   {
    "default": "1",
    "fieldname": "is_active",
    "fieldtype": "Check",
-   "label": "Is Active\t"
+   "label": "Is Active\t",
+   "description": "Toggle to enable or disable is active\t."
   },
   {
    "fieldname": "team_leads",
    "fieldtype": "Table",
    "label": "Team Leads",
-   "options": "LMS Team Lead"
+   "options": "LMS Team Lead",
+   "description": "CHANGED from single Link field \u2014 supports multiple TLs per team"
   },
   {
    "fieldname": "learners",
    "fieldtype": "Table",
    "label": "Learners",
-   "options": "LMS Team Member"
+   "options": "LMS Team Member",
+   "description": "NEW \u2014 lists all members belonging to this team"
   }
  ],
  "grid_page_length": 50,

@@ -22,18 +22,21 @@
    "in_list_view": 1,
    "label": "Badge Name",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "e.g., \"GDPR Champion\", \"Safety Pro\", \"Onboarding Star\""
   },
   {
    "fieldname": "badge_image",
    "fieldtype": "Attach Image",
    "label": "Badge Image",
-   "reqd": 1
+   "reqd": 1,
+   "description": "The badge icon/graphic shown on the learner's profile."
   },
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description"
+   "label": "Description",
+   "description": "What this badge represents. e.g., \"Awarded for completing GDPR Compliance Training\""
   },
   {
    "fieldname": "criteria_type",
@@ -41,24 +44,28 @@
    "in_list_view": 1,
    "label": "Criteria Type",
    "options": "Module Completion\nScore Based\nManual Award",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Module Completion \u2014 auto-awarded when module is finished. Score Based \u2014 awarded only if learner scores above threshold. Manual Award \u2014 Admin manually gives this badge."
   },
   {
    "fieldname": "module",
    "fieldtype": "Link",
    "label": "Module",
-   "options": "LMS Module"
+   "options": "LMS Module",
+   "description": "The module this badge is tied to. Visible when criteria_type is \"Module Completion\" or \"Score Based\"."
   },
   {
    "fieldname": "minimum_score",
    "fieldtype": "Float",
-   "label": "Minimum Score"
+   "label": "Minimum Score",
+   "description": "Visible only when criteria_type is \"Score Based\". Learner must score this or above to earn the badge."
   },
   {
    "default": "1",
    "fieldname": "is_active",
    "fieldtype": "Check",
-   "label": "Is Active"
+   "label": "Is Active",
+   "description": "Toggle to enable or disable is active."
   }
  ],
  "grid_page_length": 50,
