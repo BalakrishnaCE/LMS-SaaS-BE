@@ -17,7 +17,8 @@
    "in_list_view": 1,
    "label": "Chapter",
    "options": "LMS Chapter",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Chapter."
   },
   {
    "fieldname": "status",
@@ -25,12 +26,14 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Not Started\nIn Progress\nCompleted",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the status from the dropdown options."
   },
   {
    "fieldname": "score",
    "fieldtype": "Float",
-   "label": "Score"
+   "label": "Score",
+   "description": "Numeric value for score."
   }
  ],
  "grid_page_length": 50,

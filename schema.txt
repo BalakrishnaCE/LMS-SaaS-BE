@@ -1,0 +1,672 @@
+1. LMS TEAM (Master DocType) 
+- Team Name 
+  Fieldname: team_name 
+  Notes: e.g., "Marketing", "Engineering" 
+- Team Leads 
+  Fieldname: team_leads 
+  Notes: CHANGED from single Link field — supports multiple TLs per team 
+- Learners 
+  Fieldname: learners 
+  Notes: NEW — lists all members belonging to this team 
+
+1a. LMS TEAM LEAD (Child Table) 
+- User 
+  Fieldname: user 
+
+1b. LMS TEAM MEMBER (Child Table) 
+- User 
+  Fieldname: user 
+
+2. LMS USER SETTINGS (Master DocType) 
+- System User 
+  Fieldname: system_user 
+- Theme 
+  Fieldname: theme 
+- Notification Preferences 
+  Fieldname: notification_preferences 
+
+2a. LMS NOTIFICATION PREFERENCE (Child Table) 
+- Type 
+  Fieldname: type 
+  Notes: e.g., "Deadline", "Reminder", "Discussion", "Message" 
+- Enabled 
+  Fieldname: enabled 
+
+3. LMS MODULE ASSIGNMENT (Master DocType) 
+- Module 
+  Fieldname: module 
+- Assignment Type 
+  Fieldname: assignment_type 
+- Assigned Teams 
+  Fieldname: assigned_teams 
+  Notes: Visible only when Assignment Type is "Team" 
+- Learners 
+  Fieldname: learners 
+- Duration 
+  Fieldname: duration 
+- Is Mandatory 
+  Fieldname: is_mandatory 
+
+4a. LMS ASSIGNMENT USER (Child Table) 
+- User 
+  Fieldname: user 
+
+4b. LMS ASSIGNMENT TEAM (Child Table)  
+- Team 
+  Fieldname: team 
+
+5. LMS COURSE CATEGORY (Master DocType) 
+- Category Name 
+  Fieldname: category_name 
+- Description 
+  Fieldname: description 
+
+6. LMS MODULE (Master DocType) 
+- Module Name 
+  Fieldname: module_name 
+- Category 
+  Fieldname: category 
+- Status 
+  Fieldname: status 
+- Description 
+  Fieldname: description 
+- Image 
+  Fieldname: image 
+- Duration 
+  Fieldname: duration 
+- Lessons 
+  Fieldname: lessons 
+  Notes: Child table that links to Lessons 
+- Is Score Required 
+  Fieldname: is_score_required 
+  Notes: If checked, total_score validation applies 
+- Total Score 
+  Fieldname: total_score 
+- Order 
+  Fieldname: order 
+- Final Assessments 
+  Fieldname: final_assessments 
+  Notes: CHANGED from single Link to child table — supports multiple assessments 
+
+6a. LMS MODULE ASSESSMENT (Child Table)  
+- Assessment 
+  Fieldname: assessment 
+  Notes: The quiz or assessment linked as final evaluation 
+- Order 
+  Fieldname: order 
+  Notes: Execution order if multiple assessments exist 
+
+7. LMS MODULE LESSON CHILD (Connector Child Table) 
+- Lesson 
+  Fieldname: lesson 
+- Order 
+  Fieldname: order 
+
+8. LMS LESSON (Master DocType) 
+- Lesson Name 
+  Fieldname: lesson_name 
+- Description 
+  Fieldname: description 
+- Chapters 
+  Fieldname: chapters 
+  Notes: Child table that links to Chapters 
+
+9. LMS LESSON CHAPTER (Connector Child Table) 
+- Chapter 
+  Fieldname: chapter 
+- Order 
+  Fieldname: order 
+
+10. LMS CHAPTER (Master DocType) 
+- Title 
+  Fieldname: title 
+- Contents 
+  Fieldname: contents 
+  Notes: Ordered child table linking to individual content records 
+
+11. LMS CHAPTER CONTENT (Connector Child Table)  
+- Content Type  
+  Fieldname: content_type  
+  Notes: Identifies which DocType the content_reference points to.  
+- Content Reference  
+  Fieldname: content_reference  
+  Notes: Resolves to the specific content record based on content_type.  
+- Order  
+  Fieldname: order  
+  Notes: Controls the playback/display sequence 
+
+12a. LMS VIDEO CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Base Media 
+  Fieldname: base_media 
+  Notes: Upload the MP4 file directly. 
+- Video URL 
+  Fieldname: video_url 
+  Notes: External URL e.g., YouTube, Vimeo. Used if not uploading via base_media. 
+- Transcript 
+  Fieldname: transcript 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Is Scored 
+  Fieldname: is_scored 
+  Notes: Visible only if is_assessment is checked. 
+- Score 
+  Fieldname: score 
+  Notes: Visible only if is_scored is checked. 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+
+12b. LMS AUDIO CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Base Media 
+  Fieldname: base_media 
+  Notes: Upload MP3 or audio file. 
+- Transcript 
+  Fieldname: transcript 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Track Progress 
+  Fieldname: track_progress 
+
+12c. LMS DOCUMENT CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Base Media 
+  Fieldname: base_media 
+  Notes: Upload PDF, DOCX, PPTX etc. 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Track Progress 
+  Fieldname: track_progress 
+
+12d. LMS IMAGE CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Base Media 
+  Fieldname: base_media 
+  Notes: Upload PNG, JPG etc. 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Used for image hotspot interactions. 
+
+12e. LMS TEXT CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Text Block 
+  Fieldname: text_block 
+  Notes: Rich text article body. 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements  
+  Fieldname: interactive_elements  
+  Notes: Used for embedded quizzes, tooltips, etc. 
+
+12f. LMS INTERACTIVE VIDEO CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Base Media 
+  Fieldname: base_media 
+- Video URL 
+  Fieldname: video_url 
+  Notes: External URL if not uploading via base_media. 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Is Scored 
+  Fieldname: is_scored 
+- Score 
+  Fieldname: score 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Stores timeline popups, embedded quizzes etc. 
+
+12g. LMS FILL IN THE BLANK CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Text Block 
+  Fieldname: text_block 
+  Notes: Stores the sentence with blanks. e.g., "The GDPR penalty is [blank] million euros." 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Is Scored 
+  Fieldname: is_scored 
+- Score 
+  Fieldname: score 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Each row stores one correct answer for one blank. 
+
+12h. LMS DRAG AND DROP CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Base Media 
+  Fieldname: base_media 
+  Notes: Background image with the drop zones drawn on it. 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Is Scored 
+  Fieldname: is_scored 
+- Score 
+  Fieldname: score 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Rows store Drag Items and Drop Zones with X/Y coordinates. 
+
+12i. LMS FLASHCARD CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Each row = one flashcard. element_text = front of card. secondary_text = back of card. 
+
+12j. LMS POLL CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Question 
+  Fieldname: question 
+  Notes: The poll question shown to the learner. 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Each row = one poll option. is_correct flags the expected/correct option. 
+
+12k. LMS BRANCHING SCENARIO CONTENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Is Assessment 
+  Fieldname: is_assessment 
+- Is Scored 
+  Fieldname: is_scored 
+- Score 
+  Fieldname: score 
+- Track Progress 
+  Fieldname: track_progress 
+- Interactive Elements 
+  Fieldname: interactive_elements 
+  Notes: Each row = one scenario node or decision button. linked_record_type + linked_record_name points to the next scenario node. 
+
+13. LMS INTERACTIVE TYPE (Master DocType)  
+- Type Name 
+  Fieldname: type_name 
+  Notes: e.g., "Text Popup", "Video Popup", "Hotspot", "Drag Item", "Drop Zone", "Flashcard", "Branching Button", "Embedded Quiz". This is also the document name. 
+- Description 
+  Fieldname: description 
+  Notes: Explanation of what this interaction type does 
+
+14. LMS INTERACTIVE ELEMENT (Universal Child Table)
+- Interaction Type 
+  Fieldname: interaction_type 
+- Timeline Timestamp 
+  Fieldname: timeline_seconds 
+  Notes: Used for Interactive Video. Example: 120.5 pauses the video at 2:00 
+- X Coordinate 
+  Fieldname: x_coordinate 
+  Notes: Percentage X-axis. Used for Images, Videos, Drag & Drop 
+- Y Coordinate 
+  Fieldname: y_coordinate 
+  Notes: Percentage Y-axis. Used for Images, Videos, Drag & Drop 
+- Element Text 
+  Fieldname: element_text 
+  Notes: Text shown in the popup, front of a flashcard, or label of a drag item 
+- Secondary Text 
+  Fieldname: secondary_text 
+  Notes: Used for the back of a flashcard 
+- Linked Record Type 
+  Fieldname: linked_record_type 
+  Notes: Admin picks which DocType to embed. e.g., "LMS Quiz" 
+- Linked Record 
+  Fieldname: linked_record_name 
+  Notes: Links to the specific Quiz or Node ID 
+- Is Correct Answer 
+  Fieldname: is_correct 
+  Notes: Used for Drag & Drop validation or Poll logic 
+
+14. LMS MODULE TRACKER (Master DocType) 
+- User 
+  Fieldname: user 
+- Module 
+  Fieldname: module 
+- Status 
+  Fieldname: status 
+- Progress Percentage 
+  Fieldname: progress_percentage 
+  Notes: 0.0 to 100.0 
+- Total Score 
+  Fieldname: total_score 
+- Started On 
+  Fieldname: started_on 
+- Completed On 
+  Fieldname: completed_on 
+- Lesson Progress 
+  Fieldname: lesson_progress 
+  Notes: Child table tracking individual Lesson status 
+- Chapter Progress 
+  Fieldname: chapter_progress 
+  Notes: Child table tracking individual Chapter status 
+- Content Progress 
+  Fieldname: content_progress 
+  Notes: NEW — Child table tracking the granular completion status of each individual content item. 
+
+15. LMS LESSON PROGRESS (Child Table) 
+- Lesson 
+  Fieldname: lesson 
+- Status 
+  Fieldname: status 
+
+16. LMS CHAPTER PROGRESS (Child Table) 
+- Chapter 
+  Fieldname: chapter 
+- Status 
+  Fieldname: status 
+- Score 
+  Fieldname: score 
+
+16a. LMS CONTENT PROGRESS (Child Table)  
+- Content Type 
+  Fieldname: content_type 
+  Notes: Identifies which content DocType this row tracks. e.g., "LMS Video Content" 
+- Content Reference 
+  Fieldname: content_reference 
+  Notes: Links to the specific content record being tracked. 
+- Status 
+  Fieldname: status 
+- Score 
+  Fieldname: score 
+  Notes: Score achieved on this content item if it is scored. 
+
+17. LMS QUIZ (Master DocType) 
+- Title 
+  Fieldname: title 
+- Description 
+  Fieldname: description 
+- Total Score 
+  Fieldname: total_score 
+- Is Passing Required 
+  Fieldname: is_passing_required 
+  Notes: NEW — If checked, learner must meet the passing percentage to mark this quiz as passed. 
+- Passing Percentage 
+  Fieldname: passing_percentage 
+  Notes: NEW — Minimum % score to pass. e.g., 70.0 means learner needs 70% to pass. Visible only if is_passing_required is checked. 
+- Randomize Questions 
+  Fieldname: randomize_questions 
+- Time Limit 
+  Fieldname: time_limit_mins 
+  Notes: Time limit in minutes 
+- Questions 
+  Fieldname: questions 
+
+18. LMS QUIZ CHILD (Connector Child Table) 
+- Quiz Question 
+  Fieldname: quiz_question 
+- Order 
+  Fieldname: order 
+
+19. LMS QUIZ QUESTION (Question Bank Master Doctype) 
+- Question Text 
+  Fieldname: question_text 
+- Question Type 
+  Fieldname: question_type 
+- Score 
+  Fieldname: score 
+- Options 
+  Fieldname: options 
+
+20. LMS QUIZ OPTION (Answers) 
+- Option Text 
+  Fieldname: option_text 
+- Is Correct 
+  Fieldname: is_correct 
+
+29. LMS QUIZ PROGRESS (Master DocType) 
+- User 
+  Fieldname: user 
+  Notes: The user who submitted the quiz 
+- Quiz 
+  Fieldname: quiz 
+  Notes: The quiz that was taken 
+- Score 
+  Fieldname: score 
+  Notes: Actual score, e.g., 80 
+- Passed 
+  Fieldname: passed 
+  Notes: Backend auto-fills based on the passing score 
+- Submitted On 
+  Fieldname: submitted_on 
+  Notes: Exact time the learner submitted the quiz 
+- Responses 
+  Fieldname: responses 
+  Notes: Child table storing each individual answer 
+
+30. LMS QUIZ RESPONSE (Child Table) 
+- Question 
+  Fieldname: question 
+  Notes: The question being answered 
+- Selected Option 
+  Fieldname: selected_option 
+  Notes: Stores the text of the option the learner selected. e.g., "Policy on Sexual Harassment at Workplace" No child table required. 
+- Is Correct 
+  Fieldname: is_correct 
+  Notes: Backend auto-fills by checking the "Is Correct" value on the selected option 
+
+21. LMS DISCUSSION (Master DocType) 
+- Reference Module 
+  Fieldname: reference_module 
+- Reference Lesson 
+  Fieldname: reference_lesson 
+- Reference Chapter 
+  Fieldname: reference_chapter 
+- Messages 
+  Fieldname: messages 
+  Notes: Child table holding the actual chat log 
+
+22. LMS DISCUSSION MESSAGE (Child Table) 
+- User 
+  Fieldname: user 
+- Message 
+  Fieldname: message 
+  Notes: Actual text typed by the user 
+- Timestamp 
+  Fieldname: timestamp 
+  Notes: When the message was typed 
+- Reply To 
+  Fieldname: reply_to 
+  Notes: Optional reference to a previous message 
+
+23. LMS LEARNER NOTE (Master DocType) 
+- User 
+  Fieldname: user 
+- Note Title 
+  Fieldname: note_title 
+- Note Content 
+  Fieldname: note_content 
+- Reference Module 
+  Fieldname: reference_module 
+- Reference Lesson 
+  Fieldname: reference_lesson 
+- Reference Chapter 
+  Fieldname: reference_chapter 
+- Is Private 
+  Fieldname: is_private 
+
+24. LMS REMINDER RULE (Master DocType) 
+- Rule Name 
+  Fieldname: rule_name 
+  Notes: e.g., "Overdue Warning" 
+- Trigger Type 
+  Fieldname: trigger_type 
+- Trigger Days 
+  Fieldname: trigger_days 
+  Notes: e.g., 3 
+- Notify Learner 
+  Fieldname: notify_learner 
+- Notify Team Lead 
+  Fieldname: notify_team_lead 
+
+25. LMS NOTIFICATION LOG (Master DocType)
+- User 
+  Fieldname: user 
+- Rule Triggered 
+  Fieldname: rule_triggered 
+- Message Sent 
+  Fieldname: message_sent 
+- Sent On 
+  Fieldname: sent_on 
+- Status 
+  Fieldname: status 
+
+26. LMS ANNOUNCEMENT (Master DocType) 
+- Title 
+  Fieldname: title 
+- Message 
+  Fieldname: message 
+- Target Audience 
+  Fieldname: target_audience 
+- Target Teams 
+  Fieldname: target_teams 
+  Notes: CHANGED from single Link to child table. Visible only when Target Audience is "Specific Team". Supports announcing to multiple teams at once. 
+- Target Members 
+  Fieldname: target_members 
+  Notes: Visible only when Target Audience is "Specific Members". Announces to specific individuals. 
+- Expires On 
+  Fieldname: expires_on 
+  Notes: Announcement auto-hides after this date 
+
+29a. LMS ANNOUNCEMENT TEAM (Child Table)
+- Team 
+  Fieldname: team 
+
+29b. LMS ANNOUNCEMENT MEMBER (Child Table)
+- User 
+  Fieldname: user 
+
+27. LMS FAQ (Master DocType) 
+- Question 
+  Fieldname: question 
+- Answer 
+  Fieldname: answer 
+- Category 
+  Fieldname: category 
+  Notes: CHANGED from plain Data to Link → LMS FAQ Category. Allows dynamic category management. 
+
+30. LMS FAQ CATEGORY (Master DocType)
+- Category Name 
+  Fieldname: category_name 
+  Notes: e.g., "Billing", "Technical", "General" 
+
+28. LMS SETTINGS (Single DocType) 
+- Brand Logo 
+  Fieldname: brand_logo 
+- Primary Color 
+  Fieldname: primary_color 
+  Notes: Allows React frontend to fetch the hex code and change themes 
+- Feature Toggles 
+  Fieldname: feature_toggles 
+  Notes: CHANGED from individual checkboxes to a child table. Allows new features to be toggled without schema changes 
+
+32a. LMS FEATURE TOGGLE (Child Table)
+- Feature Name 
+  Fieldname: feature_name 
+  Notes: e.g., "Discussions", "Notes", "FAQ", "Live Sessions", "Leaderboard" 
+- Enabled 
+  Fieldname: enabled 
+  Notes: Whether this feature is active for the tenant 
+
+33. LMS BADGE (Master DocType) 
+- Badge Name 
+  Fieldname: badge_name 
+  Notes: e.g., "GDPR Champion", "Safety Pro", "Onboarding Star" 
+- Badge Image 
+  Fieldname: badge_image 
+  Notes: The badge icon/graphic shown on the learner's profile. 
+- Description 
+  Fieldname: description 
+  Notes: What this badge represents. e.g., "Awarded for completing GDPR Compliance Training" 
+- Criteria Type 
+  Fieldname: criteria_type 
+  Notes: Module Completion — auto-awarded when module is finished. Score Based — awarded only if learner scores above threshold. Manual Award — Admin manually gives this badge. 
+- Module 
+  Fieldname: module 
+  Notes: The module this badge is tied to. Visible when criteria_type is "Module Completion" or "Score Based". 
+- Minimum Score 
+  Fieldname: minimum_score 
+  Notes: Visible only when criteria_type is "Score Based". Learner must score this or above to earn the badge. 
+- Is Active 
+  Fieldname: is_active 
+
+34. LMS CERTIFICATE TEMPLATE (Master DocType) 
+- Template Name 
+  Fieldname: template_name 
+  Notes: e.g., "Standard Completion Certificate", "Gold Certificate" 
+- HTML Template 
+  Fieldname: html_template 
+  Notes: Full HTML design of the certificate. Use these placeholders that backend will auto-fill: {{learner_name}} {{module_name}} {{completion_date}} {{score}} {{certificate_id}} 
+- Preview Image 
+  Fieldname: preview_image 
+  Notes: A screenshot of what the certificate looks like. Shown to Admin when selecting a template. 
+- Is Active 
+  Fieldname: is_active 
+
+35. LMS CERTIFICATE (Master DocType) 
+- Certificate ID 
+  Fieldname: certificate_id 
+  Notes: Auto-generated unique ID. e.g., "CERT-2026-00001" Used for verification and QR code generation. 
+- User 
+  Fieldname: user 
+  Notes: The learner who earned this certificate. 
+- Module 
+  Fieldname: module 
+  Notes: The module they completed. 
+- Enrollment 
+  Fieldname: enrollment 
+  Notes: Links to the learner's completion record. Used to fetch score and completion date. 
+- Template 
+  Fieldname: template 
+  Notes: Which design template was used. 
+- Score 
+  Fieldname: score 
+  Notes: The learner's final score. Auto-fetched from LMS Module Tracker. 
+- Issued On 
+  Fieldname: issued_on 
+  Notes: The date the certificate was issued. 
+- Certificate PDF 
+  Fieldname: certificate_pdf 
+  Notes: The generated PDF file of the certificate. Backend generates this using the HTML template and attaches it here automatically. 
+- Is Valid 
+  Fieldname: is_valid 
+  Notes: Admin can uncheck to revoke a certificate. 
+
+36. LMS LEARNER BADGE (Master DocType) 
+- User 
+  Fieldname: user 
+- Badge 
+  Fieldname: badge 
+- Module 
+  Fieldname: module 
+  Notes: The module that triggered this badge award. 
+- Awarded On 
+  Fieldname: awarded_on 
+- Awarded By 
+  Fieldname: awarded_by 
+  Notes: Filled when criteria_type is "Manual Award". Empty when auto-awarded by the system.

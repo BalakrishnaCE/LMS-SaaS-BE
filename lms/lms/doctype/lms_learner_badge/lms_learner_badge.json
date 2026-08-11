@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-10 11:00:51.901141",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "badge",
+  "module",
+  "awarded_on",
+  "awarded_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "description": "Link to the corresponding User."
+  },
+  {
+   "fieldname": "badge",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Badge",
+   "options": "LMS Badge",
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Badge."
+  },
+  {
+   "fieldname": "module",
+   "fieldtype": "Link",
+   "label": "Module",
+   "options": "LMS Module",
+   "description": "The module that triggered this badge award."
+  },
+  {
+   "fieldname": "awarded_on",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Awarded On",
+   "reqd": 1,
+   "description": "The exact awarded on."
+  },
+  {
+   "fieldname": "awarded_by",
+   "fieldtype": "Link",
+   "label": "Awarded By",
+   "options": "User",
+   "description": "Filled when criteria_type is \"Manual Award\". Empty when auto-awarded by the system."
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-10 11:00:51.901141",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Learner Badge",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -13,6 +13,7 @@
  ],
  "fields": [
   {
+   "description": "Enter the question.",
    "fieldname": "question",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -21,6 +22,7 @@
    "unique": 1
   },
   {
+   "description": "Enter the answer.",
    "fieldname": "answer",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
@@ -28,15 +30,17 @@
    "reqd": 1
   },
   {
+   "description": "Allows dynamic category management.",
    "fieldname": "category",
-   "fieldtype": "Data",
-   "label": "Category"
+   "fieldtype": "Link",
+   "label": "Category",
+   "options": "LMS FAQ Category"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:15.398371",
+ "modified": "2026-08-11 13:36:21.678423",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS FAQ",

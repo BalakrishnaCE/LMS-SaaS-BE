@@ -7,35 +7,42 @@
  "engine": "InnoDB",
  "field_order": [
   "content_type",
-  "content_data",
+  "content_reference",
   "order"
  ],
  "fields": [
   {
+   "description": "Identifies which DocType the content_reference points to.",
    "fieldname": "content_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Content Type",
-   "options": "Video\nArticle\nPDF\nInteractive Video\nQuiz\nFill in the Blanks",
+   "options": "LMS Video Content\nLMS Audio Content\nLMS Document Content\nLMS Image Content\nLMS Text Content\nLMS Interactive Video Content\nLMS Fill In The Blank Content\nLMS Drag And Drop Content\nLMS Flashcard Content\nLMS Poll Content\nLMS Branching Scenario Content",
    "reqd": 1
   },
   {
-   "fieldname": "content_data",
-   "fieldtype": "Text Editor",
-   "label": "Content Data"
+   "description": "Resolves to the specific content record based on content_type.",
+   "fieldname": "content_reference",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Content Reference",
+   "options": "content_type",
+   "reqd": 1
   },
   {
    "fieldname": "order",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Order",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Controls the playback/display sequence"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-07 12:53:52.162271",
+ "modified": "2026-08-10 13:04:01.352548",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Chapter Content",

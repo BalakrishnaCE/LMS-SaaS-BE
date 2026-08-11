@@ -7,11 +7,13 @@
  "engine": "InnoDB",
  "field_order": [
   "team_name",
-  "team_lead",
+  "team_leads",
+  "learners",
   "is_active"
  ],
  "fields": [
   {
+   "description": "e.g., \"Marketing\", \"Engineering\"",
    "fieldname": "team_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -20,22 +22,31 @@
    "unique": 1
   },
   {
-   "fieldname": "team_lead",
-   "fieldtype": "Link",
-   "label": "Team Lead",
-   "options": "User"
-  },
-  {
    "default": "1",
+   "description": "Toggle to enable or disable is active\t.",
    "fieldname": "is_active",
    "fieldtype": "Check",
    "label": "Is Active\t"
+  },
+  {
+   "description": "supports multiple TLs per team",
+   "fieldname": "team_leads",
+   "fieldtype": "Table",
+   "label": "Team Leads",
+   "options": "LMS Team Lead"
+  },
+  {
+   "description": "lists all members belonging to this team",
+   "fieldname": "learners",
+   "fieldtype": "Table",
+   "label": "Learners",
+   "options": "LMS Team Member"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 12:23:24.864670",
+ "modified": "2026-08-11 13:33:45.639396",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Team",

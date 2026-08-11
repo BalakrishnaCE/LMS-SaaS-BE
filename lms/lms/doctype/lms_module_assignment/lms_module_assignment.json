@@ -1,92 +1,74 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:title",
+ "autoname": "LMS-ASSIGN-.####",
  "creation": "2026-08-07 15:42:14.019983",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "title",
   "module",
-  "assignee_type",
-  "team",
-  "users",
-  "assigned_by",
-  "assignment_date",
-  "due_date",
+  "assignment_type",
+  "assigned_teams",
+  "learners",
+  "duration",
   "is_mandatory"
  ],
  "fields": [
-  {
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Title",
-   "reqd": 1,
-   "unique": 1
-  },
   {
    "fieldname": "module",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Module",
    "options": "LMS Module",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Module."
   },
   {
-   "fieldname": "assignee_type",
+   "fieldname": "assignment_type",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Assignee Type",
-   "options": "Team\nSpecific Users",
-   "reqd": 1
+   "label": "Assignment Type",
+   "options": "Team\nManual",
+   "reqd": 1,
+   "description": "Select the assignment type from the dropdown options."
   },
   {
-   "fieldname": "team",
-   "fieldtype": "Link",
-   "label": "Team",
-   "options": "LMS Team"
-  },
-  {
-   "fieldname": "users",
+   "fieldname": "assigned_teams",
    "fieldtype": "Table",
-   "label": "Specific Users",
-   "options": "LMS Assignment User"
+   "label": "Assigned Teams",
+   "options": "LMS Assignment Team",
+   "description": "Visible only when Assignment Type is \"Team\""
   },
   {
-   "fieldname": "assigned_by",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Assigned By",
-   "options": "User",
-   "reqd": 1
+   "fieldname": "learners",
+   "fieldtype": "Table",
+   "label": "Learners",
+   "options": "LMS Assignment User",
+   "description": "Visible only when Assignment Type is Manual"
   },
   {
-   "fieldname": "assignment_date",
-   "fieldtype": "Date",
-   "label": "Assignment Date",
-   "reqd": 1
-  },
-  {
-   "fieldname": "due_date",
-   "fieldtype": "Date",
-   "label": "Due Date"
+   "fieldname": "duration",
+   "fieldtype": "Int",
+   "label": "Duration (Days)",
+   "description": "Number of days the learner has to complete this module"
   },
   {
    "default": "1",
    "fieldname": "is_mandatory",
    "fieldtype": "Check",
-   "label": "Is Mandatory"
+   "label": "Is Mandatory",
+   "description": "Toggle to enable or disable is mandatory."
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:14.019983",
+ "modified": "2026-08-10 06:22:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module Assignment",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {

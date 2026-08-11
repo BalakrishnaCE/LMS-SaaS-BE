@@ -17,19 +17,21 @@
    "in_list_view": 1,
    "label": "Question",
    "options": "LMS Quiz Question",
-   "reqd": 1
+   "reqd": 1,
+   "description": "The question being answered"
   },
   {
    "fieldname": "selected_option",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Selected Option",
-   "options": "LMS Quiz Option"
+   "description": "Stores the text of the option the learner selected. e.g., \"Policy on Sexual Harassment at Workplace\" No child table required."
   },
   {
    "default": "0",
    "fieldname": "is_correct",
    "fieldtype": "Check",
-   "label": "Is Correct"
+   "label": "Is Correct",
+   "description": "Backend auto-fills by checking the \"Is Correct\" value on the selected option"
   }
  ],
  "grid_page_length": 50,

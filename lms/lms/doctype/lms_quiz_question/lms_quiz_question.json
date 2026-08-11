@@ -17,7 +17,8 @@
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Question Text",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Enter the question text."
   },
   {
    "fieldname": "question_type",
@@ -25,20 +26,23 @@
    "in_list_view": 1,
    "label": "Question Type",
    "options": "Multiple Choice\nSingle Choice\nTrue/False",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the question type from the dropdown options."
   },
   {
    "fieldname": "score",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Score",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Numeric value for score."
   },
   {
    "fieldname": "options",
    "fieldtype": "Table",
    "label": "Options",
-   "options": "LMS Quiz Option"
+   "options": "LMS Quiz Option",
+   "description": "Child table for LMS Quiz Option."
   }
  ],
  "grid_page_length": 50,

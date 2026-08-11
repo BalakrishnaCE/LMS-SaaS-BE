@@ -21,7 +21,8 @@
    "in_list_view": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding User."
   },
   {
    "fieldname": "quiz",
@@ -29,43 +30,49 @@
    "in_list_view": 1,
    "label": "Quiz",
    "options": "LMS Quiz",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Quiz."
   },
   {
    "fieldname": "enrollment",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Enrollment",
-   "options": "LMS Module Enrollment",
-   "reqd": 1
+   "options": "LMS Module Tracker",
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Module Tracker."
   },
   {
    "fieldname": "score",
    "fieldtype": "Float",
-   "label": "Score"
+   "label": "Score",
+   "description": "Numeric value for score."
   },
   {
    "default": "0",
    "fieldname": "passed",
    "fieldtype": "Check",
-   "label": "Passed"
+   "label": "Passed",
+   "description": "Toggle to enable or disable passed."
   },
   {
    "fieldname": "submitted_on",
    "fieldtype": "Datetime",
-   "label": "Submitted On"
+   "label": "Submitted On",
+   "description": "The exact submitted on."
   },
   {
    "fieldname": "responses",
    "fieldtype": "Table",
    "label": "Responses",
-   "options": "LMS Quiz Response"
+   "options": "LMS Quiz Response",
+   "description": "Child table for LMS Quiz Response."
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:14.792098",
+ "modified": "2026-08-10 10:43:11.944933",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Quiz Submission",

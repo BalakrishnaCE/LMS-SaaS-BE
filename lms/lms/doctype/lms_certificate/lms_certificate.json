@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:certificate_id",
+ "creation": "2026-08-10 11:00:51.815362",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "certificate_id",
+  "user",
+  "module",
+  "enrollment",
+  "template",
+  "score",
+  "issued_on",
+  "certificate_pdf",
+  "is_valid"
+ ],
+ "fields": [
+  {
+   "fieldname": "certificate_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Certificate ID",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Auto-generated unique ID. e.g., \"CERT-2026-00001\" Used for verification and QR code generation."
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "description": "The learner who earned this certificate."
+  },
+  {
+   "fieldname": "module",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Module",
+   "options": "LMS Module",
+   "reqd": 1,
+   "description": "The module they completed."
+  },
+  {
+   "fieldname": "enrollment",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Enrollment",
+   "options": "LMS Module Tracker",
+   "reqd": 1,
+   "description": "Links to the learner's completion record. Used to fetch score and completion date."
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "label": "Template",
+   "options": "LMS Certificate Template",
+   "reqd": 1,
+   "description": "Which design template was used."
+  },
+  {
+   "fieldname": "score",
+   "fieldtype": "Float",
+   "label": "Score",
+   "description": "The learner's final score. Auto-fetched from LMS Module Tracker."
+  },
+  {
+   "fieldname": "issued_on",
+   "fieldtype": "Date",
+   "label": "Issued On",
+   "reqd": 1,
+   "description": "The date the certificate was issued."
+  },
+  {
+   "fieldname": "certificate_pdf",
+   "fieldtype": "Attach",
+   "label": "Certificate PDF",
+   "description": "The generated PDF file of the certificate. Backend generates this using the HTML template and attaches it here automatically."
+  },
+  {
+   "default": "1",
+   "fieldname": "is_valid",
+   "fieldtype": "Check",
+   "label": "Is Valid",
+   "description": "Admin can uncheck to revoke a certificate."
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-10 11:00:51.815362",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Certificate",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

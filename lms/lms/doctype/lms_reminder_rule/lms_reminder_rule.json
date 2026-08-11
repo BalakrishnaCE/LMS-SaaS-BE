@@ -20,7 +20,8 @@
    "in_list_view": 1,
    "label": "Rule Name",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "e.g., \"Overdue Warning\""
   },
   {
    "fieldname": "trigger_type",
@@ -28,26 +29,30 @@
    "in_list_view": 1,
    "label": "Trigger Type",
    "options": "Before Due Date\nAfter Due Date\nLearner Inactive",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Select the trigger type from the dropdown options."
   },
   {
    "fieldname": "trigger_days",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Trigger Days",
-   "reqd": 1
+   "reqd": 1,
+   "description": "e.g., 3"
   },
   {
    "default": "0",
    "fieldname": "notify_learner",
    "fieldtype": "Check",
-   "label": "Notify Learner"
+   "label": "Notify Learner",
+   "description": "Toggle to enable or disable notify learner."
   },
   {
    "default": "0",
    "fieldname": "notify_team_lead",
    "fieldtype": "Check",
-   "label": "Notify Team Lead"
+   "label": "Notify Team Lead",
+   "description": "Toggle to enable or disable notify team lead."
   }
  ],
  "grid_page_length": 50,

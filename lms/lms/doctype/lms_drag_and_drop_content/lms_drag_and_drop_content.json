@@ -1,0 +1,96 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-10 06:39:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "base_media",
+  "is_assessment",
+  "is_scored",
+  "score",
+  "track_progress",
+  "interactive_elements"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Enter the title."
+  },
+  {
+   "fieldname": "base_media",
+   "fieldtype": "Attach Image",
+   "label": "Base Media",
+   "description": "Background image with the drop zones drawn on it."
+  },
+  {
+   "default": "0",
+   "fieldname": "is_assessment",
+   "fieldtype": "Check",
+   "label": "Is Assessment",
+   "description": "Toggle to enable or disable is assessment."
+  },
+  {
+   "default": "0",
+   "fieldname": "is_scored",
+   "fieldtype": "Check",
+   "label": "Is Scored",
+   "depends_on": "is_assessment",
+   "description": "Visible only if Is Assessment is checked"
+  },
+  {
+   "fieldname": "score",
+   "fieldtype": "Float",
+   "label": "Score",
+   "depends_on": "is_scored",
+   "description": "Points awarded for successful completion"
+  },
+  {
+   "default": "1",
+   "fieldname": "track_progress",
+   "fieldtype": "Check",
+   "label": "Track Progress",
+   "description": "Toggle to enable or disable track progress."
+  },
+  {
+   "fieldname": "interactive_elements",
+   "fieldtype": "Table",
+   "label": "Interactive Elements",
+   "options": "LMS Interactive Element",
+   "description": "Rows store Drag Items and Drop Zones with X/Y coordinates."
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-10 06:39:00.000000",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Drag And Drop Content",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "autoname": "field:title"
+}

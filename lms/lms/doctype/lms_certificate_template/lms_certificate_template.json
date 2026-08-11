@@ -1,0 +1,75 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:template_name",
+ "creation": "2026-08-10 11:00:51.739057",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "html_template",
+  "preview_image",
+  "is_active"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Template Name",
+   "reqd": 1,
+   "unique": 1,
+   "description": "e.g., \"Standard Completion Certificate\", \"Gold Certificate\""
+  },
+  {
+   "fieldname": "html_template",
+   "fieldtype": "Text Editor",
+   "in_list_view": 1,
+   "label": "HTML Template",
+   "reqd": 1,
+   "description": "Full HTML design of the certificate. Use these placeholders that backend will auto-fill: {{learner_name}} {{module_name}} {{completion_date}} {{score}} {{certificate_id}}"
+  },
+  {
+   "fieldname": "preview_image",
+   "fieldtype": "Attach Image",
+   "label": "Preview Image",
+   "description": "A screenshot of what the certificate looks like. Shown to Admin when selecting a template."
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active",
+   "description": "Toggle to enable or disable is active."
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-10 11:00:51.739057",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Certificate Template",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -10,14 +10,23 @@
   "module_name",
   "category",
   "status",
+  "module_view",
   "description",
   "image",
+  "duration",
+  "order",
   "lessons",
+  "is_score_required",
+  "is_mandatory",
+  "complete_all_lessons",
+  "complete_all_interactions",
+  "enable_certificate",
   "total_score",
-  "final_assessment"
+  "final_assessments"
  ],
  "fields": [
   {
+   "description": "Enter the module name.",
    "fieldname": "module_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -26,12 +35,14 @@
    "unique": 1
   },
   {
+   "description": "Link to the corresponding LMS Course Category.",
    "fieldname": "category",
    "fieldtype": "Link",
    "label": "Category",
    "options": "LMS Course Category"
   },
   {
+   "description": "Select the status from the dropdown options.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -40,40 +51,105 @@
    "reqd": 1
   },
   {
+   "default": "Everyone",
+   "description": "Determines who can discover this module in the catalog.",
+   "fieldname": "module_view",
+   "fieldtype": "Select",
+   "label": "Module View",
+   "options": "Everyone\nAssigned Only\nHidden"
+  },
+  {
+   "description": "Enter the description.",
    "fieldname": "description",
    "fieldtype": "Text Editor",
    "label": "Description"
   },
   {
+   "description": "Upload the image file.",
    "fieldname": "image",
    "fieldtype": "Attach Image",
    "label": "Image"
   },
   {
+   "description": "Expected number of days for a learner to complete this module. Used to calculate due dates in assignments.",
+   "fieldname": "duration",
+   "fieldtype": "Int",
+   "label": "Duration (Days)"
+  },
+  {
+   "description": "Display sequence of this module in the catalog",
+   "fieldname": "order",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Order",
+   "reqd": 1
+  },
+  {
+   "description": "Child table that links to Lessons",
    "fieldname": "lessons",
    "fieldtype": "Table",
    "label": "Lessons",
-   "options": "LMS Module Lesson"
+   "options": "LMS Module Lesson Child"
   },
   {
+   "default": "0",
+   "description": "If checked, total_score validation applies",
+   "fieldname": "is_score_required",
+   "fieldtype": "Check",
+   "label": "Is Score Required"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable is mandatory.",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "label": "Is Mandatory"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable complete all lessons.",
+   "fieldname": "complete_all_lessons",
+   "fieldtype": "Check",
+   "label": "Complete All Lessons"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable complete all interactions.",
+   "fieldname": "complete_all_interactions",
+   "fieldtype": "Check",
+   "label": "Complete All Interactions"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable enable certificate.",
+   "fieldname": "enable_certificate",
+   "fieldtype": "Check",
+   "label": "Enable Certificate"
+  },
+  {
+   "depends_on": "is_score_required",
+   "description": "Auto-calculated by backend from all scored content inside this module",
    "fieldname": "total_score",
    "fieldtype": "Float",
-   "label": "Total Score"
+   "label": "Total Score",
+   "read_only": 1
   },
   {
-   "fieldname": "final_assessment",
-   "fieldtype": "Link",
-   "label": "Final Assessment",
-   "options": "LMS Quiz"
+   "description": "supports multiple assessments",
+   "fieldname": "final_assessments",
+   "fieldtype": "Table",
+   "label": "Final Assessments",
+   "options": "LMS Module Assessment"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:13.863992",
+ "modified": "2026-08-11 13:31:03.430516",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

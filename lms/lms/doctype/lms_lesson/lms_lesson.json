@@ -17,18 +17,21 @@
    "in_list_view": 1,
    "label": "Lesson Name",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "description": "Enter the lesson name."
   },
   {
    "fieldname": "description",
    "fieldtype": "Text Editor",
-   "label": "Description"
+   "label": "Description",
+   "description": "Enter the description."
   },
   {
    "fieldname": "chapters",
    "fieldtype": "Table",
    "label": "Chapters",
-   "options": "LMS Lesson Chapter"
+   "options": "LMS Lesson Chapter",
+   "description": "Child table that links to Chapters"
   }
  ],
  "grid_page_length": 50,
