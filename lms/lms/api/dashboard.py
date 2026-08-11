@@ -4,101 +4,111 @@ from frappe.utils import today, add_days, getdate, add_months, now
 
 @frappe.whitelist(allow_guest=True)
 def get_metrics_summary():
-    # Define the 6 historical snapshots (months ago)
-    intervals = [add_months(now(), -i) for i in range(5, -1, -1)]
-    
-    active_learners_history = []
-    completion_rate_history = []
-    overdue_assignments_history = []
-    compliance_completion_history = []
-    
-    # Pre-fetch assignment lookup map
-    assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "creation", "is_mandatory"])
-    assignment_map = {a.module: a for a in assignments}
-    
-    # Get all users who have the LMS-Learner role
-    learners = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent")
-    if not learners:
-        learners = ["no_learners_found"] # Prevent empty IN clause SQL error
+    def get_data(timeframe):
+        if timeframe == "year":
+            intervals = [add_months(now(), -i * 12) for i in range(5, -1, -1)]
+        else:
+            intervals = [add_months(now(), -i) for i in range(5, -1, -1)]
         
-    for dt in intervals:
-        # Active Learners up to this date, only counting users with LMS-Learner role
-        active_learners_history.append(frappe.db.count("User", {
-            "creation": ["<=", dt],
-            "name": ["in", learners]
-        }))
+        active_learners_history = []
+        completion_rate_history = []
+        overdue_assignments_history = []
+        compliance_completion_history = []
         
-        # Trackers up to this date
-        trackers_dt = frappe.get_all("LMS Module Tracker", filters={"creation": ["<=", dt]}, fields=["status", "modified", "module", "started_on", "creation", "completed_on"])
-        total_dt = len(trackers_dt)
+        assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "creation", "is_mandatory"])
+        assignment_map = {a.module: a for a in assignments}
         
-        completed_dt = 0
-        overdue_dt = 0
+        all_learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, fields=["parent", "creation"])
         
-        for t in trackers_dt:
-            is_completed_by_dt = (t.status == "Completed" and t.completed_on and getdate(t.completed_on) <= getdate(dt))
-            if is_completed_by_dt:
-                completed_dt += 1
+        for dt in intervals:
+            learners_by_dt = set([r.parent for r in all_learner_roles if getdate(r.creation) <= getdate(dt)])
+            thirty_days_before_dt = add_days(dt, -30)
+            trackers_dt = frappe.get_all("LMS Module Tracker", filters={"creation": ["<=", dt]}, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
             
-            # Check if overdue at this snapshot
-            a = assignment_map.get(t.module)
-            if a and a.duration:
-                start_date = getdate(t.started_on) if t.started_on else getdate(t.creation)
-                if start_date <= getdate(dt):
+            active_users_at_dt = set()
+            for t in trackers_dt:
+                if t.modified and getdate(thirty_days_before_dt) <= getdate(t.modified) <= getdate(dt):
+                    if t.user in learners_by_dt:
+                        active_users_at_dt.add(t.user)
+            active_learners_history.append(len(active_users_at_dt))
+            
+            total_dt = len(trackers_dt)
+            completed_dt = 0
+            overdue_dt = 0
+            
+            for t in trackers_dt:
+                is_completed_by_dt = (t.status == "Completed" and (not t.completed_on or getdate(t.completed_on) <= getdate(dt)))
+                if is_completed_by_dt:
+                    completed_dt += 1
+                
+                a = assignment_map.get(t.module)
+                if a and a.duration and t.started_on:
+                    start_date = getdate(t.started_on)
                     due_date = add_days(start_date, a.duration)
-                    is_finished_by_dt = (t.status in ["Completed", "Failed"] and ((t.completed_on and getdate(t.completed_on) <= getdate(dt)) or getdate(t.creation) <= getdate(dt)))
-                    # Fallback to creation for Failed since Failed might not have completed_on in seed
-                    if getdate(due_date) < getdate(dt) and not is_finished_by_dt:
+                    is_completed_on_time = (t.status == "Completed" and (not t.completed_on or getdate(t.completed_on) <= getdate(dt)))
+                    if getdate(due_date) < getdate(dt) and not is_completed_on_time:
                         overdue_dt += 1
-                        
-        completion_rate_history.append(int((completed_dt / total_dt) * 100) if total_dt > 0 else 0)
-        overdue_assignments_history.append(overdue_dt)
+                            
+            completion_rate_history.append(int((completed_dt / total_dt) * 100) if total_dt > 0 else 0)
+            overdue_assignments_history.append(overdue_dt)
+            
+            mandatory_modules = [m for m, a in assignment_map.items() if a.is_mandatory]
+            comp_trackers = [t for t in trackers_dt if t.module in mandatory_modules]
+            comp_total = len(comp_trackers)
+            comp_completed = len([t for t in comp_trackers if t.status == "Completed" and (not t.completed_on or getdate(t.completed_on) <= getdate(dt))])
+            compliance_completion_history.append(int((comp_completed / comp_total) * 100) if comp_total > 0 else 0)
+            
+        active_learners = active_learners_history[-1]
+        completion_rate = completion_rate_history[-1]
+        overdue_assignments = overdue_assignments_history[-1]
+        compliance_completion = compliance_completion_history[-1]
         
-        # Compliance completion (mandatory modules)
-        mandatory_modules = [m for m, a in assignment_map.items() if a.is_mandatory]
-        comp_trackers = [t for t in trackers_dt if t.module in mandatory_modules]
-        comp_total = len(comp_trackers)
-        comp_completed = len([t for t in comp_trackers if t.status == "Completed" and t.completed_on and getdate(t.completed_on) <= getdate(dt)])
-        compliance_completion_history.append(int((comp_completed / comp_total) * 100) if comp_total > 0 else 0)
+        current_label = "this month" if timeframe == "month" else "this year"
+        prev_label = "last month" if timeframe == "month" else "last year"
         
-    # Current values are simply the most recent snapshot
-    active_learners = active_learners_history[-1]
-    completion_rate = completion_rate_history[-1]
-    overdue_assignments = overdue_assignments_history[-1]
-    compliance_completion = compliance_completion_history[-1]
-    
-    # Calculate specific trend strings matching original UI
-    a_prev = active_learners_history[-2] if len(active_learners_history) > 1 else active_learners
-    a_pct = int(((active_learners - a_prev) / a_prev) * 100) if a_prev > 0 else 0
-    a_trend = f"+{a_pct}% this month" if a_pct >= 0 else f"{a_pct}% this month"
-    
-    c_prev = completion_rate_history[-2] if len(completion_rate_history) > 1 else completion_rate
-    c_trend = f"vs {c_prev}% last month"
-    
-    o_prev = overdue_assignments_history[-2] if len(overdue_assignments_history) > 1 else overdue_assignments
-    o_pct = int(((overdue_assignments - o_prev) / o_prev) * 100) if o_prev > 0 else 0
-    o_trend = f"+{o_pct}% this month" if o_pct >= 0 else f"{o_pct}% this month"
-    
-    cc_prev = compliance_completion_history[-2] if len(compliance_completion_history) > 1 else compliance_completion
-    cc_diff = compliance_completion - cc_prev
-    cc_trend = f"+{cc_diff}% this month" if cc_diff >= 0 else f"{cc_diff}% this month"
-    
+        a_prev = active_learners_history[-2] if len(active_learners_history) > 1 else active_learners
+        if a_prev == 0:
+            a_pct = 100 if active_learners > 0 else 0
+        else:
+            a_pct = round(((active_learners - a_prev) / a_prev) * 100)
+        a_trend = f"+{a_pct}% {current_label}" if a_pct > 0 else f"{a_pct}% {current_label}"
+        
+        c_prev = completion_rate_history[-2] if len(completion_rate_history) > 1 else completion_rate
+        c_trend = f"vs {c_prev}% {prev_label}"
+        
+        o_prev = overdue_assignments_history[-2] if len(overdue_assignments_history) > 1 else overdue_assignments
+        if o_prev == 0:
+            o_pct = 100 if overdue_assignments > 0 else 0
+        else:
+            o_pct = round(((overdue_assignments - o_prev) / o_prev) * 100)
+        o_trend = f"+{o_pct}% {current_label}" if o_pct > 0 else f"{o_pct}% {current_label}"
+        
+        cc_prev = compliance_completion_history[-2] if len(compliance_completion_history) > 1 else compliance_completion
+        if cc_prev == 0:
+            cc_pct = 100 if compliance_completion > 0 else 0
+        else:
+            cc_pct = round(((compliance_completion - cc_prev) / cc_prev) * 100)
+        cc_trend = f"+{cc_pct}% {current_label}" if cc_pct > 0 else f"{cc_pct}% {current_label}"
+        
+        return {
+            "labels": [getdate(dt).strftime("%Y") if timeframe == "year" else getdate(dt).strftime("%b") for dt in intervals],
+            "activeLearners": active_learners,
+            "activeLearnersTrend": a_trend,
+            "activeLearnersHistory": active_learners_history,
+            "completionRate": completion_rate,
+            "completionRateTrend": c_trend,
+            "completionRateHistory": completion_rate_history,
+            "overdueAssignments": overdue_assignments,
+            "overdueAssignmentsTrend": o_trend,
+            "overdueAssignmentsHistory": overdue_assignments_history,
+            "complianceCompletion": compliance_completion,
+            "complianceCompletionTrend": cc_trend,
+            "complianceCompletionHistory": compliance_completion_history
+        }
+
     return {
-        "activeLearners": active_learners,
-        "activeLearnersTrend": a_trend if a_pct != 0 else "Trending steady",
-        "activeLearnersHistory": active_learners_history,
-        
-        "completionRate": completion_rate,
-        "completionRateTrend": c_trend,
-        "completionRateHistory": completion_rate_history,
-        
-        "overdueAssignments": overdue_assignments,
-        "overdueAssignmentsTrend": o_trend if o_pct != 0 else "Needs review",
-        "overdueAssignmentsHistory": overdue_assignments_history,
-        
-        "complianceCompletion": compliance_completion,
-        "complianceCompletionTrend": cc_trend if cc_diff != 0 else "On track",
-        "complianceCompletionHistory": compliance_completion_history
+        "month": get_data("month"),
+        "year": get_data("year")
     }
 
 @frappe.whitelist(allow_guest=True)
@@ -124,11 +134,11 @@ def get_department_performance():
         
         overdue_users = set()
         for tr in trackers:
-            if tr.status in ["In Progress", "Not started"]:
+            # Only use started_on; skip if not started. Any status != Completed is overdue.
+            if tr.status != "Completed" and tr.started_on:
                 a = assignment_map.get(tr.module)
                 if a and a.duration:
-                    start_date = getdate(tr.started_on) if tr.started_on else getdate(tr.creation)
-                    due = getdate(add_days(start_date, a.duration))
+                    due = getdate(add_days(getdate(tr.started_on), a.duration))
                     if due < today_dt:
                         overdue_users.add(tr.user)
         
@@ -156,12 +166,14 @@ def get_upcoming_deadlines():
     today_dt = getdate(today())
     next_week = getdate(add_days(today_dt, 30))
     
-    trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["in", ["In Progress", "Not started"]]}, fields=["module", "started_on", "creation"])
+    trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["!=", "Completed"]}, fields=["module", "started_on"])
     for t in trackers:
+        # Only use started_on; skip if not started yet
+        if not t.started_on:
+            continue
         a = assignment_map.get(t.module)
         if a and a.duration:
-            start_date = getdate(t.started_on) if t.started_on else getdate(t.creation)
-            due = getdate(add_days(start_date, a.duration))
+            due = getdate(add_days(getdate(t.started_on), a.duration))
             if today_dt <= due <= next_week:
                 if t.module not in approaching:
                     approaching[t.module] = {"count": 0, "mandatory": a.is_mandatory}
@@ -233,19 +245,20 @@ def get_learning_content_summary():
     for t in trackers:
         if t.status == "Completed":
             status_counts["Passed"] += 1
-        elif t.status == "Failed":
-            status_counts["Failed"] += 1
         else:
+            # Any non-Completed status: check if overdue first (only if started)
             is_overdue = False
-            a = assignment_map.get(t.module)
-            if a and a.duration:
-                start_date = getdate(t.started_on) if t.started_on else getdate(t.creation)
-                due = add_days(start_date, a.duration)
-                if getdate(due) < getdate(today()):
-                    is_overdue = True
-                    
+            if t.started_on:
+                a = assignment_map.get(t.module)
+                if a and a.duration:
+                    due = add_days(getdate(t.started_on), a.duration)
+                    if getdate(due) < getdate(today()):
+                        is_overdue = True
+
             if is_overdue:
                 status_counts["Overdue"] += 1
+            elif t.status == "Failed":
+                status_counts["Failed"] += 1
             elif t.status == "In Progress":
                 status_counts["In Progress"] += 1
             else:
@@ -275,22 +288,21 @@ def get_needs_attention_metrics():
     for t in trackers:
         if t.status == "Failed" and t.total_score is not None and t.total_score < 60:
             low_scores += 1
-            
-        if t.status in ["In Progress", "Not started"]:
+
+        # Any status != Completed is overdue once past due date (only if started)
+        if t.status != "Completed" and t.started_on:
             a = assignment_map.get(t.module)
             if a and a.duration:
-                start_date = getdate(t.started_on) if t.started_on else getdate(t.creation)
-                due = add_days(start_date, a.duration)
+                due = add_days(getdate(t.started_on), a.duration)
                 if getdate(due) < getdate(today()):
                     overdue_learning += 1
                 
-    # Inactive Learners (simulated by checking users with no trackers)
-    learners = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent")
-    if not learners:
-        learners = ["no_learners_found"]
-        
-    total_learners = frappe.db.count("User", {"name": ["in", learners]})
-    active_users = len(set([t.user for t in frappe.get_all("LMS Module Tracker", fields=["user"])]))
+    # Inactive Learners: users with LMS-Learner role who haven't had any activity in 30 days
+    # We check if they have any LMS Module Tracker modified in the last 30 days
+    thirty_days_ago = add_days(today(), -30)
+    current_learners = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent")
+    total_learners = len(current_learners)
+    active_users = len(set([t.user for t in frappe.get_all("LMS Module Tracker", fields=["user"], filters={"modified": [">=", thirty_days_ago]})]))
     inactive_learners = max(0, total_learners - active_users)
 
     return {
@@ -326,14 +338,18 @@ def get_assessment_performance():
 def get_onboarding_status():
     thirty_days_ago = add_days(today(), -30)
     
-    learners = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent")
-    if not learners:
-        learners = ["no_learners_found"]
-        
-    new_users = frappe.db.count("User", {
-        "creation": [">=", thirty_days_ago],
-        "name": ["in", learners]
-    })
+    # Count users where the LMS-Learner ROLE was assigned in the last 30 days
+    # This is the correct signal for "new to LMS" — the user account may have existed for years
+    # but they only became a learner when the role was assigned.
+    new_learner_roles = frappe.get_all(
+        "Has Role",
+        filters={
+            "role": "LMS-Learner",
+            "creation": [">=", thirty_days_ago]
+        },
+        pluck="parent"
+    )
+    new_users = len(new_learner_roles)
     
     if new_users == 0:
         return {
@@ -354,53 +370,119 @@ def get_onboarding_status():
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_insights():
-    teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
-    if not teams:
+    from frappe.utils import add_days, today, getdate
+    
+    insights = []
+    
+    # Fetch all trackers and assignments
+    trackers = frappe.get_all("LMS Module Tracker", fields=["name", "status", "user", "module", "creation", "started_on"])
+    if not trackers:
         return []
         
-    team_scores = {}
-    team_in_progress = {}
+    assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
+    assignment_map = {a.module: a for a in assignments}
     
-    for t in teams:
-        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
-        member_emails = [m.user for m in members]
-        if not member_emails:
-            continue
-            
-        trackers = frappe.get_all("LMS Module Tracker", filters={"user": ["in", member_emails]}, fields=["status", "total_score"])
-        
-        completed = [tr for tr in trackers if tr.status == "Completed" and tr.total_score is not None]
-        if completed:
-            avg_score = sum([tr.total_score for tr in completed]) / len(completed)
-            team_scores[t.team_name] = avg_score
-            
-        in_progress = len([tr for tr in trackers if tr.status == "In Progress"])
-        team_in_progress[t.team_name] = in_progress
-
-    insights = []
-    if team_scores:
-        top_team = max(team_scores, key=team_scores.get)
-        bottom_team = min(team_scores, key=team_scores.get)
-        
+    # 1. Overall Completion Rate (Success/Green)
+    total_trackers = len(trackers)
+    completed_trackers = [t for t in trackers if t.status == "Completed"]
+    if total_trackers > 0:
+        completion_rate = int((len(completed_trackers) / total_trackers) * 100)
         insights.append({
-            "title": "Top Performing Department",
-            "description": f"{top_team} leads with the highest average assessment score of {int(team_scores[top_team])}%.",
+            "title": "Completion Rate",
+            "description": f"**{completion_rate}% of assigned learning** has been **completed** this month.",
             "type": "success"
         })
-        if top_team != bottom_team:
+
+    # 2. Highest Overdue Learners by Department (Destructive/Red)
+    teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
+    user_team_map = {}
+    for t in teams:
+        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
+        for m in members:
+            user_team_map[m.user] = t.team_name
+            
+    team_overdue_users = {}
+    for t in trackers:
+        if t.status != "Completed" and t.started_on:
+            a = assignment_map.get(t.module)
+            if a and a.duration:
+                due_date = add_days(getdate(t.started_on), a.duration)
+                if getdate(due_date) < getdate(today()):
+                    team = user_team_map.get(t.user)
+                    if team:
+                        if team not in team_overdue_users:
+                            team_overdue_users[team] = set()
+                        team_overdue_users[team].add(t.user)
+                        
+    if team_overdue_users:
+        worst_team = max(team_overdue_users, key=lambda k: len(team_overdue_users[k]))
+        overdue_count = len(team_overdue_users[worst_team])
+        if overdue_count > 0:
             insights.append({
-                "title": "Needs Support",
-                "description": f"{bottom_team} has the lowest average assessment score ({int(team_scores[bottom_team])}%). Consider providing additional resources.",
+                "title": "Overdue Alerts",
+                "description": f"**{worst_team} has the highest** number of **overdue learners ({overdue_count})**.",
+                "type": "destructive"
+            })
+
+    # 3. Most Completed Module (Info/Blue)
+    module_completed_counts = {}
+    for t in completed_trackers:
+        module_completed_counts[t.module] = module_completed_counts.get(t.module, 0) + 1
+        
+    if module_completed_counts:
+        top_module = max(module_completed_counts, key=module_completed_counts.get)
+        insights.append({
+            "title": "Popular Content",
+            "description": f"**{top_module}** is the most **completed module**.",
+            "type": "info"
+        })
+
+    # 4. Not Started Learners (Warning/Yellow)
+    not_started_users = set([t.user for t in trackers if t.status == "Not started"])
+    not_started_count = len(not_started_users)
+    if not_started_count > 0:
+        insights.append({
+            "title": "Engagement Drop",
+            "description": f"**{not_started_count} learners** haven't started their **assigned training**.",
+            "type": "warning"
+        })
+
+    # 5. Assessment Pass Rate Trend (Success/Green)
+    trackers_scores = frappe.get_all("LMS Module Tracker", fields=["status", "creation"], filters={"status": ["in", ["Completed", "Failed"]]})
+    
+    thirty_days_ago = add_days(today(), -30)
+    sixty_days_ago = add_days(today(), -60)
+    
+    current_month_attempts = [t for t in trackers_scores if getdate(t.creation) >= getdate(thirty_days_ago)]
+    prev_month_attempts = [t for t in trackers_scores if getdate(sixty_days_ago) <= getdate(t.creation) < getdate(thirty_days_ago)]
+    
+    def get_pass_rate(attempt_list):
+        if not attempt_list: return 0
+        passed = len([t for t in attempt_list if t.status == "Completed"])
+        return int((passed / len(attempt_list)) * 100)
+        
+    current_pass_rate = get_pass_rate(current_month_attempts)
+    prev_pass_rate = get_pass_rate(prev_month_attempts)
+    
+    if current_month_attempts and prev_month_attempts:
+        diff = current_pass_rate - prev_pass_rate
+        if diff >= 0:
+            insights.append({
+                "title": "Performance Up",
+                "description": f"**Assessment pass rate improved by {diff}%** compared to last month.",
+                "type": "success"
+            })
+        else:
+            insights.append({
+                "title": "Performance Down",
+                "description": f"**Assessment pass rate dropped by {abs(diff)}%** compared to last month.",
                 "type": "warning"
             })
-            
-    if team_in_progress:
-        top_learning_team = max(team_in_progress, key=team_in_progress.get)
-        if team_in_progress[top_learning_team] > 0:
-            insights.append({
-                "title": "High Engagement",
-                "description": f"{top_learning_team} currently has {team_in_progress[top_learning_team]} active learners in progress. Great momentum!",
-                "type": "info"
-            })
-            
+    elif current_month_attempts:
+        insights.append({
+            "title": "Performance",
+            "description": f"**Assessment pass rate** is currently at **{current_pass_rate}%**.",
+            "type": "success" if current_pass_rate >= 80 else "warning"
+        })
+
     return insights

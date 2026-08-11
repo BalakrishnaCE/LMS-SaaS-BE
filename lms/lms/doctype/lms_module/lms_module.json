@@ -26,29 +26,29 @@
  ],
  "fields": [
   {
+   "description": "Enter the module name.",
    "fieldname": "module_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Module Name",
    "reqd": 1,
-   "unique": 1,
-   "description": "Enter the module name."
+   "unique": 1
   },
   {
+   "description": "Link to the corresponding LMS Course Category.",
    "fieldname": "category",
    "fieldtype": "Link",
    "label": "Category",
-   "options": "LMS Course Category",
-   "description": "Link to the corresponding LMS Course Category."
+   "options": "LMS Course Category"
   },
   {
+   "description": "Select the status from the dropdown options.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
    "options": "Draft\nPublished\nArchived",
-   "reqd": 1,
-   "description": "Select the status from the dropdown options."
+   "reqd": 1
   },
   {
    "default": "Everyone",
@@ -59,16 +59,16 @@
    "options": "Everyone\nAssigned Only\nHidden"
   },
   {
+   "description": "Enter the description.",
    "fieldname": "description",
    "fieldtype": "Text Editor",
-   "label": "Description",
-   "description": "Enter the description."
+   "label": "Description"
   },
   {
+   "description": "Upload the image file.",
    "fieldname": "image",
    "fieldtype": "Attach Image",
-   "label": "Image",
-   "description": "Upload the image file."
+   "label": "Image"
   },
   {
    "description": "Expected number of days for a learner to complete this module. Used to calculate due dates in assignments.",
@@ -85,11 +85,11 @@
    "reqd": 1
   },
   {
+   "description": "Child table that links to Lessons",
    "fieldname": "lessons",
    "fieldtype": "Table",
    "label": "Lessons",
-   "options": "LMS Module Lesson Child",
-   "description": "Child table that links to Lessons"
+   "options": "LMS Module Lesson Child"
   },
   {
    "default": "0",
@@ -100,31 +100,31 @@
   },
   {
    "default": "0",
+   "description": "Toggle to enable or disable is mandatory.",
    "fieldname": "is_mandatory",
    "fieldtype": "Check",
-   "label": "Is Mandatory",
-   "description": "Toggle to enable or disable is mandatory."
+   "label": "Is Mandatory"
   },
   {
    "default": "0",
+   "description": "Toggle to enable or disable complete all lessons.",
    "fieldname": "complete_all_lessons",
    "fieldtype": "Check",
-   "label": "Complete All Lessons",
-   "description": "Toggle to enable or disable complete all lessons."
+   "label": "Complete All Lessons"
   },
   {
    "default": "0",
+   "description": "Toggle to enable or disable complete all interactions.",
    "fieldname": "complete_all_interactions",
    "fieldtype": "Check",
-   "label": "Complete All Interactions",
-   "description": "Toggle to enable or disable complete all interactions."
+   "label": "Complete All Interactions"
   },
   {
    "default": "0",
+   "description": "Toggle to enable or disable enable certificate.",
    "fieldname": "enable_certificate",
    "fieldtype": "Check",
-   "label": "Enable Certificate",
-   "description": "Toggle to enable or disable enable certificate."
+   "label": "Enable Certificate"
   },
   {
    "depends_on": "is_score_required",
@@ -135,17 +135,17 @@
    "read_only": 1
   },
   {
+   "description": "supports multiple assessments",
    "fieldname": "final_assessments",
    "fieldtype": "Table",
    "label": "Final Assessments",
-   "options": "LMS Module Assessment",
-   "description": "CHANGED from single Link to child table \u2014 supports multiple assessments"
+   "options": "LMS Module Assessment"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 12:03:14.852934",
+ "modified": "2026-08-11 13:31:03.430516",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module",

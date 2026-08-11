@@ -17,68 +17,69 @@
  ],
  "fields": [
   {
+   "description": "Enter the title.",
    "fieldname": "title",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1,
-   "description": "Enter the title."
+   "unique": 1
   },
   {
+   "description": "Enter the message.",
    "fieldname": "message",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Message",
-   "reqd": 1,
-   "description": "Enter the message."
+   "reqd": 1
   },
   {
+   "description": "Select the target audience from the dropdown options.",
    "fieldname": "target_audience",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Target Audience",
    "options": "All Users\nSpecific Team",
-   "reqd": 1,
-   "description": "Select the target audience from the dropdown options."
+   "reqd": 1
   },
   {
+   "description": "Link to the corresponding LMS Team.",
    "fieldname": "target_team",
    "fieldtype": "Link",
    "label": "Target Team",
-   "options": "LMS Team",
-   "description": "Link to the corresponding LMS Team."
+   "options": "LMS Team"
   },
   {
+   "description": "Announcement auto-hides after this date",
    "fieldname": "expires_on",
    "fieldtype": "Date",
-   "label": "Expires On",
-   "description": "Announcement auto-hides after this date"
+   "label": "Expires On"
   },
   {
    "depends_on": "eval:doc.target_audience=='Specific Team'",
+   "description": "Supports announcing to multiple teams at once.",
    "fieldname": "target_teams",
    "fieldtype": "Table",
    "label": "Target Teams",
-   "options": "LMS Announcement Team",
-   "description": "CHANGED from single Link to child table. Visible only when Target Audience is \"Specific Team\". Supports announcing to multiple teams at once."
+   "options": "LMS Announcement Team"
   },
   {
    "depends_on": "eval:doc.target_audience=='Specific Members'",
+   "description": "Announces to specific individuals.",
    "fieldname": "target_members",
    "fieldtype": "Table",
    "label": "Target Members",
-   "options": "LMS Announcement Member",
-   "description": "Visible only when Target Audience is \"Specific Members\". Announces to specific individuals."
+   "options": "LMS Announcement Member"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.754000",
+ "modified": "2026-08-11 13:38:37.833295",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Announcement",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

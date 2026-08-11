@@ -19,82 +19,82 @@
  ],
  "fields": [
   {
+   "description": "Link to the corresponding User.",
    "fieldname": "user",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "User",
    "options": "User",
-   "reqd": 1,
-   "description": "Link to the corresponding User."
+   "reqd": 1
   },
   {
+   "description": "Link to the corresponding LMS Module.",
    "fieldname": "module",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Module",
    "options": "LMS Module",
-   "reqd": 1,
-   "description": "Link to the corresponding LMS Module."
+   "reqd": 1
   },
   {
+   "description": "Select the status from the dropdown options.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
    "options": "In Progress\nCompleted\nFailed\nNot started",
-   "reqd": 1,
-   "description": "Select the status from the dropdown options."
+   "reqd": 1
   },
   {
+   "description": "0.0 to 100.0",
    "fieldname": "progress_percentage",
    "fieldtype": "Float",
-   "label": "Progress Percentage",
-   "description": "0.0 to 100.0"
+   "label": "Progress Percentage"
   },
   {
+   "description": "Numeric value for total score.",
    "fieldname": "total_score",
    "fieldtype": "Float",
-   "label": "Total Score",
-   "description": "Numeric value for total score."
+   "label": "Total Score"
   },
   {
+   "description": "The exact started on.",
    "fieldname": "started_on",
    "fieldtype": "Datetime",
-   "label": "Started On",
-   "description": "The exact started on."
+   "label": "Started On"
   },
   {
+   "description": "The exact completed on.",
    "fieldname": "completed_on",
    "fieldtype": "Datetime",
-   "label": "Completed On",
-   "description": "The exact completed on."
+   "label": "Completed On"
   },
   {
+   "description": "Child table tracking individual Lesson status",
    "fieldname": "lesson_progress",
    "fieldtype": "Table",
    "label": "Lesson Progress",
-   "options": "LMS Lesson Progress",
-   "description": "Child table tracking individual Lesson status"
+   "options": "LMS Lesson Progress"
   },
   {
+   "description": "Child table tracking individual Chapter status",
    "fieldname": "chapter_progress",
    "fieldtype": "Table",
    "label": "Chapter Progress",
-   "options": "LMS Chapter Progress",
-   "description": "Child table tracking individual Chapter status"
+   "options": "LMS Chapter Progress"
   },
   {
+   "description": "Child table tracking the granular completion status of each individual content item.",
    "fieldname": "content_progress",
    "fieldtype": "Table",
    "label": "Content Progress",
-   "options": "LMS Content Progress",
-   "description": "NEW \u2014 Child table tracking the granular completion status of each individual content item."
+   "options": "LMS Content Progress"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 14:23:45.864835",
+ "modified": "2026-08-11 13:35:51.589258",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Module Tracker",

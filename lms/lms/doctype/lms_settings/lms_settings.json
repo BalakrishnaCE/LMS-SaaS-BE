@@ -13,37 +13,37 @@
  ],
  "fields": [
   {
+   "description": "Upload the brand logo file.",
    "fieldname": "brand_logo",
    "fieldtype": "Attach Image",
-   "label": "Brand Logo",
-   "description": "Upload the brand logo file."
+   "label": "Brand Logo"
   },
   {
+   "description": "Allows React frontend to fetch the hex code and change themes",
    "fieldname": "primary_color",
    "fieldtype": "Color",
-   "label": "Primary Color",
-   "description": "Allows React frontend to fetch the hex code and change themes"
+   "label": "Primary Color"
   },
   {
    "default": "0",
+   "description": "Toggle to enable or disable enable discussions.",
    "fieldname": "enable_discussions",
    "fieldtype": "Check",
-   "label": "Enable Discussions",
-   "description": "Toggle to enable or disable enable discussions."
+   "label": "Enable Discussions"
   },
   {
+   "description": "Allows new features to be toggled without schema changes",
    "fieldname": "feature_toggles",
    "fieldtype": "Table",
    "label": "Feature Toggles",
-   "options": "LMS Feature Toggle",
-   "description": "CHANGED from individual checkboxes to a child table. Allows new features to be toggled without schema changes"
+   "options": "LMS Feature Toggle"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-10 11:01:55.988976",
+ "modified": "2026-08-11 13:31:49.157185",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Settings",
