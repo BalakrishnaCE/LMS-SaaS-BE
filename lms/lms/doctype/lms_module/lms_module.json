@@ -35,11 +35,11 @@
    "unique": 1
   },
   {
-   "description": "Link to the corresponding LMS Course Category.",
+   "description": "Select one or more categories for this module.",
    "fieldname": "category",
-   "fieldtype": "Link",
+   "fieldtype": "Table MultiSelect",
    "label": "Category",
-   "options": "LMS Course Category"
+   "options": "LMS Module Category"
   },
   {
    "description": "Select the status from the dropdown options.",
