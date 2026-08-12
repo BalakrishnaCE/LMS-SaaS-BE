@@ -5,10 +5,22 @@ from frappe.utils import today, add_days, getdate, add_months, now
 @frappe.whitelist(allow_guest=True)
 def get_metrics_summary():
     def get_data(timeframe):
+        import calendar
+        current_year = getdate(now()).year
+        current_month = getdate(now()).month
+        
         if timeframe == "year":
-            intervals = [add_months(now(), -i * 12) for i in range(5, -1, -1)]
+            # "This Year" shows data broken down by the 12 months (Jan-Dec)
+            intervals = [getdate(f"{current_year}-{m:02d}-28") for m in range(1, 13)]
         else:
-            intervals = [add_months(now(), -i) for i in range(5, -1, -1)]
+            # "This Month" shows data broken down by 4 weeks
+            num_days = calendar.monthrange(current_year, current_month)[1]
+            intervals = [
+                getdate(f"{current_year}-{current_month:02d}-07"),
+                getdate(f"{current_year}-{current_month:02d}-14"),
+                getdate(f"{current_year}-{current_month:02d}-21"),
+                getdate(f"{current_year}-{current_month:02d}-{num_days}")
+            ]
         
         active_learners_history = []
         completion_rate_history = []
@@ -17,6 +29,18 @@ def get_metrics_summary():
         
         assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "creation", "is_mandatory"])
         assignment_map = {a.module: a for a in assignments}
+        
+        # Build a map of module -> list of categories using the new child table
+        all_module_categories = frappe.get_all(
+            "LMS Module Category",
+            fields=["parent", "category"]
+        )
+        # module_categories_map: { module_name: set_of_category_names }
+        module_categories_map = {}
+        for mc in all_module_categories:
+            if mc.parent not in module_categories_map:
+                module_categories_map[mc.parent] = set()
+            module_categories_map[mc.parent].add(mc.category)
         
         all_learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, fields=["parent", "creation"])
         
@@ -52,8 +76,9 @@ def get_metrics_summary():
             completion_rate_history.append(int((completed_dt / total_dt) * 100) if total_dt > 0 else 0)
             overdue_assignments_history.append(overdue_dt)
             
-            mandatory_modules = [m for m, a in assignment_map.items() if a.is_mandatory]
-            comp_trackers = [t for t in trackers_dt if t.module in mandatory_modules]
+            # Compliance = modules that have "Compliance" in their list of categories
+            compliance_modules = {mod for mod, cats in module_categories_map.items() if "Compliance" in cats}
+            comp_trackers = [t for t in trackers_dt if t.module in compliance_modules]
             comp_total = len(comp_trackers)
             comp_completed = len([t for t in comp_trackers if t.status == "Completed" and (not t.completed_on or getdate(t.completed_on) <= getdate(dt))])
             compliance_completion_history.append(int((comp_completed / comp_total) * 100) if comp_total > 0 else 0)
@@ -91,7 +116,7 @@ def get_metrics_summary():
         cc_trend = f"+{cc_pct}% {current_label}" if cc_pct > 0 else f"{cc_pct}% {current_label}"
         
         return {
-            "labels": [getdate(dt).strftime("%Y") if timeframe == "year" else getdate(dt).strftime("%b") for dt in intervals],
+            "labels": [getdate(dt).strftime("%b") if timeframe == "year" else f"Week {i+1}" for i, dt in enumerate(intervals)],
             "activeLearners": active_learners,
             "activeLearnersTrend": a_trend,
             "activeLearnersHistory": active_learners_history,
