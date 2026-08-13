@@ -56,7 +56,7 @@
    "fieldname": "module_view",
    "fieldtype": "Select",
    "label": "Module View",
-   "options": "Everyone\nAssigned Only\nHidden"
+   "options": "Everyone\nSelected Learners\nSelected Departments\nHidden"
   },
   {
    "description": "Enter the description.",

@@ -151,13 +151,41 @@ def remove_lesson(module_name, lesson_name):
     module = frappe.get_doc("LMS Module", module_name)
     module.lessons = [ml for ml in module.lessons if ml.lesson != lesson_name]
     module.save(ignore_permissions=True)
+    
+    if frappe.db.exists("LMS Lesson", lesson_name):
+        lesson = frappe.get_doc("LMS Lesson", lesson_name)
+        if hasattr(lesson, "chapters"):
+            for ch in lesson.chapters:
+                remove_chapter(lesson_name, ch.chapter)
+        frappe.delete_doc("LMS Lesson", lesson_name, ignore_permissions=True)
+        
     return {"status": "success"}
 
 @frappe.whitelist(allow_guest=False)
 def remove_chapter(lesson_name, chapter_name):
-    lesson = frappe.get_doc("LMS Lesson", lesson_name)
-    lesson.chapters = [ch for ch in lesson.chapters if ch.chapter != chapter_name]
-    lesson.save(ignore_permissions=True)
+    if frappe.db.exists("LMS Lesson", lesson_name):
+        lesson = frappe.get_doc("LMS Lesson", lesson_name)
+        lesson.chapters = [ch for ch in lesson.chapters if ch.chapter != chapter_name]
+        lesson.save(ignore_permissions=True)
+    
+    if frappe.db.exists("LMS Chapter", chapter_name):
+        chapter = frappe.get_doc("LMS Chapter", chapter_name)
+        
+        # Gather content references before deleting the chapter to avoid LinkExistsError
+        contents_to_delete = []
+        if hasattr(chapter, "contents"):
+            for content in chapter.contents:
+                if content.content_type and content.content_reference:
+                    contents_to_delete.append((content.content_type, content.content_reference))
+        
+        # Delete the chapter first so the links are removed
+        frappe.delete_doc("LMS Chapter", chapter_name, ignore_permissions=True)
+        
+        # Now safely delete the orphaned content records
+        for ctype, crefe in contents_to_delete:
+            if frappe.db.exists(ctype, crefe):
+                frappe.delete_doc(ctype, crefe, ignore_permissions=True)
+        
     return {"status": "success"}
 
 @frappe.whitelist(allow_guest=False)
