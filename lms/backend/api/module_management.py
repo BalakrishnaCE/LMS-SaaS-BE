@@ -15,11 +15,24 @@ def get_curriculum(module_name):
         chapters = []
         for ch in lesson.chapters:
             chapter = frappe.get_doc("LMS Chapter", ch.chapter)
+            
+            content_type = "document"
+            if hasattr(chapter, "contents") and chapter.contents:
+                raw_type = chapter.contents[0].content_type
+                reverse_map = {
+                    'LMS Text Content': 'document',
+                    'LMS Video Content': 'video',
+                    'LMS Audio Content': 'audio',
+                    'LMS Document Content': 'presentation'
+                }
+                content_type = reverse_map.get(raw_type, 'document')
+
             chapters.append({
                 "name": chapter.name,
                 "title": chapter.title,
                 "scoring": chapter.scoring,
-                "order": ch.order
+                "order": ch.order,
+                "contentType": content_type
             })
         
         curriculum.append({
@@ -64,16 +77,18 @@ def add_lesson(module_name, lesson_name, description=""):
     
     return {"status": "success", "lesson": lesson.name}
 
+import json
+
 @frappe.whitelist(allow_guest=False)
-def add_chapter(lesson_name, chapter_title, content_type="document"):
+def add_chapter(lesson_name, chapter_title, content_type="document", content_data=None):
     if not lesson_name or not chapter_title:
         frappe.throw("Lesson Name and Chapter Title are required")
         
     type_map = {
-        'document': 'LMS Document Content',
+        'document': 'LMS Text Content', # Maps to text_block (Rich Text)
         'video': 'LMS Video Content',
         'audio': 'LMS Audio Content',
-        'presentation': 'LMS Document Content',
+        'presentation': 'LMS Document Content', # Maps to base_media (File upload)
         'quiz': 'LMS Text Content', 
         'iframe': 'LMS Text Content',
         'assessment': 'LMS Text Content',
@@ -81,38 +96,44 @@ def add_chapter(lesson_name, chapter_title, content_type="document"):
     }
     doctype_name = type_map.get(content_type, 'LMS Text Content')
         
-    # Check if chapter exists, else create
-    if not frappe.db.exists("LMS Chapter", {"title": chapter_title}):
-        chapter = frappe.get_doc({
-            "doctype": "LMS Chapter",
-            "title": chapter_title,
-            "scoring": 0
+    # Always create a new chapter
+    chapter = frappe.get_doc({
+        "doctype": "LMS Chapter",
+        "title": chapter_title,
+        "scoring": 0
+    })
+    chapter.insert(ignore_permissions=True)
+    
+    try:
+        # Create the content record to link
+        content_doc = frappe.get_doc({
+            "doctype": doctype_name,
+            "title": chapter_title
         })
-        chapter.insert(ignore_permissions=True)
         
-        try:
-            # Attempt to create an empty content record to link
-            content_doc = frappe.get_doc({
-                "doctype": doctype_name,
-                "title": chapter_title
-            })
-            content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
-            
-            chapter.append("contents", {
-                "content_type": doctype_name,
-                "content_reference": content_doc.name,
-                "order": 1
-            })
-            chapter.save(ignore_permissions=True)
-        except Exception as e:
-            pass # If content creation fails due to strict validations, we still have the Chapter
-            
-    else:
-        chapter = frappe.get_doc("LMS Chapter", {"title": chapter_title})
+        # Inject dynamic fields from frontend
+        if content_data:
+            if isinstance(content_data, str):
+                content_data = json.loads(content_data)
+            for key, value in content_data.items():
+                if value is not None:
+                    content_doc.set(key, value)
+        
+        content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+        
+        chapter.append("contents", {
+            "content_type": doctype_name,
+            "content_reference": content_doc.name,
+            "order": 1
+        })
+        chapter.save(ignore_permissions=True)
+    except Exception as e:
+        frappe.log_error("Failed to create content doc", str(e))
+        pass # If content creation fails due to strict validations, we still have the Chapter
         
     lesson = frappe.get_doc("LMS Lesson", lesson_name)
     
-    # Check if attached
+    # Check if attached (in rare cases of identical IDs)
     for ch in lesson.chapters:
         if ch.chapter == chapter.name:
             return {"status": "already_exists", "chapter": chapter.name}

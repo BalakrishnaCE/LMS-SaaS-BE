@@ -22,7 +22,6 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1,
-   "unique": 1,
    "description": "Enter the title."
   },
   {
@@ -106,5 +105,5 @@
    "write": 1
   }
  ],
- "autoname": "field:title"
+ "autoname": "format:BLK-{####}"
 }
