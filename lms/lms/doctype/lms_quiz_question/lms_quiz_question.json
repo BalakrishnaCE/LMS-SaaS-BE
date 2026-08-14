@@ -9,7 +9,8 @@
   "question_text",
   "question_type",
   "score",
-  "options"
+  "options",
+  "explanation"
  ],
  "fields": [
   {
@@ -43,6 +44,12 @@
    "label": "Options",
    "options": "LMS Quiz Option",
    "description": "Child table for LMS Quiz Option."
+  },
+  {
+   "fieldname": "explanation",
+   "fieldtype": "Text",
+   "label": "Explanation",
+   "description": "Explanation or rationale for the answer."
   }
  ],
  "grid_page_length": 50,
