@@ -17,8 +17,10 @@ def get_curriculum(module_name):
             chapter = frappe.get_doc("LMS Chapter", ch.chapter)
             
             content_type = "document"
+            content_data = None
             if hasattr(chapter, "contents") and chapter.contents:
-                raw_type = chapter.contents[0].content_type
+                content_link = chapter.contents[0]
+                raw_type = content_link.content_type
                 reverse_map = {
                     'LMS Text Content': 'document',
                     'LMS Video Content': 'video',
@@ -26,13 +28,26 @@ def get_curriculum(module_name):
                     'LMS Document Content': 'presentation'
                 }
                 content_type = reverse_map.get(raw_type, 'document')
+                
+                try:
+                    content_doc = frappe.get_doc(raw_type, content_link.content_reference)
+                    content_data = content_doc.as_dict()
+                    
+                    # Convert datetimes to strings to prevent json serialization errors
+                    if 'creation' in content_data:
+                        content_data['creation'] = str(content_data['creation'])
+                    if 'modified' in content_data:
+                        content_data['modified'] = str(content_data['modified'])
+                except Exception:
+                    content_data = None
 
             chapters.append({
                 "name": chapter.name,
                 "title": chapter.title,
                 "scoring": chapter.scoring,
                 "order": ch.order,
-                "contentType": content_type
+                "contentType": content_type,
+                "contentData": content_data
             })
         
         curriculum.append({
