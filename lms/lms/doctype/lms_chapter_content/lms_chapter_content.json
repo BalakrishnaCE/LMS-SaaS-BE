@@ -17,7 +17,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Content Type",
-   "options": "LMS Video Content\nLMS Audio Content\nLMS Document Content\nLMS Image Content\nLMS Text Content\nLMS Interactive Video Content\nLMS Fill In The Blank Content\nLMS Drag And Drop Content\nLMS Flashcard Content\nLMS Poll Content\nLMS Branching Scenario Content",
+   "options": "LMS Video Content\nLMS Audio Content\nLMS Document Content\nLMS Presentation Content\nLMS Image Content\nLMS Text Content\nLMS Interactive Video Content\nLMS Fill In The Blank Content\nLMS Drag And Drop Content\nLMS Flashcard Content\nLMS Poll Content\nLMS Branching Scenario Content\nLMS Quiz Content\nLMS Assessment Content\nLMS Iframe Content",
    "reqd": 1
   },
   {

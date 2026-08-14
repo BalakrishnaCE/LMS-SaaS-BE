@@ -25,7 +25,11 @@ def get_curriculum(module_name):
                     'LMS Text Content': 'document',
                     'LMS Video Content': 'video',
                     'LMS Audio Content': 'audio',
-                    'LMS Document Content': 'presentation'
+                    'LMS Presentation Content': 'presentation',
+                    'LMS Document Content': 'presentation', # Legacy fallback
+                    'LMS Quiz Content': 'quiz',
+                    'LMS Assessment Content': 'assessment',
+                    'LMS Iframe Content': 'iframe'
                 }
                 content_type = reverse_map.get(raw_type, 'document')
                 
@@ -38,7 +42,25 @@ def get_curriculum(module_name):
                         content_data['creation'] = str(content_data['creation'])
                     if 'modified' in content_data:
                         content_data['modified'] = str(content_data['modified'])
-                except Exception:
+                        
+                    # Recursively fetch Quiz data for frontend builder
+                    if raw_type == 'LMS Quiz Content' and content_doc.quiz:
+                        quiz_doc = frappe.get_doc("LMS Quiz", content_doc.quiz)
+                        quiz_data = quiz_doc.as_dict()
+                        quiz_data['questions_data'] = []
+                        
+                        for ch_q in quiz_doc.questions:
+                            q_doc = frappe.get_doc("LMS Quiz Question", ch_q.quiz_question)
+                            q_data = q_doc.as_dict()
+                            q_data['options_data'] = []
+                            for opt in q_doc.options:
+                                q_data['options_data'].append(opt.as_dict())
+                            quiz_data['questions_data'].append(q_data)
+                            
+                        content_data['quiz_data'] = quiz_data
+
+                except Exception as e:
+                    frappe.log_error(f"Error fetching {raw_type}", str(e))
                     content_data = None
 
             chapters.append({
@@ -103,10 +125,10 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
         'document': 'LMS Text Content', # Maps to text_block (Rich Text)
         'video': 'LMS Video Content',
         'audio': 'LMS Audio Content',
-        'presentation': 'LMS Document Content', # Maps to base_media (File upload)
-        'quiz': 'LMS Text Content', 
-        'iframe': 'LMS Text Content',
-        'assessment': 'LMS Text Content',
+        'presentation': 'LMS Presentation Content', # Maps to base_media (File upload)
+        'quiz': 'LMS Quiz Content', 
+        'iframe': 'LMS Iframe Content',
+        'assessment': 'LMS Assessment Content',
         'ai': 'LMS Text Content'
     }
     doctype_name = type_map.get(content_type, 'LMS Text Content')
@@ -245,3 +267,80 @@ def duplicate_module(module_name):
     new_module.insert(ignore_permissions=True)
     
     return {"status": "success", "new_module_id": new_module.name}
+
+@frappe.whitelist(allow_guest=False)
+def save_chapter_quiz(chapter_name, quiz_data):
+    import json
+    if not chapter_name or not quiz_data:
+        frappe.throw("Chapter Name and Quiz Data are required")
+        
+    if isinstance(quiz_data, str):
+        quiz_data = json.loads(quiz_data)
+        
+    chapter = frappe.get_doc("LMS Chapter", chapter_name)
+    if not hasattr(chapter, "contents") or not chapter.contents:
+        frappe.throw("Chapter has no contents")
+        
+    content_link = chapter.contents[0]
+    if content_link.content_type != "LMS Quiz Content":
+        frappe.throw("Chapter is not linked to a Quiz Content")
+        
+    quiz_content = frappe.get_doc("LMS Quiz Content", content_link.content_reference)
+    
+    # Check if quiz exists, else create new
+    if quiz_content.quiz:
+        quiz = frappe.get_doc("LMS Quiz", quiz_content.quiz)
+    else:
+        quiz = frappe.new_doc("LMS Quiz")
+        
+    quiz.title = quiz_data.get("title") or quiz_content.title or chapter.title or "Untitled Quiz"
+    quiz.description = quiz_data.get("description") or ""
+    quiz.total_score = quiz_data.get("total_score", 0)
+    quiz.randomize_questions = quiz_data.get("randomize_questions", 0)
+    quiz.time_limit_mins = quiz_data.get("time_limit_mins", 0)
+    quiz.is_passing_required = quiz_data.get("is_passing_required", 0)
+    quiz.passing_percentage = quiz_data.get("passing_percentage", 0)
+    
+    # We will clear existing questions in the quiz and re-append them 
+    # to handle ordering and updates simply in one pass
+    quiz.set("questions", [])
+    
+    for idx, q_data in enumerate(quiz_data.get("questions", [])):
+        q_text = (q_data.get("question_text") or "").strip()
+        if not q_text:
+            continue
+            
+        if q_data.get("name"):
+            q_doc = frappe.get_doc("LMS Quiz Question", q_data.get("name"))
+        else:
+            q_doc = frappe.new_doc("LMS Quiz Question")
+            
+        q_doc.question_text = q_text
+        q_doc.question_type = q_data.get("question_type", "Single Choice")
+        q_doc.score = q_data.get("score", 1)
+        
+        q_doc.set("options", [])
+        for opt in q_data.get("options", []):
+            opt_text = (opt.get("option_text") or "").strip()
+            if not opt_text:
+                continue
+            q_doc.append("options", {
+                "option_text": opt_text,
+                "is_correct": opt.get("is_correct", 0)
+            })
+            
+        q_doc.save(ignore_permissions=True)
+        
+        quiz.append("questions", {
+            "quiz_question": q_doc.name,
+            "order": idx + 1
+        })
+        
+    quiz.save(ignore_permissions=True)
+    
+    if not quiz_content.quiz:
+        quiz_content.quiz = quiz.name
+        quiz_content.save(ignore_permissions=True)
+        
+    return {"status": "success", "message": "Quiz saved successfully", "quiz_id": quiz.name}
+
