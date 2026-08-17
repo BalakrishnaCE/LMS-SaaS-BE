@@ -1,15 +1,14 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2026-08-10 06:39:00.000000",
+ "creation": "2026-08-14 10:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "title",
-  "text_block",
+  "base_media",
   "is_assessment",
-  "track_progress",
-  "interactive_elements"
+  "track_progress"
  ],
  "fields": [
   {
@@ -21,10 +20,10 @@
    "description": "Enter the title."
   },
   {
-   "fieldname": "text_block",
-   "fieldtype": "Text Editor",
-   "label": "Text Block",
-   "description": "Rich text article body."
+   "fieldname": "base_media",
+   "fieldtype": "Attach",
+   "label": "Base Media",
+   "description": "Upload PPTX, PDF, etc."
   },
   {
    "default": "0",
@@ -39,21 +38,14 @@
    "fieldtype": "Check",
    "label": "Track Progress",
    "description": "Toggle to enable or disable track progress."
-  },
-  {
-   "fieldname": "interactive_elements",
-   "fieldtype": "Table",
-   "label": "Interactive Elements",
-   "options": "LMS Interactive Element",
-   "description": "Used for embedded quizzes, tooltips, etc."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 06:39:00.000000",
+ "modified": "2026-08-14 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Text Content",
+ "name": "LMS Presentation Content",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "row_format": "Dynamic",

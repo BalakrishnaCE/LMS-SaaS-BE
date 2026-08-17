@@ -45,8 +45,8 @@ def add_lesson(module_name, lesson_name, description=""):
     return module_management.add_lesson(module_name, lesson_name, description)
 
 @frappe.whitelist()
-def add_chapter(lesson_name, chapter_title):
-    return module_management.add_chapter(lesson_name, chapter_title)
+def add_chapter(lesson_name, chapter_title, content_type="document", content_data=None):
+    return module_management.add_chapter(lesson_name, chapter_title, content_type, content_data)
 
 @frappe.whitelist()
 def remove_lesson(module_name, lesson_name):

@@ -1,13 +1,14 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:CHAP-{####}",
- "creation": "2026-08-07 12:54:25.063579",
+ "autoname": "format:BLK-{####}",
+ "creation": "2026-08-14 14:13:31.201106",
  "doctype": "DocType",
+ "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "title",
-  "contents"
+  "assessment"
  ],
  "fields": [
   {
@@ -15,25 +16,24 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Title",
-   "reqd": 1,
-   "description": "Enter the title."
+   "reqd": 1
   },
   {
-   "fieldname": "contents",
-   "fieldtype": "Table",
-   "label": "Contents",
-   "options": "LMS Chapter Content",
-   "description": "Ordered child table linking to individual content records"
+   "fieldname": "assessment",
+   "fieldtype": "Link",
+   "label": "Assessment",
+   "options": "LMS Quiz",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 06:37:00.000000",
+ "modified": "2026-08-14 14:13:31.201106",
  "modified_by": "Administrator",
  "module": "LMS",
- "name": "LMS Chapter",
- "naming_rule": "By fieldname",
+ "name": "LMS Assessment Content",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
