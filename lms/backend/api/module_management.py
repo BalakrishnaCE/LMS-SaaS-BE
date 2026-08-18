@@ -29,7 +29,8 @@ def get_curriculum(module_name):
                     'LMS Document Content': 'presentation', # Legacy fallback
                     'LMS Quiz Content': 'quiz',
                     'LMS Assessment Content': 'assessment',
-                    'LMS Iframe Content': 'iframe'
+                    'LMS Iframe Content': 'iframe',
+                    'LMS Interactive Video Content': 'interactive_video'
                 }
                 content_type = reverse_map.get(raw_type, 'document')
                 
@@ -58,6 +59,25 @@ def get_curriculum(module_name):
                             quiz_data['questions_data'].append(q_data)
                             
                         content_data['quiz_data'] = quiz_data
+
+                    # Serialize interactive_elements child table for Interactive Video
+                    if raw_type == 'LMS Interactive Video Content' and hasattr(content_doc, 'interactive_elements'):
+                        elements = []
+                        for el in content_doc.interactive_elements:
+                            el_data = {
+                                'idx': el.idx,
+                                'interaction_type': el.interaction_type,
+                                'timeline_seconds': el.timeline_seconds,
+                                'element_text': el.element_text,
+                                'secondary_text': el.secondary_text,
+                                'linked_record_type': el.linked_record_type,
+                                'linked_record_name': el.linked_record_name,
+                                'is_correct': el.is_correct,
+                                'x_coordinate': el.x_coordinate,
+                                'y_coordinate': el.y_coordinate
+                            }
+                            elements.append(el_data)
+                        content_data['interactive_elements'] = elements
 
                 except Exception as e:
                     frappe.log_error(f"Error fetching {raw_type}", str(e))
@@ -129,7 +149,8 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
         'quiz': 'LMS Quiz Content', 
         'iframe': 'LMS Iframe Content',
         'assessment': 'LMS Assessment Content',
-        'ai': 'LMS Text Content'
+        'ai': 'LMS Text Content',
+        'interactive_video': 'LMS Interactive Video Content'
     }
     doctype_name = type_map.get(content_type, 'LMS Text Content')
         
