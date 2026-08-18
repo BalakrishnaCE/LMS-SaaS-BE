@@ -5,6 +5,11 @@ app_description = "Learning Management System"
 app_email = "admin@noveloffice.com"
 app_license = "mit"
 
+# Fixtures
+# --------
+# Auto-imported on `bench migrate` — seeds lookup tables with default records.
+fixtures = ["LMS Interactive Type"]
+
 # Apps
 # ------------------
 

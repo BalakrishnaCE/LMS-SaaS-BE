@@ -1,0 +1,38 @@
+[
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Knowledge Check",
+    "type_name": "Knowledge Check",
+    "description": "Pause video for a graded question"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Poll",
+    "type_name": "Poll",
+    "description": "Collect anonymous opinions from learners"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Reflection Prompt",
+    "type_name": "Reflection Prompt",
+    "description": "Encourage learners to think and write"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Key Takeaway",
+    "type_name": "Key Takeaway",
+    "description": "Highlight vital core points"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Discussion Prompt",
+    "type_name": "Discussion Prompt",
+    "description": "Initiate contextual student discussion"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Info Popup",
+    "type_name": "Info Popup",
+    "description": "Display informational text overlay on video"
+  }
+]
