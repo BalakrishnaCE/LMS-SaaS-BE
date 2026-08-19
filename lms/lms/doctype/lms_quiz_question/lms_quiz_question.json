@@ -9,6 +9,8 @@
   "question_text",
   "question_type",
   "score",
+  "is_mandatory",
+  "explanation",
   "options"
  ],
  "fields": [
@@ -43,6 +45,17 @@
    "label": "Options",
    "options": "LMS Quiz Option",
    "description": "Child table for LMS Quiz Option."
+  },
+  {
+   "default": "1",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "label": "Is Mandatory"
+  },
+  {
+   "fieldname": "explanation",
+   "fieldtype": "Text Editor",
+   "label": "Explanation"
   }
  ],
  "grid_page_length": 50,
