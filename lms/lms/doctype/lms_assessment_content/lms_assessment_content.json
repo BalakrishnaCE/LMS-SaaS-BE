@@ -8,7 +8,8 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
-  "assessment"
+  "assessment",
+  "base_media"
  ],
  "fields": [
   {
@@ -24,6 +25,11 @@
    "label": "Assessment",
    "options": "LMS Quiz",
    "reqd": 1
+  },
+  {
+   "fieldname": "base_media",
+   "fieldtype": "Attach",
+   "label": "Base Media"
   }
  ],
  "grid_page_length": 50,
