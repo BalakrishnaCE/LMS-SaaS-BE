@@ -88,39 +88,35 @@ def get_curriculum(module_name):
                                 elements.append(el_data)
                             content_data['interactive_elements'] = elements
 
-                        # Serialize flashcards data
-                        if raw_type == 'LMS Flashcard Content' and hasattr(content_doc, 'interactive_elements'):
-                            elements = []
-                            for el in content_doc.interactive_elements:
-                                el_data = {
-                                    'idx': el.idx,
-                                    'element_text': el.element_text,
-                                    'secondary_text': el.secondary_text
-                                }
-                                elements.append(el_data)
-                            content_data['flashcards_data'] = elements
+                except Exception as e:
+                    frappe.log_error(f"Error fetching {raw_type}", str(e))
+                    content_data = None
 
-                    except Exception as e:
-                        frappe.log_error(f"Error fetching {raw_type}", str(e))
-                        content_data = None
-
-                    chapter_contents.append({
-                        "contentType": content_type,
-                        "contentData": content_data
-                    })
-
-            # For backwards compatibility with older frontend code, we can provide the first content at the root
-            main_content_type = chapter_contents[0]["contentType"] if chapter_contents else "document"
-            main_content_data = chapter_contents[0]["contentData"] if chapter_contents else None
+            flashcards = []
+            if hasattr(chapter, "contents") and chapter.contents:
+                for content_link in chapter.contents:
+                    if content_link.content_type == "LMS Flashcard Content":
+                        try:
+                            fc_doc = frappe.get_doc("LMS Flashcard Content", content_link.content_reference)
+                            if hasattr(fc_doc, "interactive_elements"):
+                                for el in fc_doc.interactive_elements:
+                                    flashcards.append({
+                                        "id": str(el.name or el.idx),
+                                        "front": el.element_text,
+                                        "back": el.secondary_text
+                                    })
+                        except Exception as e:
+                            pass
+                        break
 
             chapters.append({
                 "name": chapter.name,
                 "title": chapter.title,
                 "scoring": chapter.scoring,
                 "order": ch.order,
-                "contentType": main_content_type,
-                "contentData": main_content_data,
-                "contents": chapter_contents
+                "contentType": content_type,
+                "contentData": content_data,
+                "flashcards": flashcards
             })
         
         curriculum.append({
