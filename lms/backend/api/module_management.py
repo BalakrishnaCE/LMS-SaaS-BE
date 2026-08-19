@@ -88,9 +88,9 @@ def get_curriculum(module_name):
                                 elements.append(el_data)
                             content_data['interactive_elements'] = elements
 
-                except Exception as e:
-                    frappe.log_error(f"Error fetching {raw_type}", str(e))
-                    content_data = None
+                    except Exception as e:
+                        frappe.log_error(f"Error fetching {raw_type}", str(e))
+                        content_data = None
 
             flashcards = []
             if hasattr(chapter, "contents") and chapter.contents:
