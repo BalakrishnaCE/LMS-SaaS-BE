@@ -1,4 +1,5 @@
 import frappe
+import json
 from frappe.utils import today, add_days, getdate, now
 
 @frappe.whitelist(allow_guest=True)
@@ -17,6 +18,19 @@ def get_module_overview(module_id):
 
     # ── Lessons count ─────────────────────────────────────────────────────────
     lesson_count = len(module.get("lessons", []))
+
+    # ── Version History ───────────────────────────────────────────────────────
+    version_history = []
+    for v in module.get("version_history", []):
+        author_name = frappe.db.get_value("User", v.author, "full_name") or v.author
+        version_history.append({
+            "version": v.version,
+            "is_current": bool(v.is_current),
+            "description": v.description,
+            "date": str(v.date)[:10] if v.date else "",
+            "author": v.author,
+            "author_name": author_name
+        })
 
     # ── Assignment info ───────────────────────────────────────────────────────
     assignment = frappe.get_all(
@@ -113,8 +127,14 @@ def get_module_overview(module_id):
             "description": module.description or "",
             "image": module.image or "",
             "status": module.status,
-            "is_mandatory": module.is_mandatory,
+            "is_mandatory": bool(module.is_mandatory),
+            "is_sequential": bool(getattr(module, "is_sequential", 0)),
+            "allow_skip": bool(getattr(module, "allow_skip", 0)),
+            "enable_discussion": bool(getattr(module, "enable_discussion", 0)),
+            "enable_ai_flashcards": bool(getattr(module, "enable_ai_flashcards", 0)),
+            "enable_certificate": bool(getattr(module, "enable_certificate", 0)),
             "version": getattr(module, "version", "1.0"),
+            "version_history": version_history,
             "categories": categories,
             "lesson_count": lesson_count,
             "estimated_hours": estimated_hours,
@@ -391,5 +411,28 @@ def delete_question(quiz_name, question_id):
     frappe.db.sql("DELETE FROM `tabLMS Quiz Response` WHERE question=%s", (question_id,))
     
     frappe.delete_doc("LMS Quiz Question", question_id, ignore_permissions=True, force=1)
+    frappe.db.commit()
+    return "success"
+
+@frappe.whitelist()
+def update_module_settings(module_id, settings):
+    """
+    Updates the settings of an LMS Module.
+    `settings` should be a JSON string of boolean/integer fields.
+    """
+    if not frappe.has_permission("LMS Module", "write", doc=module_id):
+        frappe.throw("Not permitted", frappe.PermissionError)
+        
+    module = frappe.get_doc("LMS Module", module_id)
+    settings_dict = json.loads(settings)
+    frappe.log_error("Settings dict", str(settings_dict))
+    
+    for key, value in settings_dict.items():
+        if module.meta.has_field(key):
+            frappe.log_error(f"Setting {key}", str(value))
+            module.db_set(key, 1 if value else 0)
+        else:
+            frappe.log_error(f"Missing field {key}", "Not in meta")
+            
     frappe.db.commit()
     return "success"

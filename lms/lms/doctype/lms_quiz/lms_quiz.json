@@ -14,7 +14,9 @@
   "time_limit_mins",
   "questions",
   "is_passing_required",
-  "passing_percentage"
+  "passing_percentage",
+  "instructions",
+  "max_attempts"
  ],
  "fields": [
   {
@@ -70,6 +72,17 @@
    "fieldname": "passing_percentage",
    "fieldtype": "Float",
    "label": "Passing Percentage"
+  },
+  {
+   "fieldname": "instructions",
+   "fieldtype": "Text Editor",
+   "label": "Instructions"
+  },
+  {
+   "default": "0",
+   "fieldname": "max_attempts",
+   "fieldtype": "Int",
+   "label": "Max Attempts"
   }
  ],
  "grid_page_length": 50,

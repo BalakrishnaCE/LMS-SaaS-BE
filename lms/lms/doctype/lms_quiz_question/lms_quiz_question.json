@@ -9,8 +9,9 @@
   "question_text",
   "question_type",
   "score",
-  "options",
-  "explanation"
+  "is_mandatory",
+  "explanation",
+  "options"
  ],
  "fields": [
   {
@@ -46,8 +47,14 @@
    "description": "Child table for LMS Quiz Option."
   },
   {
+   "default": "1",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "label": "Is Mandatory"
+  },
+  {
    "fieldname": "explanation",
-   "fieldtype": "Text",
+   "fieldtype": "Text Editor",
    "label": "Explanation",
    "description": "Explanation or rationale for the answer."
   }
