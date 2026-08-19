@@ -21,16 +21,28 @@ def get_module_overview(module_id):
 
     # ── Version History ───────────────────────────────────────────────────────
     version_history = []
+    current_version_val = "v1.0"
     for v in module.get("version_history", []):
         author_name = frappe.db.get_value("User", v.author, "full_name") or v.author
+        ver_str = str(v.version) if v.version else "v1.0"
+        if not ver_str.startswith("v") and not ver_str.startswith("V"):
+            ver_str = f"v{ver_str}"
+            
+        if v.is_current:
+            current_version_val = ver_str
+            
         version_history.append({
-            "version": v.version,
+            "version": ver_str,
             "is_current": bool(v.is_current),
             "description": v.description,
             "date": str(v.date)[:10] if v.date else "",
             "author": v.author,
             "author_name": author_name
         })
+    version_history.reverse()
+    
+    if version_history and current_version_val == "v1.0" and not version_history[0].get("is_current"):
+        current_version_val = version_history[0]["version"]
 
     # ── Assignment info ───────────────────────────────────────────────────────
     assignment = frappe.get_all(
@@ -59,13 +71,13 @@ def get_module_overview(module_id):
 
     total_learners = len(trackers)
     passed  = sum(1 for t in trackers if t.status == "Completed")
-    in_prog = sum(1 for t in trackers if t.status == "In Progress")
+    in_prog = sum(1 for t in trackers if t.status in ["In Progress", "Failed"])
+    ns      = sum(1 for t in trackers if t.status == "Not started")
     pending = total_learners - passed
 
     passed_pct  = round((passed  / total_learners * 100) if total_learners else 0)
     inprog_pct  = round((in_prog / total_learners * 100) if total_learners else 0)
-    ns          = max(total_learners - passed - in_prog, 0)
-    ns_pct      = 100 - passed_pct - inprog_pct
+    ns_pct      = 100 - passed_pct - inprog_pct if total_learners else 0
 
     # ── Department performance ────────────────────────────────────────────────
     # Get user → dept mapping
@@ -133,12 +145,13 @@ def get_module_overview(module_id):
             "enable_discussion": bool(getattr(module, "enable_discussion", 0)),
             "enable_ai_flashcards": bool(getattr(module, "enable_ai_flashcards", 0)),
             "enable_certificate": bool(getattr(module, "enable_certificate", 0)),
-            "version": getattr(module, "version", "1.0"),
+            "version": current_version_val,
             "version_history": version_history,
             "categories": categories,
             "lesson_count": lesson_count,
             "estimated_hours": estimated_hours,
             "created_by": module.owner,
+            "created_by_name": frappe.db.get_value("User", module.owner, "full_name") or module.owner,
             "creation": str(module.creation)[:10],
             "modified": str(module.modified)[:10],
             "visibility": getattr(module, "visibility", "All Departments"),
@@ -414,25 +427,105 @@ def delete_question(quiz_name, question_id):
     frappe.db.commit()
     return "success"
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def update_module_settings(module_id, settings):
     """
     Updates the settings of an LMS Module.
     `settings` should be a JSON string of boolean/integer fields.
     """
+    import json
     if not frappe.has_permission("LMS Module", "write", doc=module_id):
         frappe.throw("Not permitted", frappe.PermissionError)
         
     module = frappe.get_doc("LMS Module", module_id)
-    settings_dict = json.loads(settings)
-    frappe.log_error("Settings dict", str(settings_dict))
     
-    for key, value in settings_dict.items():
-        if module.meta.has_field(key):
-            frappe.log_error(f"Setting {key}", str(value))
-            module.db_set(key, 1 if value else 0)
-        else:
-            frappe.log_error(f"Missing field {key}", "Not in meta")
+    try:
+        settings_dict = json.loads(settings)
+        
+        for key, value in settings_dict.items():
+            if module.meta.has_field(key):
+                module.db_set(key, 1 if value else 0)
+                
+        return {"message": "success"}
+
+    except Exception as e:
+        frappe.log_error(f"Error in update_module_settings: {str(e)}")
+        return {"error": str(e)}
+
+@frappe.whitelist(allow_guest=False)
+def get_module_certificates(module_id):
+    if not module_id:
+        frappe.throw("Module ID is required")
+        
+    module = frappe.get_doc("LMS Module", module_id)
+    
+    certs = frappe.get_all(
+        "LMS Certificate",
+        filters={"module": module_id},
+        fields=["name", "certificate_id", "user", "issued_on", "is_valid"]
+    )
+    
+    certificate_data = []
+    for cert in certs:
+        try:
+            user_doc = frappe.get_doc("User", cert.user)
+            status = "Issued" if cert.is_valid else "Revoked"
             
-    frappe.db.commit()
-    return "success"
+            certificate_data.append({
+                "id": cert.name,
+                "learnerName": user_doc.full_name,
+                "email": user_doc.email,
+                "issueDate": str(cert.issued_on) if cert.issued_on else None,
+                "expiryDate": None,
+                "status": status
+            })
+        except Exception:
+            continue
+            
+    # For now, just return a dummy template name if any certificates exist
+    # A real implementation would fetch the template assigned to the module
+    template = {"name": "Default Template"} if certificate_data else None
+    
+    return {
+        "template": template,
+        "certificates": certificate_data,
+        "course_name": module.module_name
+    }
+
+@frappe.whitelist(allow_guest=False)
+def create_module_version(module_id, description=""):
+    """
+    Creates a new version in the module's version history.
+    Sets all existing versions' 'is_current' to 0 and adds a new version.
+    """
+    module = frappe.get_doc("LMS Module", module_id)
+    
+    # Reset is_current on all existing versions
+    version_history = module.get("version_history", [])
+    for v in version_history:
+        v.is_current = 0
+        
+    # Calculate new version number (e.g. v1.0, v1.1, etc.)
+    if not version_history:
+        new_version = "v1.0"
+    else:
+        try:
+            last_ver = str(version_history[-1].version).lstrip('vV')
+            parts = last_ver.split('.')
+            if len(parts) == 2:
+                new_version = f"v{int(parts[0])}.{int(parts[1]) + 1}"
+            else:
+                new_version = f"v{int(float(last_ver)) + 1}.0"
+        except Exception:
+            new_version = f"v{len(version_history) + 1}.0"
+            
+    module.append("version_history", {
+        "version": new_version,
+        "is_current": 1,
+        "description": description,
+        "date": today(),
+        "author": frappe.session.user
+    })
+    
+    module.save(ignore_permissions=True)
+    return {"message": "success", "new_version": new_version}

@@ -16,86 +16,111 @@ def get_curriculum(module_name):
         for ch in lesson.chapters:
             chapter = frappe.get_doc("LMS Chapter", ch.chapter)
             
-            content_type = "document"
-            content_data = None
+            chapter_contents = []
+            
             if hasattr(chapter, "contents") and chapter.contents:
-                content_link = chapter.contents[0]
-                raw_type = content_link.content_type
-                reverse_map = {
-                    'LMS Text Content': 'document',
-                    'LMS Video Content': 'video',
-                    'LMS Audio Content': 'audio',
-                    'LMS Presentation Content': 'presentation',
-                    'LMS Document Content': 'presentation', # Legacy fallback
-                    'LMS Quiz Content': 'quiz',
-                    'LMS Assessment Content': 'assessment',
-                    'LMS Iframe Content': 'iframe',
-                    'LMS Interactive Video Content': 'interactive_video'
-                }
-                content_type = reverse_map.get(raw_type, 'document')
-                
-                try:
-                    content_doc = frappe.get_doc(raw_type, content_link.content_reference)
-                    content_data = content_doc.as_dict()
+                # Sort contents by 'order' if available and > 0, fallback to a high number so unordered items go last
+                sorted_contents = sorted(chapter.contents, key=lambda x: (x.order or 999, x.idx))
+                for content_link in sorted_contents:
+                    raw_type = content_link.content_type
+                    reverse_map = {
+                        'LMS Text Content': 'text',
+                        'LMS Video Content': 'video',
+                        'LMS Audio Content': 'audio',
+                        'LMS Presentation Content': 'presentation',
+                        'LMS Document Content': 'document',
+                        'LMS Quiz Content': 'quiz',
+                        'LMS Assessment Content': 'assessment',
+                        'LMS Iframe Content': 'iframe',
+                        'LMS Interactive Video Content': 'interactive_video',
+                        'LMS Flashcard Content': 'flashcard'
+                    }
+                    content_type = reverse_map.get(raw_type, 'document')
                     
-                    # Convert datetimes to strings to prevent json serialization errors
-                    if 'creation' in content_data:
-                        content_data['creation'] = str(content_data['creation'])
-                    if 'modified' in content_data:
-                        content_data['modified'] = str(content_data['modified'])
+                    try:
+                        content_doc = frappe.get_doc(raw_type, content_link.content_reference)
+                        content_data = content_doc.as_dict()
                         
-                    # Recursively fetch Quiz data for frontend builder
-                    quiz_field = None
-                    if raw_type == 'LMS Quiz Content' and content_doc.quiz:
-                        quiz_field = content_doc.quiz
-                    elif raw_type == 'LMS Assessment Content' and content_doc.assessment:
-                        quiz_field = content_doc.assessment
-                        
-                    if quiz_field:
-                        quiz_doc = frappe.get_doc("LMS Quiz", quiz_field)
-                        quiz_data = quiz_doc.as_dict()
-                        quiz_data['questions'] = []
-                        
-                        for ch_q in quiz_doc.questions:
-                            q_doc = frappe.get_doc("LMS Quiz Question", ch_q.quiz_question)
-                            q_data = q_doc.as_dict()
-                            q_data['options'] = []
-                            for opt in q_doc.options:
-                                q_data['options'].append(opt.as_dict())
-                            quiz_data['questions'].append(q_data)
+                        # Convert datetimes to strings to prevent json serialization errors
+                        if 'creation' in content_data:
+                            content_data['creation'] = str(content_data['creation'])
+                        if 'modified' in content_data:
+                            content_data['modified'] = str(content_data['modified'])
                             
-                        content_data['quiz_data'] = quiz_data
+                        # Recursively fetch Quiz data for frontend builder
+                        quiz_field = None
+                        if raw_type == 'LMS Quiz Content' and content_doc.quiz:
+                            quiz_field = content_doc.quiz
+                        elif raw_type == 'LMS Assessment Content' and content_doc.assessment:
+                            quiz_field = content_doc.assessment
+                            
+                        if quiz_field:
+                            quiz_doc = frappe.get_doc("LMS Quiz", quiz_field)
+                            quiz_data = quiz_doc.as_dict()
+                            quiz_data['questions'] = []
+                            
+                            for ch_q in quiz_doc.questions:
+                                q_doc = frappe.get_doc("LMS Quiz Question", ch_q.quiz_question)
+                                q_data = q_doc.as_dict()
+                                q_data['options'] = []
+                                for opt in q_doc.options:
+                                    q_data['options'].append(opt.as_dict())
+                                quiz_data['questions'].append(q_data)
+                                
+                            content_data['quiz_data'] = quiz_data
 
-                    # Serialize interactive_elements child table for Interactive Video
-                    if raw_type == 'LMS Interactive Video Content' and hasattr(content_doc, 'interactive_elements'):
-                        elements = []
-                        for el in content_doc.interactive_elements:
-                            el_data = {
-                                'idx': el.idx,
-                                'interaction_type': el.interaction_type,
-                                'timeline_seconds': el.timeline_seconds,
-                                'element_text': el.element_text,
-                                'secondary_text': el.secondary_text,
-                                'linked_record_type': el.linked_record_type,
-                                'linked_record_name': el.linked_record_name,
-                                'is_correct': el.is_correct,
-                                'x_coordinate': el.x_coordinate,
-                                'y_coordinate': el.y_coordinate
-                            }
-                            elements.append(el_data)
-                        content_data['interactive_elements'] = elements
+                        # Serialize interactive_elements child table for Interactive Video
+                        if raw_type == 'LMS Interactive Video Content' and hasattr(content_doc, 'interactive_elements'):
+                            elements = []
+                            for el in content_doc.interactive_elements:
+                                el_data = {
+                                    'idx': el.idx,
+                                    'interaction_type': el.interaction_type,
+                                    'timeline_seconds': el.timeline_seconds,
+                                    'element_text': el.element_text,
+                                    'secondary_text': el.secondary_text,
+                                    'linked_record_type': el.linked_record_type,
+                                    'linked_record_name': el.linked_record_name,
+                                    'is_correct': el.is_correct,
+                                    'x_coordinate': el.x_coordinate,
+                                    'y_coordinate': el.y_coordinate
+                                }
+                                elements.append(el_data)
+                            content_data['interactive_elements'] = elements
 
-                except Exception as e:
-                    frappe.log_error(f"Error fetching {raw_type}", str(e))
-                    content_data = None
+                        # Serialize flashcards data
+                        if raw_type == 'LMS Flashcard Content' and hasattr(content_doc, 'interactive_elements'):
+                            elements = []
+                            for el in content_doc.interactive_elements:
+                                el_data = {
+                                    'idx': el.idx,
+                                    'element_text': el.element_text,
+                                    'secondary_text': el.secondary_text
+                                }
+                                elements.append(el_data)
+                            content_data['flashcards_data'] = elements
+
+                    except Exception as e:
+                        frappe.log_error(f"Error fetching {raw_type}", str(e))
+                        content_data = None
+
+                    chapter_contents.append({
+                        "contentType": content_type,
+                        "contentData": content_data
+                    })
+
+            # For backwards compatibility with older frontend code, we can provide the first content at the root
+            main_content_type = chapter_contents[0]["contentType"] if chapter_contents else "document"
+            main_content_data = chapter_contents[0]["contentData"] if chapter_contents else None
 
             chapters.append({
                 "name": chapter.name,
                 "title": chapter.title,
                 "scoring": chapter.scoring,
                 "order": ch.order,
-                "contentType": content_type,
-                "contentData": content_data
+                "contentType": main_content_type,
+                "contentData": main_content_data,
+                "contents": chapter_contents
             })
         
         curriculum.append({
