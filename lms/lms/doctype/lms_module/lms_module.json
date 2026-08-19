@@ -21,8 +21,13 @@
   "complete_all_lessons",
   "complete_all_interactions",
   "enable_certificate",
+  "enable_discussion",
+  "enable_ai_flashcards",
+  "is_sequential",
+  "allow_skip",
   "total_score",
-  "final_assessments"
+  "final_assessments",
+  "version_history"
  ],
  "fields": [
   {
@@ -140,6 +145,41 @@
    "fieldtype": "Table",
    "label": "Final Assessments",
    "options": "LMS Module Assessment"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable discussion.",
+   "fieldname": "enable_discussion",
+   "fieldtype": "Check",
+   "label": "Enable Discussion"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable AI flashcards.",
+   "fieldname": "enable_ai_flashcards",
+   "fieldtype": "Check",
+   "label": "Enable AI Flashcards"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable sequential order.",
+   "fieldname": "is_sequential",
+   "fieldtype": "Check",
+   "label": "Is Sequential"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable skipping.",
+   "fieldname": "allow_skip",
+   "fieldtype": "Check",
+   "label": "Allow Skip"
+  },
+  {
+   "description": "Tracks the version history and updates of this module.",
+   "fieldname": "version_history",
+   "fieldtype": "Table",
+   "label": "Version History",
+   "options": "LMS Module Version"
   }
  ],
  "grid_page_length": 50,

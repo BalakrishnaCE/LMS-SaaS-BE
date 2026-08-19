@@ -55,7 +55,8 @@
   {
    "fieldname": "explanation",
    "fieldtype": "Text Editor",
-   "label": "Explanation"
+   "label": "Explanation",
+   "description": "Explanation or rationale for the answer."
   }
  ],
  "grid_page_length": 50,
