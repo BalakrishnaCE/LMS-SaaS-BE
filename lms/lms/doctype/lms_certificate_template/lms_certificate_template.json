@@ -24,7 +24,8 @@
   },
   {
    "fieldname": "html_template",
-   "fieldtype": "Text Editor",
+   "fieldtype": "Code",
+   "options": "HTML",
    "in_list_view": 1,
    "label": "HTML Template",
    "reqd": 1,

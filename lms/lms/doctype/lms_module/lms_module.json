@@ -21,6 +21,12 @@
   "complete_all_lessons",
   "complete_all_interactions",
   "enable_certificate",
+  "certificate_template",
+  "certificate_reference_number",
+  "certificate_validity_period",
+  "certificate_signature_by",
+  "certificate_passing_percentage",
+  "enable_module_review",
   "enable_discussion",
   "enable_ai_flashcards",
   "is_sequential",
@@ -130,6 +136,50 @@
    "fieldname": "enable_certificate",
    "fieldtype": "Check",
    "label": "Enable Certificate"
+  },
+  {
+   "depends_on": "eval:doc.enable_certificate==1",
+   "description": "Select the HTML design template for the certificate.",
+   "fieldname": "certificate_template",
+   "fieldtype": "Link",
+   "label": "Certificate Template",
+   "options": "LMS Certificate Template"
+  },
+  {
+   "depends_on": "eval:doc.enable_certificate==1",
+   "description": "Acts as the namespace or prefix for generated certificates.",
+   "fieldname": "certificate_reference_number",
+   "fieldtype": "Data",
+   "label": "Certificate Reference Number"
+  },
+  {
+   "depends_on": "eval:doc.enable_certificate==1",
+   "description": "Number of days the certificate remains valid.",
+   "fieldname": "certificate_validity_period",
+   "fieldtype": "Int",
+   "label": "Certificate Validity Period"
+  },
+  {
+   "depends_on": "eval:doc.enable_certificate==1",
+   "description": "The name/instructor to be printed as the signature.",
+   "fieldname": "certificate_signature_by",
+   "fieldtype": "Link",
+   "options": "LMS Authorized Signatory",
+   "label": "Certificate Signature By"
+  },
+  {
+   "depends_on": "eval:doc.enable_certificate==1",
+   "description": "The minimum score required to earn the certificate.",
+   "fieldname": "certificate_passing_percentage",
+   "fieldtype": "Float",
+   "label": "Certificate Passing Percentage"
+  },
+  {
+   "default": "0",
+   "description": "Toggle to enable or disable module review.",
+   "fieldname": "enable_module_review",
+   "fieldtype": "Check",
+   "label": "Enable Module Review"
   },
   {
    "depends_on": "is_score_required",
