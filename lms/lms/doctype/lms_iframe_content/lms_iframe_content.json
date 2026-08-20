@@ -8,7 +8,8 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
-  "iframe_url"
+  "iframe_url",
+  "duration"
  ],
  "fields": [
   {
@@ -23,6 +24,12 @@
    "fieldtype": "Data",
    "label": "Iframe URL",
    "reqd": 1
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Float",
+   "label": "Duration (Minutes)",
+   "description": "Dynamic duration calculated from frontend editors."
   }
  ],
  "grid_page_length": 50,

@@ -443,3 +443,24 @@ def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_u
         
     content_doc.save(ignore_permissions=True)
     return {"status": "success"}
+
+@frappe.whitelist(allow_guest=False)
+def update_chapter_text(chapter_name, text_block, content_idx=0):
+    try:
+        content_idx = int(content_idx)
+        chapter = frappe.get_doc("LMS Chapter", chapter_name)
+        if not chapter.contents or len(chapter.contents) <= content_idx:
+            frappe.throw("Content not found")
+            
+        content_ref = chapter.contents[content_idx]
+        if content_ref.content_type not in ["LMS Text Content", "LMS AI Content"]:
+            frappe.throw(f"Content type {content_ref.content_type} does not support text updates")
+            
+        content_doc = frappe.get_doc(content_ref.content_type, content_ref.content_reference)
+        content_doc.text_block = text_block
+        content_doc.save(ignore_permissions=True)
+        
+        return {"status": "success"}
+    except Exception as e:
+        frappe.log_error("Failed to update chapter text", str(e))
+        frappe.throw(str(e))

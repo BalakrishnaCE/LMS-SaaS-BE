@@ -8,7 +8,8 @@
   "title",
   "base_media",
   "is_assessment",
-  "track_progress"
+  "track_progress",
+  "duration"
  ],
  "fields": [
   {
@@ -38,6 +39,12 @@
    "fieldtype": "Check",
    "label": "Track Progress",
    "description": "Toggle to enable or disable track progress."
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Float",
+   "label": "Duration (Minutes)",
+   "description": "Dynamic duration calculated from frontend editors."
   }
  ],
  "index_web_pages_for_search": 1,
