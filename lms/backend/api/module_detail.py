@@ -482,9 +482,17 @@ def get_module_certificates(module_id):
         except Exception:
             continue
             
-    # For now, just return a dummy template name if any certificates exist
-    # A real implementation would fetch the template assigned to the module
-    template = {"name": "Default Template"} if certificate_data else None
+    # Fetch the template assigned to the module
+    template = None
+    if module.enable_certificate and module.certificate_template:
+        try:
+            template_doc = frappe.get_doc("LMS Certificate Template", module.certificate_template)
+            template = {
+                "name": template_doc.template_name,
+                "html": template_doc.html_template
+            }
+        except Exception:
+            pass
     
     return {
         "template": template,

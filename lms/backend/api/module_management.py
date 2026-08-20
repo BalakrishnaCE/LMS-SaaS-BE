@@ -28,7 +28,7 @@ def get_curriculum(module_name):
                         'LMS Video Content': 'video',
                         'LMS Audio Content': 'audio',
                         'LMS Presentation Content': 'presentation',
-                        'LMS Document Content': 'document',
+                        'LMS Document Content': 'file',
                         'LMS Quiz Content': 'quiz',
                         'LMS Assessment Content': 'assessment',
                         'LMS Iframe Content': 'iframe',
@@ -91,6 +91,13 @@ def get_curriculum(module_name):
                     except Exception as e:
                         frappe.log_error(f"Error fetching {raw_type}", str(e))
                         content_data = None
+                        
+                    if raw_type != 'LMS Flashcard Content':
+                        chapter_contents.append({
+                            "id": content_link.name,
+                            "contentType": content_type,
+                            "contentData": content_data
+                        })
 
             flashcards = []
             if hasattr(chapter, "contents") and chapter.contents:
@@ -114,8 +121,7 @@ def get_curriculum(module_name):
                 "title": chapter.title,
                 "scoring": chapter.scoring,
                 "order": ch.order,
-                "contentType": content_type,
-                "contentData": content_data,
+                "contents": chapter_contents,
                 "flashcards": flashcards
             })
         
@@ -325,7 +331,7 @@ def duplicate_module(module_name):
     return {"status": "success", "new_module_id": new_module.name}
 
 @frappe.whitelist(allow_guest=False)
-def save_chapter_quiz(chapter_name, quiz_data):
+def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
     import json
     if not chapter_name or not quiz_data:
         frappe.throw("Chapter Name and Quiz Data are required")
@@ -337,7 +343,11 @@ def save_chapter_quiz(chapter_name, quiz_data):
     if not hasattr(chapter, "contents") or not chapter.contents:
         frappe.throw("Chapter has no contents")
         
-    content_link = chapter.contents[0]
+    content_idx = int(content_idx)
+    if content_idx >= len(chapter.contents):
+        frappe.throw(f"Chapter has no content at index {content_idx}")
+        
+    content_link = chapter.contents[content_idx]
     if content_link.content_type not in ["LMS Quiz Content", "LMS Assessment Content"]:
         frappe.throw("Chapter is not linked to a Quiz or Assessment Content")
         
@@ -409,7 +419,7 @@ def save_chapter_quiz(chapter_name, quiz_data):
 
 
 @frappe.whitelist(allow_guest=False)
-def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None):
+def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, content_idx=0):
     if not chapter_name:
         frappe.throw("Chapter Name is required")
         
@@ -417,7 +427,11 @@ def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_u
     if not hasattr(chapter, "contents") or not chapter.contents:
         frappe.throw("Chapter has no contents")
         
-    content_link = chapter.contents[0]
+    content_idx = int(content_idx)
+    if content_idx >= len(chapter.contents):
+        frappe.throw(f"Chapter has no content at index {content_idx}")
+        
+    content_link = chapter.contents[content_idx]
     content_doc = frappe.get_doc(content_link.content_type, content_link.content_reference)
     
     if base_media is not None and hasattr(content_doc, "base_media"):
