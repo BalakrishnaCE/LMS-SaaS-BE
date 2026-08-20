@@ -10,7 +10,8 @@
   "is_scored",
   "score",
   "track_progress",
-  "interactive_elements"
+  "interactive_elements",
+  "duration"
  ],
  "fields": [
   {
@@ -56,6 +57,12 @@
    "label": "Interactive Elements",
    "options": "LMS Interactive Element",
    "description": "Each row = one scenario node or decision button. linked_record_type + linked_record_name points to the next scenario node."
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Float",
+   "label": "Duration (Minutes)",
+   "description": "Dynamic duration calculated from frontend editors."
   }
  ],
  "index_web_pages_for_search": 1,

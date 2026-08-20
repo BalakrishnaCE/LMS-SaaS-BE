@@ -9,7 +9,8 @@
   "question",
   "is_assessment",
   "track_progress",
-  "interactive_elements"
+  "interactive_elements",
+  "duration"
  ],
  "fields": [
   {
@@ -47,6 +48,12 @@
    "label": "Interactive Elements",
    "options": "LMS Interactive Element",
    "description": "Each row = one poll option. is_correct flags the expected/correct option."
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Float",
+   "label": "Duration (Minutes)",
+   "description": "Dynamic duration calculated from frontend editors."
   }
  ],
  "index_web_pages_for_search": 1,
