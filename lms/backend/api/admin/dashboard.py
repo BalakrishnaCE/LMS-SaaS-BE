@@ -10,10 +10,8 @@ def get_metrics_summary():
         current_month = getdate(now()).month
         
         if timeframe == "year":
-            # "This Year" shows data broken down by the 12 months (Jan-Dec)
             intervals = [getdate(f"{current_year}-{m:02d}-28") for m in range(1, 13)]
         else:
-            # "This Month" shows data broken down by 4 weeks
             num_days = calendar.monthrange(current_year, current_month)[1]
             intervals = [
                 getdate(f"{current_year}-{current_month:02d}-07"),
@@ -30,12 +28,10 @@ def get_metrics_summary():
         assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "creation", "is_mandatory"])
         assignment_map = {a.module: a for a in assignments}
         
-        # Build a map of module -> list of categories using the new child table
         all_module_categories = frappe.get_all(
             "LMS Module Category",
             fields=["parent", "category"]
         )
-        # module_categories_map: { module_name: set_of_category_names }
         module_categories_map = {}
         for mc in all_module_categories:
             if mc.parent not in module_categories_map:
@@ -144,122 +140,6 @@ def get_metrics_summary():
     }
 
 @frappe.whitelist(allow_guest=True)
-def get_department_performance():
-    teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
-    
-    assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
-    assignment_map = {a.module: a for a in assignments}
-    today_dt = getdate(today())
-    
-    results = []
-    for t in teams:
-        # Get members of this team
-        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
-        member_emails = [m.user for m in members]
-        
-        if not member_emails:
-            continue
-            
-        trackers = frappe.get_all("LMS Module Tracker", filters={"user": ["in", member_emails]}, fields=["user", "status", "total_score", "module", "started_on", "creation"])
-        total_t = len(trackers)
-        completed = len([tr for tr in trackers if tr.status == "Completed"])
-        
-        overdue_users = set()
-        for tr in trackers:
-            # Only use started_on; skip if not started. Any status != Completed is overdue.
-            if tr.status != "Completed" and tr.started_on:
-                a = assignment_map.get(tr.module)
-                if a and a.duration:
-                    due = getdate(add_days(getdate(tr.started_on), a.duration))
-                    if due < today_dt:
-                        overdue_users.add(tr.user)
-        
-        c_rate = int((completed / total_t) * 100) if total_t > 0 else 0
-        
-        completed_trackers = [tr for tr in trackers if tr.status == "Completed" and tr.total_score is not None]
-        avg_score = sum([tr.total_score for tr in completed_trackers]) / len(completed_trackers) if len(completed_trackers) > 0 else 0
-        
-        results.append({
-            "name": t.team_name,
-            "completionRate": c_rate,
-            "avgScore": int(avg_score),
-            "overdueLearners": len(overdue_users),
-            "criticalOverdue": len(overdue_users) > 5
-        })
-    return results
-
-@frappe.whitelist(allow_guest=True)
-def get_upcoming_deadlines():
-    assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "is_mandatory"])
-    assignment_map = {a.module: a for a in assignments}
-    
-    # We want to find which modules have the most learners approaching their deadline within 30 days
-    approaching = {}
-    today_dt = getdate(today())
-    next_week = getdate(add_days(today_dt, 30))
-    
-    trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["!=", "Completed"]}, fields=["module", "started_on"])
-    for t in trackers:
-        # Only use started_on; skip if not started yet
-        if not t.started_on:
-            continue
-        a = assignment_map.get(t.module)
-        if a and a.duration:
-            due = getdate(add_days(getdate(t.started_on), a.duration))
-            if today_dt <= due <= next_week:
-                if t.module not in approaching:
-                    approaching[t.module] = {"count": 0, "mandatory": a.is_mandatory}
-                approaching[t.module]["count"] += 1
-                
-    results = []
-    for module_name, data in approaching.items():
-        results.append({
-            "id": module_name,
-            "name": module_name, # Since module is a Link, the ID is the module name
-            "type": "Module",
-            "date": "Approaching in 30 days",
-            "pending": data['count'],
-            "critical": bool(data['mandatory'])
-        })
-        
-    return sorted(results, key=lambda x: x["pending"], reverse=True)[:5]
-
-@frappe.whitelist(allow_guest=True)
-def get_recently_assigned():
-    assignments = frappe.get_all("LMS Module Assignment", 
-        fields=["name", "module", "creation", "duration"],
-        limit=20,
-        order_by="creation desc"
-    )
-    
-    seen_modules = set()
-    unique_assignments = []
-    for a in assignments:
-        if a.module not in seen_modules:
-            seen_modules.add(a.module)
-            unique_assignments.append(a)
-        if len(unique_assignments) == 5:
-            break
-            
-    results = []
-    for a in unique_assignments:
-        # Count trackers for this module
-        trackers = frappe.get_all("LMS Module Tracker", filters={"module": a.module}, fields=["status"])
-        total_assigned = len(trackers)
-        completed = len([t for t in trackers if t.status == "Completed"])
-        progress = int((completed / total_assigned) * 100) if total_assigned > 0 else 0
-        
-        results.append({
-            "id": a.name,
-            "name": a.module, # using module as name since title is gone
-            "assignedLearners": total_assigned,
-            "dueDate": f"{a.duration} Days" if a.duration else "No Limit",
-            "progress": progress,
-            "actions": ["View Progress", "Send Reminder"]
-        })
-    return results
-
-@frappe.whitelist(allow_guest=True)
 def get_learning_content_summary():
     trackers = frappe.get_all("LMS Module Tracker", fields=["status", "module", "started_on", "creation"])
     
@@ -278,7 +158,6 @@ def get_learning_content_summary():
         if t.status == "Completed":
             status_counts["Passed"] += 1
         else:
-            # Any non-Completed status: check if overdue first (only if started)
             is_overdue = False
             if t.started_on:
                 a = assignment_map.get(t.module)
@@ -309,14 +188,6 @@ def get_learning_content_summary():
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_content_by_completion():
-    """
-    Returns learning content broken down by completion category:
-    - Highest Completion: trackers in modules with >= 80% learner completion rate
-    - Lowest Completion:  trackers in modules with < 30% learner completion rate
-    - Completed:          trackers where status == Completed
-    - In Progress:        trackers where status == In Progress
-    - Not Started:        trackers that haven't been started
-    """
     trackers = frappe.get_all("LMS Module Tracker", fields=["status", "module", "user"])
 
     counts = {
@@ -327,7 +198,6 @@ def get_learning_content_by_completion():
         "Not Started":        0,
     }
 
-    # Group trackers by module to compute per-module completion rates
     module_trackers = {}
     for t in trackers:
         module_trackers.setdefault(t.module, []).append(t)
@@ -343,7 +213,6 @@ def get_learning_content_by_completion():
         elif rate < 30:
             counts["Lowest Completion"] += total
 
-    # Individual tracker counts for Completed / In Progress / Not Started
     for t in trackers:
         if t.status == "Completed":
             counts["Completed"] += 1
@@ -376,7 +245,6 @@ def get_needs_attention_metrics():
         if t.status == "Failed" and t.total_score is not None and t.total_score < 60:
             low_scores += 1
 
-        # Any status != Completed is overdue once past due date (only if started)
         if t.status != "Completed" and t.started_on:
             a = assignment_map.get(t.module)
             if a and a.duration:
@@ -384,8 +252,6 @@ def get_needs_attention_metrics():
                 if getdate(due) < getdate(today()):
                     overdue_learning += 1
                 
-    # Inactive Learners: users with LMS-Learner role who haven't had any activity in 30 days
-    # We check if they have any LMS Module Tracker modified in the last 30 days
     thirty_days_ago = add_days(today(), -30)
     current_learners = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent")
     total_learners = len(current_learners)
@@ -424,10 +290,6 @@ def get_assessment_performance():
 @frappe.whitelist(allow_guest=True)
 def get_onboarding_status():
     thirty_days_ago = add_days(today(), -30)
-    
-    # Count users where the LMS-Learner ROLE was assigned in the last 30 days
-    # This is the correct signal for "new to LMS" — the user account may have existed for years
-    # but they only became a learner when the role was assigned.
     new_learner_roles = frappe.get_all(
         "Has Role",
         filters={
@@ -458,10 +320,7 @@ def get_onboarding_status():
 @frappe.whitelist(allow_guest=True)
 def get_learning_insights():
     from frappe.utils import add_days, today, getdate
-    
     insights = []
-    
-    # Fetch all trackers and assignments
     trackers = frappe.get_all("LMS Module Tracker", fields=["name", "status", "user", "module", "creation", "started_on"])
     if not trackers:
         return []
@@ -469,7 +328,6 @@ def get_learning_insights():
     assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
     assignment_map = {a.module: a for a in assignments}
     
-    # 1. Overall Completion Rate (Success/Green)
     total_trackers = len(trackers)
     completed_trackers = [t for t in trackers if t.status == "Completed"]
     if total_trackers > 0:
@@ -480,7 +338,6 @@ def get_learning_insights():
             "type": "success"
         })
 
-    # 2. Highest Overdue Learners by Department (Destructive/Red)
     teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
     user_team_map = {}
     for t in teams:
@@ -511,7 +368,6 @@ def get_learning_insights():
                 "type": "destructive"
             })
 
-    # 3. Most Completed Module (Info/Blue)
     module_completed_counts = {}
     for t in completed_trackers:
         module_completed_counts[t.module] = module_completed_counts.get(t.module, 0) + 1
@@ -524,7 +380,6 @@ def get_learning_insights():
             "type": "info"
         })
 
-    # 4. Not Started Learners (Warning/Yellow)
     not_started_users = set([t.user for t in trackers if t.status == "Not started"])
     not_started_count = len(not_started_users)
     if not_started_count > 0:
@@ -534,7 +389,6 @@ def get_learning_insights():
             "type": "warning"
         })
 
-    # 5. Assessment Pass Rate Trend (Success/Green)
     trackers_scores = frappe.get_all("LMS Module Tracker", fields=["status", "creation"], filters={"status": ["in", ["Completed", "Failed"]]})
     
     thirty_days_ago = add_days(today(), -30)
