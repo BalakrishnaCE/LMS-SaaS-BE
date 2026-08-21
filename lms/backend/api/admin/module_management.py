@@ -464,3 +464,58 @@ def update_chapter_text(chapter_name, text_block, content_idx=0):
     except Exception as e:
         frappe.log_error("Failed to update chapter text", str(e))
         frappe.throw(str(e))
+
+
+@frappe.whitelist(allow_guest=False)
+def reorder_lessons(module_name, lesson_order):
+    """
+    Reorder lessons within a module.
+    lesson_order: JSON array of lesson names in the new order.
+    """
+    import json as _json
+    try:
+        order = _json.loads(lesson_order) if isinstance(lesson_order, str) else lesson_order
+        module = frappe.get_doc("LMS Module", module_name)
+        # Build a lookup: lesson name -> row
+        row_map = {row.lesson: row for row in module.lessons}
+        # Re-assign order field and rebuild the child table in the given order
+        module.lessons = []
+        for idx, lesson_name in enumerate(order):
+            if lesson_name in row_map:
+                row = row_map[lesson_name]
+                row.order = idx + 1
+                module.lessons.append(row)
+        module.save(ignore_permissions=True)
+        return {"status": "success"}
+    except Exception as e:
+        frappe.log_error("reorder_lessons failed", str(e))
+        frappe.throw(str(e))
+
+
+@frappe.whitelist(allow_guest=False)
+def reorder_chapters(lesson_name, chapter_order):
+    """
+    Reorder chapters within a lesson, allowing for newly moved chapters.
+    chapter_order: JSON array of chapter names in the new order.
+    """
+    import json as _json
+    try:
+        order = _json.loads(chapter_order) if isinstance(chapter_order, str) else chapter_order
+        lesson = frappe.get_doc("LMS Lesson", lesson_name)
+        row_map = {row.chapter: row for row in lesson.chapters}
+        lesson.chapters = []
+        for idx, chapter_name in enumerate(order):
+            if chapter_name in row_map:
+                row = row_map[chapter_name]
+                row.order = idx + 1
+                lesson.chapters.append(row)
+            else:
+                row = lesson.append("chapters", {})
+                row.chapter = chapter_name
+                row.order = idx + 1
+        lesson.save(ignore_permissions=True)
+        return {"status": "success"}
+    except Exception as e:
+        frappe.log_error("reorder_chapters failed", str(e))
+        frappe.throw(str(e))
+
