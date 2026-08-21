@@ -34,7 +34,7 @@ def delete_file(file_url):
 
 # --- Curriculum Builder Endpoints ---
 
-from lms.backend.api import module_management
+from lms.backend.api.admin import module_management
 
 @frappe.whitelist()
 def get_curriculum(module_name):
