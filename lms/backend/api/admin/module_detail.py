@@ -320,6 +320,16 @@ def _apply_content_snapshot(module_id, snapshot):
         for field, value in module_settings.items():
             if module.meta.has_field(field):
                 setattr(module, field, value)
+                
+        # Rebuild lessons child table
+        module.set("lessons", [])
+        for idx, lesson_data in enumerate(snapshot.get("lessons", [])):
+            if lesson_data.get("name"):
+                module.append("lessons", {
+                    "lesson": lesson_data.get("name"),
+                    "order": idx + 1
+                })
+                
         module.save(ignore_permissions=True)
 
     # Restore lessons, chapters, and content blocks
@@ -331,6 +341,16 @@ def _apply_content_snapshot(module_id, snapshot):
             lesson = frappe.get_doc("LMS Lesson", lesson_name)
             lesson.lesson_name = lesson_data.get("lesson_name", lesson.lesson_name)
             lesson.description = lesson_data.get("description", lesson.description or "")
+            
+            # Rebuild chapters child table
+            lesson.set("chapters", [])
+            for idx, chapter_data in enumerate(lesson_data.get("chapters", [])):
+                if chapter_data.get("name"):
+                    lesson.append("chapters", {
+                        "chapter": chapter_data.get("name"),
+                        "order": idx + 1
+                    })
+                    
             lesson.save(ignore_permissions=True)
         except Exception:
             pass
@@ -538,67 +558,19 @@ def has_unpublished_changes(module_id):
     # Use the current version's CREATION time as the publish baseline.
     # `creation` is set once when the row is inserted and never changes.
     latest_v = next((v for v in versions if v.is_current), versions[-1])
-    version_time = latest_v.creation
-
-    if version_time is None:
-        return {"has_changes": True}
-
-    # 1. LMS Module
-    if module.modified > version_time:
-        return {"has_changes": True}
-
-    # Collect lesson names
-    lesson_names = [l.lesson for l in module.get("lessons", []) if l.lesson]
-    if not lesson_names:
-        return {"has_changes": False}
-
-    # 2. LMS Lesson
-    lessons = frappe.db.get_all(
-        "LMS Lesson",
-        filters={"name": ["in", lesson_names]},
-        fields=["modified"]
-    )
-    for lesson in lessons:
-        if lesson.modified > version_time:
-            return {"has_changes": True}
-
-    # Collect chapter names
-    chapter_links = frappe.db.get_all(
-        "LMS Lesson Chapter",
-        filters={"parent": ["in", lesson_names]},
-        fields=["chapter"]
-    )
-    chapter_names = [c.chapter for c in chapter_links if c.chapter]
-    if not chapter_names:
-        return {"has_changes": False}
-
-    # 3. LMS Chapter
-    chapters = frappe.db.get_all(
-        "LMS Chapter",
-        filters={"name": ["in", chapter_names]},
-        fields=["modified"]
-    )
-    for chapter in chapters:
-        if chapter.modified > version_time:
-            return {"has_changes": True}
-
-    # 4. LMS Chapter Content (text, video, audio, quiz, etc.)
-    content_blocks = frappe.db.get_all(
-        "LMS Chapter Content",
-        filters={"parent": ["in", chapter_names], "parenttype": "LMS Chapter"},
-        fields=["modified", "content_type", "content_reference"]
-    )
-    for block in content_blocks:
-        if block.modified > version_time:
-            return {"has_changes": True}
+    
+    import json
+    try:
+        if latest_v.content_snapshot:
+            old_snapshot = json.loads(latest_v.content_snapshot)
+            current_snapshot = json.loads(json.dumps(_build_content_snapshot(module), default=str))
             
-        # Check the actual content document
-        if block.content_type and block.content_reference:
-            try:
-                content_modified = frappe.db.get_value(block.content_type, block.content_reference, "modified")
-                if content_modified and content_modified > version_time:
-                    return {"has_changes": True}
-            except Exception:
-                pass
+            if old_snapshot == current_snapshot:
+                return {"has_changes": False}
+            else:
+                return {"has_changes": True}
+    except Exception as e:
+        frappe.log_error(f"Error comparing snapshots for has_unpublished_changes: {str(e)}")
+        return {"has_changes": True}
 
-    return {"has_changes": False}
+    return {"has_changes": True}
