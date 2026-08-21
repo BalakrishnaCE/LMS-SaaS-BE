@@ -62,6 +62,7 @@ def add_interaction(
         "timeline_seconds": timeline_seconds,
         "element_text": element_text or "",
         "secondary_text": secondary_text or "",
+        "is_required": 1 if is_required else 0,
     }
 
     # Handle linked records for Knowledge Check (Quiz)
@@ -125,6 +126,7 @@ def update_interaction(
         target.element_text = element_text
     if secondary_text is not None:
         target.secondary_text = secondary_text
+    target.is_required = 1 if is_required else 0
 
     # Parse options if passed as string
     if options and isinstance(options, str):
@@ -336,6 +338,7 @@ def _serialize_element(el):
         "linked_record_type": el.linked_record_type,
         "linked_record_name": el.linked_record_name,
         "is_correct": el.is_correct,
+        "is_required": bool(el.is_required),
         "x_coordinate": el.x_coordinate,
         "y_coordinate": el.y_coordinate,
     }
