@@ -10,7 +10,8 @@
   "is_current",
   "description",
   "date",
-  "author"
+  "author",
+  "content_snapshot"
  ],
  "fields": [
   {
@@ -44,6 +45,12 @@
    "in_list_view": 1,
    "label": "Author",
    "options": "User"
+  },
+  {
+   "fieldname": "content_snapshot",
+   "fieldtype": "Code",
+   "label": "Content Snapshot",
+   "hidden": 1
   }
  ],
  "grid_page_length": 50,
