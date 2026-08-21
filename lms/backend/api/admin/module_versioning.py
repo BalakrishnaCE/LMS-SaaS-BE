@@ -360,7 +360,7 @@ def has_unpublished_changes(module_id):
     # `creation` is set once when the row is inserted and never changes.
     latest_v = next((v for v in versions if v.is_current), versions[-1])
     
-    import json
+    
     try:
         if latest_v.content_snapshot:
             old_snapshot = json.loads(latest_v.content_snapshot)
