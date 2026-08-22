@@ -6,6 +6,8 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "source_type",
+  "slides_json",
   "base_media",
   "is_assessment",
   "track_progress",
@@ -19,6 +21,22 @@
    "label": "Title",
    "reqd": 1,
    "description": "Enter the title."
+  },
+  {
+   "default": "Uploaded",
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "label": "Source Type",
+   "options": "Uploaded\nNative",
+   "reqd": 1,
+   "description": "Choose Native for drag-and-drop editor or Uploaded for PPT/PDF."
+  },
+  {
+   "fieldname": "slides_json",
+   "fieldtype": "Long Text",
+   "label": "Slides JSON",
+   "description": "Serialized canvas data for native presentations.",
+   "depends_on": "eval:doc.source_type=='Native'"
   },
   {
    "fieldname": "base_media",
