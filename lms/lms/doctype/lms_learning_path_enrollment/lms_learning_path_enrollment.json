@@ -1,0 +1,68 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "LMS-LPE-.####",
+ "creation": "2026-08-22 08:20:32.965342",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "learning_path",
+  "learner",
+  "team",
+  "status",
+  "completion_percentage"
+ ],
+ "fields": [
+  {
+   "fieldname": "learning_path",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Learning Path",
+   "options": "LMS Learning Path",
+   "reqd": 1
+  },
+  {
+   "fieldname": "learner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Learner",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "team",
+   "fieldtype": "Link",
+   "label": "Team",
+   "options": "LMS Team"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Not Started\nIn Progress\nCompleted",
+   "reqd": 1
+  },
+  {
+   "fieldname": "completion_percentage",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Completion Percentage"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-22 08:20:32.965342",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Learning Path Enrollment",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

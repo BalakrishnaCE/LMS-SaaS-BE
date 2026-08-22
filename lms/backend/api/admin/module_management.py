@@ -322,9 +322,18 @@ def duplicate_module(module_name):
         
     original = frappe.get_doc("LMS Module", module_name)
     
+    # Generate unique name
+    base_name = f"{original.module_name} (Copy)"
+    new_name = base_name
+    counter = 1
+    
+    while frappe.db.exists("LMS Module", new_name):
+        new_name = f"{base_name} {counter}"
+        counter += 1
+        
     # Create copy
     new_module = frappe.copy_doc(original)
-    new_module.module_name = f"{original.module_name} (Copy)"
+    new_module.module_name = new_name
     new_module.status = "Draft"
     new_module.insert(ignore_permissions=True)
     
@@ -419,7 +428,7 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
 
 
 @frappe.whitelist(allow_guest=False)
-def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, content_idx=0):
+def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, slides_json=None, content_idx=0):
     if not chapter_name:
         frappe.throw("Chapter Name is required")
         
@@ -440,6 +449,10 @@ def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_u
         content_doc.video_url = video_url
     if iframe_url is not None and hasattr(content_doc, "iframe_url"):
         content_doc.iframe_url = iframe_url
+    if slides_json is not None and hasattr(content_doc, "slides_json"):
+        content_doc.slides_json = slides_json
+        if hasattr(content_doc, "source_type"):
+            content_doc.source_type = "Native"
         
     content_doc.save(ignore_permissions=True)
     return {"status": "success"}

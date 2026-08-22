@@ -25,7 +25,7 @@
    "label": "Certificate ID",
    "reqd": 1,
    "unique": 1,
-   "description": "Auto-generated unique ID. e.g., \"CERT-2026-00001\" Used for verification and QR code generation."
+   "description": "Auto-generated unique ID. e.g., \"CERT-2026-####1\" Used for verification and QR code generation."
   },
   {
    "fieldname": "user",
