@@ -333,6 +333,15 @@ def duplicate_module(module_name):
         
     # Create copy
     new_module = frappe.copy_doc(original)
+    
+    base_name = f"{original.module_name} (Copy)"
+    new_name = base_name
+    count = 1
+    
+    while frappe.db.exists("LMS Module", new_name):
+        new_name = f"{base_name} {count}"
+        count += 1
+        
     new_module.module_name = new_name
     new_module.status = "Draft"
     new_module.insert(ignore_permissions=True)
