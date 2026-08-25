@@ -1,5 +1,51 @@
 import frappe
 from frappe.utils import today, add_days, getdate, now
+from frappe.utils.pdf import get_pdf
+
+def get_estimated_hours_from_curriculum(module_name):
+    from lms.backend.api.admin.module_management import get_curriculum
+    try:
+        curriculum = get_curriculum(module_name)
+        total_mins = 0
+        
+        default_durations = {
+            'text': 8,
+            'file': 10,
+            'video': 8,
+            'audio': 10,
+            'presentation': 15,
+            'quiz': 8,
+            'iframe': 5,
+            'assessment': 30,
+            'flashcard': 5,
+            'document': 10
+        }
+        
+        for lesson in curriculum:
+            for chapter in lesson.get("chapters", []):
+                primary_content = None
+                if chapter.get("contents"):
+                    primary_content = chapter["contents"][0]
+                
+                content_type = primary_content.get("contentType") if primary_content else chapter.get("contentType", "document")
+                if content_type == 'document':
+                    content_type = 'file'
+                    
+                true_duration = primary_content.get("contentData", {}).get("duration") if primary_content else None
+                
+                if content_type == 'interactive_video':
+                    if true_duration:
+                        total_mins += round(float(true_duration) * 1.5)
+                    else:
+                        total_mins += round(default_durations.get('video', 8) * 1.5)
+                elif true_duration:
+                    total_mins += round(float(true_duration))
+                else:
+                    total_mins += default_durations.get(content_type, 8)
+                    
+        return round(total_mins / 60, 1) if total_mins else 0
+    except Exception:
+        return 0
 
 @frappe.whitelist(allow_guest=True)
 def get_module_overview(module_id):
@@ -56,13 +102,15 @@ def get_module_overview(module_id):
 
     total_learners = len(trackers)
     passed  = sum(1 for t in trackers if t.status == "Completed")
-    in_prog = sum(1 for t in trackers if t.status in ["In Progress", "Failed"])
+    in_prog = sum(1 for t in trackers if t.status == "In Progress")
+    failed  = sum(1 for t in trackers if t.status == "Failed")
     ns      = sum(1 for t in trackers if t.status == "Not started")
     pending = total_learners - passed
 
     passed_pct  = round((passed  / total_learners * 100) if total_learners else 0)
     inprog_pct  = round((in_prog / total_learners * 100) if total_learners else 0)
-    ns_pct      = 100 - passed_pct - inprog_pct if total_learners else 0
+    failed_pct  = round((failed / total_learners * 100) if total_learners else 0)
+    ns_pct      = max(0, 100 - passed_pct - inprog_pct - failed_pct) if total_learners else 0
 
     user_emails = list({t.user for t in trackers if t.user})
     dept_map = {}
@@ -101,15 +149,9 @@ def get_module_overview(module_id):
         })
     departments.sort(key=lambda x: x["progress"], reverse=True)
 
-    estimated_hours = None
-    try:
-        lesson_names = [l.lesson for l in module.get("lessons", []) if l.lesson]
-        if lesson_names:
-            lesson_docs = frappe.get_all("LMS Lesson", filters={"name": ["in", lesson_names]}, fields=["estimated_time"])
-            total_mins = sum((l.estimated_time or 0) for l in lesson_docs)
-            estimated_hours = round(total_mins / 60, 1) if total_mins else None
-    except Exception:
-        pass
+    estimated_hours = getattr(module, "duration", None)
+    if estimated_hours is None or estimated_hours == 0:
+        estimated_hours = get_estimated_hours_from_curriculum(module_id)
 
     return {
         "module": {
@@ -142,9 +184,11 @@ def get_module_overview(module_id):
             "passed": passed,
             "pending": pending,
             "in_progress": in_prog,
+            "failed": failed,
             "not_started": ns,
             "passed_pct": passed_pct,
             "inprog_pct": inprog_pct,
+            "failed_pct": failed_pct,
             "ns_pct": ns_pct,
         },
         "departments": departments,
@@ -183,7 +227,7 @@ def get_module_certificates(module_id):
     certs = frappe.get_all(
         "LMS Certificate",
         filters={"module": module_id},
-        fields=["name", "certificate_id", "user", "issued_on", "is_valid"]
+        fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf"]
     )
     
     certificate_data = []
@@ -194,11 +238,13 @@ def get_module_certificates(module_id):
             
             certificate_data.append({
                 "id": cert.name,
+                "certificate_id": cert.certificate_id or cert.name,
                 "learnerName": user_doc.full_name,
                 "email": user_doc.email,
                 "issueDate": str(cert.issued_on) if cert.issued_on else None,
                 "expiryDate": None,
-                "status": status
+                "status": status,
+                "certificate_pdf": cert.certificate_pdf or None
             })
         except Exception:
             continue
@@ -219,3 +265,5 @@ def get_module_certificates(module_id):
         "certificates": certificate_data,
         "course_name": module.module_name
     }
+
+

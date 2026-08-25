@@ -541,3 +541,21 @@ def reorder_chapters(lesson_name, chapter_order):
         frappe.log_error("reorder_chapters failed", str(e))
         frappe.throw(str(e))
 
+
+@frappe.whitelist()
+def toggle_module_archive(module_name):
+    module = frappe.get_doc("LMS Module", module_name)
+    if module.status == "Archived":
+        # Unarchive
+        last_status = module.custom_pre_archive_status or "Draft"
+        if last_status == "Archived":
+            last_status = "Draft"
+        module.status = last_status
+        module.custom_pre_archive_status = None
+    else:
+        # Archive
+        module.custom_pre_archive_status = module.status
+        module.status = "Archived"
+        
+    module.save(ignore_permissions=True)
+    return module.status
