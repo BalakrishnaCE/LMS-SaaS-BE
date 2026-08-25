@@ -290,7 +290,7 @@ def remove_chapter(lesson_name, chapter_name):
 @frappe.whitelist(allow_guest=False)
 def get_admin_dashboard_modules():
     modules = frappe.get_all("LMS Module", 
-        fields=["name", "module_name", "category", "status", "creation", "modified", "image", "is_mandatory"],
+        fields=["name", "module_name", "category", "status", "creation", "modified", "image", "is_mandatory", "duration"],
         order_by="creation desc"
     )
     
@@ -299,9 +299,18 @@ def get_admin_dashboard_modules():
         total = frappe.db.count("LMS Module Tracker", {"module": mod.name})
         completed = frappe.db.count("LMS Module Tracker", {"module": mod.name, "status": "Completed"})
         
+        # Get lesson count using SQL to avoid any child table ORM quirks
+        lesson_count_res = frappe.db.sql("""
+            SELECT count(name) 
+            FROM `tabLMS Module Lesson Child` 
+            WHERE parent = %s AND parenttype = 'LMS Module'
+        """, (mod.name,))
+        lesson_count = lesson_count_res[0][0] if lesson_count_res else 0
+        
         mod.totalLearners = total
         mod.completedLearners = completed
         mod.completionRate = (completed / total * 100) if total > 0 else 0
+        mod.lesson_count = lesson_count
         
     return modules
 
