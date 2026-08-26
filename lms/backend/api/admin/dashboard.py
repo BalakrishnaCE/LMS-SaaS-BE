@@ -87,14 +87,11 @@ def get_metrics_summary():
             overdue_assignments_history.append(o)
             compliance_completion_history.append(cc)
             
-        active_learners = active_learners_history[-1]
-        completion_rate = completion_rate_history[-1]
-        overdue_assignments = overdue_assignments_history[-1]
-        compliance_completion = compliance_completion_history[-1]
+        dt_current = getdate(now())
+        active_learners, completion_rate, overdue_assignments, compliance_completion = compute_metrics_for_date(dt_current)
         
         trend_label = "last month" if timeframe == "month" else "last year"
         
-        dt_current = intervals[-1]
         dt_prev = add_months(dt_current, -1) if timeframe == "month" else add_months(dt_current, -12)
         a_prev, c_prev, o_prev, cc_prev = compute_metrics_for_date(dt_prev)
         
@@ -319,7 +316,6 @@ def get_onboarding_status():
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_insights():
-    from frappe.utils import add_days, today, getdate
     insights = []
     trackers = frappe.get_all("LMS Module Tracker", fields=["name", "status", "user", "module", "creation", "started_on"])
     if not trackers:
