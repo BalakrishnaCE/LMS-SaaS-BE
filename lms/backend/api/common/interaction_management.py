@@ -17,7 +17,7 @@ def get_interactions(chapter_name):
     for el in interactive_content.interactive_elements:
         elements.append(_serialize_element(el))
 
-    elements.sort(key=lambda e: e.get("timeline_seconds") or 0)
+    elements.sort(key=lambda e: (e.get("sort_order") or 0, e.get("timeline_seconds") or 0))
     return elements
 
 
@@ -43,6 +43,7 @@ def _serialize_element(el):
         "idx": el.idx,
         "interaction_type": el.interaction_type,
         "timeline_seconds": el.timeline_seconds,
+        "end_time_seconds": el.end_time_seconds,
         "element_text": el.element_text,
         "secondary_text": el.secondary_text,
         "linked_record_type": el.linked_record_type,
@@ -51,6 +52,16 @@ def _serialize_element(el):
         "is_required": bool(el.is_required),
         "x_coordinate": el.x_coordinate,
         "y_coordinate": el.y_coordinate,
+        "pause_video": bool(el.pause_video) if el.pause_video is not None else True,
+        "display_mode": el.display_mode or "immediate",
+        "correct_action": el.correct_action or "continue",
+        "incorrect_action": el.incorrect_action or "message",
+        "correct_jump_seconds": el.correct_jump_seconds,
+        "incorrect_jump_seconds": el.incorrect_jump_seconds,
+        "require_correct": bool(el.require_correct),
+        "feedback_correct": el.feedback_correct or "",
+        "feedback_incorrect": el.feedback_incorrect or "",
+        "sort_order": el.sort_order or 0,
     }
 
     if el.interaction_type == "Knowledge Check" and el.linked_record_type == "LMS Quiz" and el.linked_record_name:
@@ -80,7 +91,7 @@ def _get_all_elements_sorted(interactive_content):
     """Return all elements from an interactive content doc, sorted by timeline_seconds."""
     interactive_content.reload()
     elements = [_serialize_element(el) for el in interactive_content.interactive_elements]
-    elements.sort(key=lambda e: e.get("timeline_seconds") or 0)
+    elements.sort(key=lambda e: (e.get("sort_order") or 0, e.get("timeline_seconds") or 0))
     return elements
 
 

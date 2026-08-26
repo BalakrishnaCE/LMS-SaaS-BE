@@ -6,12 +6,14 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "description",
   "base_media",
   "video_url",
   "is_assessment",
   "is_scored",
   "score",
   "track_progress",
+  "allow_seeking",
   "interactive_elements",
   "duration"
  ],
@@ -23,6 +25,12 @@
    "label": "Title",
    "reqd": 1,
    "description": "Enter the title."
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description",
+   "description": "Creator-provided description or instructions for this interactive video."
   },
   {
    "fieldname": "base_media",
@@ -66,6 +74,13 @@
    "description": "Toggle to enable or disable track progress."
   },
   {
+   "default": "1",
+   "fieldname": "allow_seeking",
+   "fieldtype": "Check",
+   "label": "Allow Seeking",
+   "description": "Whether learners can skip ahead freely. When disabled, forward-seeking is restricted to the furthest-watched point."
+  },
+  {
    "fieldname": "interactive_elements",
    "fieldtype": "Table",
    "label": "Interactive Elements",
@@ -81,7 +96,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 06:39:00.000000",
+ "modified": "2026-08-26 13:50:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Interactive Video Content",
