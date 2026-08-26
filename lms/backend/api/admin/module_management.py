@@ -197,34 +197,35 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
             "scoring": 0
         })
         chapter.insert(ignore_permissions=True)
-        
-        try:
-            # Create the content record to link
-            content_doc = frappe.get_doc({
-                "doctype": doctype_name,
-                "title": chapter_title
-            })
-            
-            # Inject dynamic fields from frontend
-            if content_data:
-                if isinstance(content_data, str):
-                    content_data = json.loads(content_data)
-                for key, value in content_data.items():
-                    if value is not None:
-                        content_doc.set(key, value)
-            
-            content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
-            
-            chapter.append("contents", {
-                "content_type": doctype_name,
-                "content_reference": content_doc.name,
-                "order": 1
-            })
-            chapter.save(ignore_permissions=True)
-        except Exception as inner_e:
-            frappe.log_error("Failed to create content doc", str(inner_e))
-            pass # If content creation fails due to strict validations, we still have the Chapter
-            
+        # Only create content if content_type is provided and not 'none'
+        if content_type and content_type.lower() != 'none':
+            try:
+                # Create the content record to link
+                content_doc = frappe.get_doc({
+                    "doctype": doctype_name,
+                    "title": chapter_title
+                })
+                
+                # Inject dynamic fields from frontend
+                if content_data:
+                    if isinstance(content_data, str):
+                        content_data = json.loads(content_data)
+                    for key, value in content_data.items():
+                        if value is not None:
+                            content_doc.set(key, value)
+                
+                content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+                
+                chapter.append("contents", {
+                    "content_type": doctype_name,
+                    "content_reference": content_doc.name,
+                    "order": 1
+                })
+                chapter.save(ignore_permissions=True)
+            except Exception as inner_e:
+                frappe.log_error("Failed to create content doc", str(inner_e))
+                pass # If content creation fails due to strict validations, we still have the Chapter
+                
         lesson = frappe.get_doc("LMS Lesson", lesson_name)
         
         # Check if attached (in rare cases of identical IDs)
@@ -243,6 +244,119 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
     except Exception as e:
         import traceback
         frappe.log_error("add_chapter FATAL ERROR", traceback.format_exc())
+        raise
+
+@frappe.whitelist(allow_guest=False)
+def add_content_block(chapter_name, content_type, content_data=None):
+    try:
+        if not chapter_name or not content_type:
+            frappe.throw("Chapter Name and Content Type are required")
+            
+        type_map = {
+            'text': 'LMS Text Content',
+            'file': 'LMS Document Content',
+            'video': 'LMS Video Content',
+            'audio': 'LMS Audio Content',
+            'presentation': 'LMS Presentation Content',
+            'quiz': 'LMS Quiz Content', 
+            'iframe': 'LMS Iframe Content',
+            'assessment': 'LMS Assessment Content',
+            'ai': 'LMS Text Content',
+            'interactive_video': 'LMS Interactive Video Content'
+        }
+        doctype_name = type_map.get(content_type, 'LMS Text Content')
+        
+        chapter = frappe.get_doc("LMS Chapter", chapter_name)
+        
+        # Create the content record to link
+        content_doc = frappe.get_doc({
+            "doctype": doctype_name,
+            "title": chapter.title or "Untitled Content"
+        })
+        
+        # Inject dynamic fields from frontend
+        if content_data:
+            if isinstance(content_data, str):
+                content_data = json.loads(content_data)
+            for key, value in content_data.items():
+                if value is not None:
+                    content_doc.set(key, value)
+        
+        content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
+        
+        new_order = len(chapter.contents) + 1
+        
+        chapter.append("contents", {
+            "content_type": doctype_name,
+            "content_reference": content_doc.name,
+            "order": new_order
+        })
+        chapter.save(ignore_permissions=True)
+        
+        return {"status": "success", "content_reference": content_doc.name, "doctype": doctype_name}
+    except Exception as e:
+        import traceback
+        frappe.log_error("add_content_block ERROR", traceback.format_exc())
+        raise
+
+@frappe.whitelist(allow_guest=False)
+def remove_content_block(chapter_name, content_reference):
+    try:
+        if not chapter_name or not content_reference:
+            frappe.throw("Chapter Name and Content Reference are required")
+            
+        chapter = frappe.get_doc("LMS Chapter", chapter_name)
+        target_row = None
+        
+        for row in chapter.contents:
+            if row.content_reference == content_reference:
+                target_row = row
+                break
+                
+        if target_row:
+            chapter.remove(target_row)
+            chapter.save(ignore_permissions=True)
+            
+            # Also try to delete the actual content document
+            try:
+                if frappe.db.exists(target_row.content_type, target_row.content_reference):
+                    frappe.delete_doc(target_row.content_type, target_row.content_reference, ignore_permissions=True)
+            except Exception as inner_e:
+                frappe.log_error("Failed to delete content doc on remove_content_block", str(inner_e))
+                pass
+                
+        return {"status": "success"}
+    except Exception as e:
+        import traceback
+        frappe.log_error("remove_content_block ERROR", traceback.format_exc())
+        raise
+
+@frappe.whitelist(allow_guest=False)
+def reorder_content_blocks(chapter_name, ordered_references):
+    """
+    ordered_references: A JSON string or list of content_reference IDs in the new order.
+    """
+    try:
+        if not chapter_name or not ordered_references:
+            frappe.throw("Chapter Name and Ordered References are required")
+            
+        if isinstance(ordered_references, str):
+            ordered_references = json.loads(ordered_references)
+            
+        chapter = frappe.get_doc("LMS Chapter", chapter_name)
+        
+        # Update the order of the contents based on the index in ordered_references
+        ref_order_map = {ref: idx + 1 for idx, ref in enumerate(ordered_references)}
+        
+        for row in chapter.contents:
+            if row.content_reference in ref_order_map:
+                row.order = ref_order_map[row.content_reference]
+                
+        chapter.save(ignore_permissions=True)
+        return {"status": "success"}
+    except Exception as e:
+        import traceback
+        frappe.log_error("reorder_content_blocks ERROR", traceback.format_exc())
         raise
 
 @frappe.whitelist(allow_guest=False)

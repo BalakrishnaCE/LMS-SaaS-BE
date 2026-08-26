@@ -49,6 +49,18 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
     return module_management.add_chapter(lesson_name, chapter_title, content_type, content_data)
 
 @frappe.whitelist()
+def add_content_block(chapter_name, content_type, content_data=None):
+    return module_management.add_content_block(chapter_name, content_type, content_data)
+
+@frappe.whitelist()
+def remove_content_block(chapter_name, content_reference):
+    return module_management.remove_content_block(chapter_name, content_reference)
+
+@frappe.whitelist()
+def reorder_content_blocks(chapter_name, ordered_references):
+    return module_management.reorder_content_blocks(chapter_name, ordered_references)
+
+@frappe.whitelist()
 def remove_lesson(module_name, lesson_name):
     return module_management.remove_lesson(module_name, lesson_name)
 
