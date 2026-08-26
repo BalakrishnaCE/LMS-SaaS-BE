@@ -682,3 +682,11 @@ def toggle_module_archive(module_name):
         
     module.save(ignore_permissions=True)
     return module.status
+
+@frappe.whitelist(allow_guest=False)
+def get_teams():
+    teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
+    for team in teams:
+        learner_count = frappe.db.count("LMS Team Member", {"parent": team.name, "parenttype": "LMS Team"})
+        team.learner_count = learner_count
+    return teams
