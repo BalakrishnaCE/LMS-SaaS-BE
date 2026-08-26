@@ -41,9 +41,7 @@ def _build_content_snapshot(module_doc):
             "is_mandatory": int(module_doc.is_mandatory or 0),
             "is_sequential": int(getattr(module_doc, "is_sequential", 0)),
             "allow_skip": int(getattr(module_doc, "allow_skip", 0)),
-            "enable_discussion": int(getattr(module_doc, "enable_discussion", 0)),
             "enable_ai_flashcards": int(getattr(module_doc, "enable_ai_flashcards", 0)),
-            "enable_certificate": int(getattr(module_doc, "enable_certificate", 0)),
         },
         "lessons": []
     }
@@ -364,6 +362,12 @@ def has_unpublished_changes(module_id):
     try:
         if latest_v.content_snapshot:
             old_snapshot = json.loads(latest_v.content_snapshot)
+            
+            # Ensure certificate and discussion settings don't trigger "unpublished changes"
+            if "module_settings" in old_snapshot:
+                old_snapshot["module_settings"].pop("enable_certificate", None)
+                old_snapshot["module_settings"].pop("enable_discussion", None)
+                
             current_snapshot = json.loads(json.dumps(_build_content_snapshot(module), default=str))
             
             if old_snapshot == current_snapshot:
