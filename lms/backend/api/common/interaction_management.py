@@ -40,6 +40,7 @@ def _get_interactive_video_content(chapter):
 def _serialize_element(el):
     """Serialize a single LMS Interactive Element child row to a dict."""
     data = {
+        "name": el.name,
         "idx": el.idx,
         "interaction_type": el.interaction_type,
         "timeline_seconds": el.timeline_seconds,

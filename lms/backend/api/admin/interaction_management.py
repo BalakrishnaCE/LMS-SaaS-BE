@@ -47,7 +47,7 @@ def add_interaction(
     if options and isinstance(options, str):
         options = json.loads(options)
 
-    frappe.log_error(f"ADD INTERACTION DEBUG: x={x_coordinate}, y={y_coordinate}, type={type(x_coordinate)}")
+    frappe.log_error(f"ADD INTERACTION DEBUG: inc_action={incorrect_action}, inc_jump={incorrect_jump_seconds}", "Add Interaction Payload")
     element_data = {
         "interaction_type": interaction_type_name,
         "timeline_seconds": timeline_seconds,
@@ -59,8 +59,8 @@ def add_interaction(
         "display_mode": display_mode or "immediate",
         "correct_action": correct_action or "continue",
         "incorrect_action": incorrect_action or "message",
-        "correct_jump_seconds": float(correct_jump_seconds) if correct_jump_seconds else None,
-        "incorrect_jump_seconds": float(incorrect_jump_seconds) if incorrect_jump_seconds else None,
+        "correct_jump_seconds": float(correct_jump_seconds) if correct_jump_seconds is not None and str(correct_jump_seconds).strip() != "" else None,
+        "incorrect_jump_seconds": float(incorrect_jump_seconds) if incorrect_jump_seconds is not None and str(incorrect_jump_seconds).strip() != "" else None,
         "require_correct": 1 if require_correct in (True, 1, "1", "true", "True") else 0,
         "feedback_correct": feedback_correct or "",
         "feedback_incorrect": feedback_incorrect or "",
@@ -148,9 +148,9 @@ def update_interaction(
     if incorrect_action is not None:
         target.incorrect_action = incorrect_action
     if correct_jump_seconds is not None:
-        target.correct_jump_seconds = float(correct_jump_seconds) if correct_jump_seconds else None
+        target.correct_jump_seconds = float(correct_jump_seconds) if str(correct_jump_seconds).strip() != "" else None
     if incorrect_jump_seconds is not None:
-        target.incorrect_jump_seconds = float(incorrect_jump_seconds) if incorrect_jump_seconds else None
+        target.incorrect_jump_seconds = float(incorrect_jump_seconds) if str(incorrect_jump_seconds).strip() != "" else None
     if require_correct is not None:
         target.require_correct = 1 if require_correct in (True, 1, "1", "true", "True") else 0
     if feedback_correct is not None:
@@ -160,7 +160,7 @@ def update_interaction(
     if sort_order is not None:
         target.sort_order = int(sort_order)
     
-    frappe.log_error(f"UPDATE INTERACTION DEBUG: x={x_coordinate}, y={y_coordinate}, type={type(x_coordinate)}")
+    frappe.log_error(f"UPDATE INTERACTION DEBUG: inc_action={incorrect_action}, inc_jump={incorrect_jump_seconds}", "Update Interaction Payload")
 
     if x_coordinate is not None:
         target.x_coordinate = float(x_coordinate) if x_coordinate else None
@@ -198,6 +198,9 @@ def update_interaction(
 
     elif target.interaction_type == "Poll" and options is not None:
         target.secondary_text = json.dumps(options)
+
+    if target.name:
+        target.db_update()
 
     interactive_content.save(ignore_permissions=True)
     return _get_all_elements_sorted(interactive_content)
