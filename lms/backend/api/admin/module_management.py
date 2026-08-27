@@ -94,7 +94,7 @@ def get_curriculum(module_name):
                         
                     if raw_type != 'LMS Flashcard Content':
                         chapter_contents.append({
-                            "id": content_link.name,
+                            "id": content_link.content_reference,
                             "contentType": content_type,
                             "contentData": content_data
                         })
@@ -485,10 +485,11 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
         frappe.throw("Chapter has no contents")
         
     content_idx = int(content_idx)
-    if content_idx >= len(chapter.contents):
+    sorted_contents = sorted(chapter.contents, key=lambda x: (x.order or 999, x.idx))
+    if content_idx >= len(sorted_contents):
         frappe.throw(f"Chapter has no content at index {content_idx}")
         
-    content_link = chapter.contents[content_idx]
+    content_link = sorted_contents[content_idx]
     if content_link.content_type not in ["LMS Quiz Content", "LMS Assessment Content"]:
         frappe.throw("Chapter is not linked to a Quiz or Assessment Content")
         
@@ -569,10 +570,11 @@ def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_u
         frappe.throw("Chapter has no contents")
         
     content_idx = int(content_idx)
-    if content_idx >= len(chapter.contents):
+    sorted_contents = sorted(chapter.contents, key=lambda x: (x.order or 999, x.idx))
+    if content_idx >= len(sorted_contents):
         frappe.throw(f"Chapter has no content at index {content_idx}")
         
-    content_link = chapter.contents[content_idx]
+    content_link = sorted_contents[content_idx]
     content_doc = frappe.get_doc(content_link.content_type, content_link.content_reference)
     
     if base_media is not None and hasattr(content_doc, "base_media"):
@@ -594,10 +596,14 @@ def update_chapter_text(chapter_name, text_block, content_idx=0):
     try:
         content_idx = int(content_idx)
         chapter = frappe.get_doc("LMS Chapter", chapter_name)
-        if not chapter.contents or len(chapter.contents) <= content_idx:
+        if not chapter.contents:
             frappe.throw("Content not found")
             
-        content_ref = chapter.contents[content_idx]
+        sorted_contents = sorted(chapter.contents, key=lambda x: (x.order or 999, x.idx))
+        if len(sorted_contents) <= content_idx:
+            frappe.throw("Content not found")
+            
+        content_ref = sorted_contents[content_idx]
         if content_ref.content_type not in ["LMS Text Content", "LMS AI Content"]:
             frappe.throw(f"Content type {content_ref.content_type} does not support text updates")
             
