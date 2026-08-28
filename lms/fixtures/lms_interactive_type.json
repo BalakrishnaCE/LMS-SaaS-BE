@@ -34,5 +34,29 @@
     "name": "Info Popup",
     "type_name": "Info Popup",
     "description": "Display informational text overlay on video"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Image Overlay",
+    "type_name": "Image Overlay",
+    "description": "Display a hotspot or image overlay on the video"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Bookmark",
+    "type_name": "Bookmark",
+    "description": "Add a visual bookmark to the timeline"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Information",
+    "type_name": "Information",
+    "description": "Provide context or additional information"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Resource Link",
+    "type_name": "Resource Link",
+    "description": "Link to external resources or files"
   }
 ]

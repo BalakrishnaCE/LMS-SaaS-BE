@@ -8,6 +8,7 @@
  "field_order": [
   "system_user",
   "theme",
+  "designation",
   "notification_preferences"
  ],
  "fields": [
@@ -27,6 +28,13 @@
    "label": "Theme",
    "options": "Light\nDark\nSystem",
    "description": "Select the theme from the dropdown options."
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Data",
+   "label": "Designation",
+   "in_list_view": 1,
+   "description": "The learner's designation or job title, e.g. Software Engineer, Marketing Manager."
   },
   {
    "fieldname": "notification_preferences",
