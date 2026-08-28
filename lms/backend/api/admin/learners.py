@@ -8,6 +8,20 @@ def _evaluate_user_risks(users):
         
     user_names = [u.name for u in users]
 
+    # Fetch User Roles (for active/inactive check)
+    roles = frappe.get_all("Has Role", filters={"parent": ("in", user_names), "role": "LMS-Learner"}, fields=["parent", "role"])
+    user_has_learner_role = set(r.parent for r in roles)
+
+    # Fetch User Settings (for designation)
+    user_settings = frappe.get_all("LMS User Settings", filters={"system_user": ("in", user_names)}, fields=["system_user", "designation"])
+    user_designation = {s.system_user: s.designation for s in user_settings}
+
+    # Fetch User Teams
+    team_members = frappe.get_all("LMS Team Member", filters={"user": ("in", user_names)}, fields=["user", "parent"])
+    user_teams = {u: [] for u in user_names}
+    for tm in team_members:
+        user_teams[tm.user].append(tm.parent)
+
     modules = frappe.get_all("LMS Module", fields=["name", "duration", "is_mandatory"])
     modules_dict = {m.name: m for m in modules}
 
@@ -35,12 +49,7 @@ def _evaluate_user_risks(users):
         completed = sum(1 for t in u_trackers if t.status == "Completed")
         failed = sum(1 for t in u_trackers if t.status == "Failed")
         
-        total_progress = 0
-        for t in u_trackers:
-            if t.status == "Completed":
-                total_progress += 100
-            else:
-                total_progress += float(t.progress_percentage or 0)
+        total_progress = sum(float(t.progress_percentage or 0) for t in u_trackers)
         
         avg_progress = total_progress / assigned if assigned > 0 else 0
         
@@ -118,7 +127,11 @@ def _evaluate_user_risks(users):
             "risk": learner_risk,
             "risk_factors": risk_factors,
             "last_activity": last_activity_date,
-            "next_deadline": next_deadline.strftime("%b %d, %Y") if next_deadline else "None"
+            "next_deadline": next_deadline.strftime("%b %d, %Y") if next_deadline else "None",
+            "department": user_teams[u.name][0] if user_teams.get(u.name) else "No Team",
+            "designation": user_designation.get(u.name) or "",
+            "has_trackers": len(u_trackers) > 0,
+            "has_learner_role": u.name in user_has_learner_role
         }
         
     return user_evals
@@ -129,7 +142,7 @@ def get_learner_kpis():
     learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent", ignore_permissions=True)
     filters = {"name": ("!=", "Administrator")}
     if learner_roles:
-        filters["name"] = ("in", learner_roles)
+        filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
         
     users = frappe.get_all("User", filters=filters, fields=["name", "enabled"], ignore_permissions=True)
     total = len(users)
@@ -142,8 +155,12 @@ def get_learner_kpis():
     
     for u in users:
         eval_data = user_evals.get(u.name, {})
-        if eval_data.get("last_activity") and getdate(eval_data["last_activity"]) >= fourteen_days_ago:
+        has_lms_learner = eval_data.get("has_learner_role", False)
+        has_trackers = eval_data.get("has_trackers", False)
+        
+        if has_lms_learner and has_trackers:
             active += 1
+            
         if eval_data.get("risk") in ["Overdue", "Needs Attention"]:
             at_risk += 1
             
@@ -169,7 +186,7 @@ def get_learners(search="", limit=10, status="all", risk="all", offset=0):
     filters = {"name": ("!=", "Administrator")}
     learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent", ignore_permissions=True)
     if learner_roles:
-        filters["name"] = ("in", learner_roles)
+        filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
     if search:
         filters["full_name"] = ("like", f"%{search}%")
         
@@ -181,7 +198,10 @@ def get_learners(search="", limit=10, status="all", risk="all", offset=0):
     results = []
     for u in users:
         eval_data = user_evals.get(u.name, {})
-        learner_status = "Active" if u.enabled else "Inactive"
+        
+        has_lms_learner = eval_data.get("has_learner_role", False)
+        has_trackers = eval_data.get("has_trackers", False)
+        learner_status = "Active" if (has_lms_learner and has_trackers) else "Inactive"
         
         avatar = u.user_image
         if not avatar:
@@ -196,8 +216,8 @@ def get_learners(search="", limit=10, status="all", risk="all", offset=0):
             "name": u.full_name or u.name,
             "email": u.email,
             "avatar": f"url({avatar})",
-            "department": "Engineering",
-            "designation": "LMS Learner",
+            "department": eval_data.get("department", "Engineering"),
+            "designation": eval_data.get("designation", "LMS Learner"),
             "assignedCount": eval_data.get("assigned", 0),
             "completedCount": eval_data.get("completed", 0),
             "progress": int(eval_data.get("avg_progress", 0)),
@@ -248,9 +268,12 @@ def get_learner_details(user_id):
     elif avatar.startswith("/"):
         avatar = get_url(avatar)
 
-    trackers = frappe.get_all("LMS Module Tracker", filters={"user": user.name}, fields=["name", "module", "status"])
+    trackers = frappe.get_all("LMS Module Tracker", filters={"user": user.name}, fields=["name", "module", "status", "creation"], order_by="creation asc")
     modules = frappe.get_all("LMS Module", fields=["name", "is_mandatory"])
     mod_dict = {m.name: m.is_mandatory for m in modules}
+
+    # Get earliest tracker activity as "joined date"
+    first_activity_date = trackers[0].creation if trackers else None
 
     mandatory_assigned = 0
     mandatory_completed = 0
@@ -267,6 +290,26 @@ def get_learner_details(user_id):
             optional_assigned += 1
             if t.status == "Completed":
                 optional_completed += 1
+                
+    lp_enrollments = frappe.get_all("LMS Learning Path Enrollment", filters={"learner": user.name}, fields=["name", "learning_path", "status"])
+    learning_paths = frappe.get_all("LMS Learning Path", fields=["name", "is_mandatory"])
+    lp_dict = {lp.name: lp.is_mandatory for lp in learning_paths}
+
+    lp_mandatory_assigned = 0
+    lp_mandatory_completed = 0
+    lp_optional_assigned = 0
+    lp_optional_completed = 0
+
+    for lpe in lp_enrollments:
+        is_mand = lp_dict.get(lpe.learning_path, 0)
+        if is_mand:
+            lp_mandatory_assigned += 1
+            if lpe.status == "Completed":
+                lp_mandatory_completed += 1
+        else:
+            lp_optional_assigned += 1
+            if lpe.status == "Completed":
+                lp_optional_completed += 1
                 
     submissions = frappe.get_all("LMS Quiz Submission", filters={"user": user.name}, fields=["name", "quiz", "passed", "creation", "score"])
     
@@ -286,34 +329,70 @@ def get_learner_details(user_id):
             avg_score = sum(valid_scores) / len(valid_scores)
             highest_score = max(valid_scores)
             
-    chart_data = []
-    
-    quarters = {}
+    yearly_data = {}
+    available_years = set()
     for s in submissions:
         dt = getdate(s.creation)
-        q = (dt.month - 1) // 3 + 1
-        key = f"Q{q} {dt.year}"
-        if key not in quarters:
-            quarters[key] = []
-        quarters[key].append(s.score)
-            
-    for k, v in quarters.items():
-        chart_data.append({
-            "label": k,
-            "value": int(sum(v) / len(v)) if v else 0
-        })
+        available_years.add(dt.year)
         
-    chart_data.sort(key=lambda x: (x["label"].split()[1], x["label"].split()[0]))
+    if not available_years:
+        available_years.add(getdate(today()).year)
+        
+    available_years = sorted(list(available_years), reverse=True)
     
-    # If no chart data, mock it for UI demonstration
-    if not chart_data:
-        chart_data = [
-            {"label": "Q1 2026", "value": 60},
-            {"label": "Q2 2026", "value": 70},
-            {"label": "Q3 2026", "value": 78},
-            {"label": "Q4 2026", "value": 85},
-        ]
+    # Initialize all years
+    for y in available_years:
+        yearly_data[str(y)] = {
+            "chartData": [
+                {"label": f"Q1 {y}", "value": 0},
+                {"label": f"Q2 {y}", "value": 0},
+                {"label": f"Q3 {y}", "value": 0},
+                {"label": f"Q4 {y}", "value": 0}
+            ],
+            "avgScore": 0,
+            "highestScore": 0,
+            "assessmentsTaken": 0,
+            "retakes": 0,
+            "_scores": {1: [], 2: [], 3: [], 4: []},
+            "_quizzes": {},
+        }
         
+    # Populate raw data
+    for s in submissions:
+        dt = getdate(s.creation)
+        y = str(dt.year)
+        q = (dt.month - 1) // 3 + 1
+        
+        yd = yearly_data[y]
+        yd["_scores"][q].append(s.score)
+        yd["_quizzes"][s.quiz] = yd["_quizzes"].get(s.quiz, 0) + 1
+        
+    # Finalize calculations
+    for y, yd in yearly_data.items():
+        all_scores = []
+        for q in range(1, 5):
+            scores = yd["_scores"][q]
+            if scores:
+                all_scores.extend(scores)
+                yd["chartData"][q-1]["value"] = int(sum(scores) / len(scores))
+                
+        if all_scores:
+            yd["avgScore"] = int(sum(all_scores) / len(all_scores))
+            yd["highestScore"] = max(all_scores)
+            
+        yd["assessmentsTaken"] = len(yd["_quizzes"])
+        yd["retakes"] = sum(1 for count in yd["_quizzes"].values() if count > 1)
+        
+        del yd["_scores"]
+        del yd["_quizzes"]
+        
+    learning_performance = {
+        "availableYears": available_years,
+        "yearlyData": yearly_data
+    }
+
+    
+
     # If no trackers, mock the overview stats to match the mock assigned modules
     if not trackers:
         # User has no assignments, return empty details or zeros
@@ -323,9 +402,9 @@ def get_learner_details(user_id):
                 "name": user.full_name or user.name,
                 "email": user.email,
                 "avatar": avatar,
-                "department": "Engineering",
-                "designation": "LMS Learner",
-                "joinedDate": user.creation.strftime("%b %d, %Y") if user.creation else "",
+                "department": eval_data.get("department", "No Team"),
+                "designation": eval_data.get("designation", "No Role"),
+                "joinedDate": first_activity_date.strftime("%b %d, %Y") if first_activity_date else "",
                 "status": "Active" if user.enabled else "Inactive"
             },
             "overview": {
@@ -336,7 +415,23 @@ def get_learner_details(user_id):
                 "highestScore": 0,
                 "assessmentsTaken": 0,
                 "retakes": 0,
-                "learningPerformance": [],
+                "learningPerformance": {
+                    "availableYears": [getdate(today()).year],
+                    "yearlyData": {
+                        str(getdate(today()).year): {
+                            "chartData": [
+                                {"label": f"Q1 {getdate(today()).year}", "value": 0},
+                                {"label": f"Q2 {getdate(today()).year}", "value": 0},
+                                {"label": f"Q3 {getdate(today()).year}", "value": 0},
+                                {"label": f"Q4 {getdate(today()).year}", "value": 0}
+                            ],
+                            "avgScore": 0,
+                            "highestScore": 0,
+                            "assessmentsTaken": 0,
+                            "retakes": 0
+                        }
+                    }
+                },
                 "modules": {
                     "total": 0,
                     "mandatoryCompleted": 0,
@@ -345,11 +440,11 @@ def get_learner_details(user_id):
                     "optionalTotal": 0
                 },
                 "learningPaths": {
-                    "total": 0,
-                    "mandatoryCompleted": 0,
-                    "mandatoryTotal": 0,
-                    "optionalCompleted": 0,
-                    "optionalTotal": 0
+                    "total": lp_mandatory_assigned + lp_optional_assigned,
+                    "mandatoryCompleted": lp_mandatory_completed,
+                    "mandatoryTotal": lp_mandatory_assigned,
+                    "optionalCompleted": lp_optional_completed,
+                    "optionalTotal": lp_optional_assigned
                 },
                 "risk": "On Track",
                 "riskFactors": ["No modules assigned"],
@@ -362,9 +457,9 @@ def get_learner_details(user_id):
             "name": user.full_name or user.name,
             "email": user.email,
             "avatar": avatar,
-            "department": "Engineering",
-            "designation": "LMS Learner",
-            "joinedDate": user.creation.strftime("%b %d, %Y") if user.creation else "",
+            "department": eval_data.get("department", "No Team"),
+            "designation": eval_data.get("designation", "No Role"),
+            "joinedDate": first_activity_date.strftime("%b %d, %Y") if first_activity_date else "",
             "status": "Active" if user.enabled else "Inactive"
         },
         "overview": {
@@ -375,7 +470,7 @@ def get_learner_details(user_id):
             "highestScore": int(highest_score),
             "assessmentsTaken": total_assessments,
             "retakes": retakes,
-            "learningPerformance": chart_data,
+            "learningPerformance": learning_performance,
             "modules": {
                 "total": mandatory_assigned + optional_assigned,
                 "mandatoryCompleted": mandatory_completed,
@@ -384,11 +479,11 @@ def get_learner_details(user_id):
                 "optionalTotal": optional_assigned
             },
             "learningPaths": {
-                "total": 0,
-                "mandatoryCompleted": 0,
-                "mandatoryTotal": 0,
-                "optionalCompleted": 0,
-                "optionalTotal": 0
+                "total": lp_mandatory_assigned + lp_optional_assigned,
+                "mandatoryCompleted": lp_mandatory_completed,
+                "mandatoryTotal": lp_mandatory_assigned,
+                "optionalCompleted": lp_optional_completed,
+                "optionalTotal": lp_optional_assigned
             },
             "risk": eval_data.get("risk", "On Track"),
             "riskFactors": eval_data.get("risk_factors", []),
@@ -397,7 +492,7 @@ def get_learner_details(user_id):
     }
 
 @frappe.whitelist(allow_guest=True)
-def get_learner_assigned_modules(user_id, limit=10, offset=0):
+def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, statuses=None, types=None, priorities=None):
     try:
         limit = int(limit)
         offset = int(offset)
@@ -415,6 +510,16 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0):
     
     modules = frappe.get_all("LMS Module", fields=["name", "module_name", "category", "duration", "is_mandatory"], ignore_permissions=True)
     mod_dict = {m.name: m for m in modules}
+    
+    import json
+    if categories and isinstance(categories, str):
+        categories = json.loads(categories)
+    if statuses and isinstance(statuses, str):
+        statuses = json.loads(statuses)
+    if types and isinstance(types, str):
+        types = json.loads(types)
+    if priorities and isinstance(priorities, str):
+        priorities = json.loads(priorities)
     
     results = []
     current_date = getdate(today())
@@ -435,15 +540,35 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0):
             if t.status != "Completed" and current_date > due_date_obj:
                 t.status = "Overdue"
                 
+        mod_status = t.status or "Not Started"
+        mod_category = mod.category or "General"
+        is_mandatory = bool(mod.is_mandatory)
+        
+        # Apply filters
+        if categories and not any(c.lower() in mod_category.lower() for c in categories):
+            continue
+            
+        if statuses and mod_status.lower() not in [s.lower() for s in statuses]:
+            continue
+            
+        # Default mock type filtering (since we don't have distinct types in backend yet)
+        mod_type = "Module"
+        if types and mod_type.lower() not in [ty.lower() for ty in types]:
+            continue
+            
+        mod_priority = "Mandatory" if is_mandatory else "Optional"
+        if priorities and mod_priority.lower() not in [p.lower() for p in priorities]:
+            continue
+                
         results.append({
             "id": t.name,
             "moduleId": mod.name,
             "name": mod.module_name or mod.name,
-            "category": mod.category or "General",
+            "category": mod_category,
             "progress": int(t.progress_percentage or 0),
-            "status": t.status or "Not Started",
+            "status": mod_status,
             "dueDate": due_date,
-            "isMandatory": bool(mod.is_mandatory)
+            "isMandatory": is_mandatory
         })
         
     total = len(results)
@@ -517,3 +642,248 @@ def seed_dummy_data():
             
     frappe.db.commit()
     return "Seed complete!"
+@frappe.whitelist(allow_guest=True)
+def get_learner_assessments(user_id, categories=None, statuses=None, types=None, priorities=None):
+    try:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id}, fields=["name", "module", "status"])
+        
+        import json
+        if categories and isinstance(categories, str): categories = json.loads(categories)
+        if statuses and isinstance(statuses, str): statuses = json.loads(statuses)
+        if types and isinstance(types, str): types = json.loads(types)
+        if priorities and isinstance(priorities, str): priorities = json.loads(priorities)
+        
+        results = []
+        
+        for t in trackers:
+            mod = frappe.get_doc("LMS Module", t.module)
+            
+            submissions = frappe.get_all("LMS Quiz Submission", filters={"enrollment": t.name}, fields=["quiz", "score", "passed"])
+            
+            ass_dict = {}
+            for s in submissions:
+                if s.quiz not in ass_dict:
+                    ass_dict[s.quiz] = {"best_score": s.score, "attempts": 1, "passed": s.passed}
+                else:
+                    ass_dict[s.quiz]["attempts"] += 1
+                    if s.score > ass_dict[s.quiz]["best_score"]:
+                        ass_dict[s.quiz]["best_score"] = s.score
+                    if s.passed:
+                        ass_dict[s.quiz]["passed"] = 1
+                        
+            assessments_list = []
+            for quiz_name, data in ass_dict.items():
+                quiz = frappe.get_doc("LMS Quiz", quiz_name)
+                # determine result badge
+                res = "Passed" if data["passed"] else ("Failed" if data["attempts"] >= (quiz.max_attempts or 3) else "Needs attention")
+                
+                assessments_list.append({
+                    "id": quiz_name,
+                    "title": quiz.title,
+                    "type": "Quiz",
+                    "bestScore": data["best_score"],
+                    "passScore": quiz.passing_percentage if quiz.is_passing_required else "--",
+                    "attempts": f"{data['attempts']}/{quiz.max_attempts or 3}",
+                    "result": res,
+                    "lesson": "Lesson"
+                })
+                
+            paths = frappe.get_all("LMS Learning Path Course", filters={"module": mod.name}, fields=["parent"])
+            path_name = paths[0].parent if paths else None
+            
+            if path_name:
+                path_item = next((r for r in results if r["title"] == path_name and r["type"] == "Learning Path"), None)
+                if not path_item:
+                    path_doc = frappe.get_doc("LMS Learning Path", path_name)
+                    path_item = {
+                        "id": path_name,
+                        "title": path_name,
+                        "type": "Learning Path",
+                        "category": mod.category[0].category if mod.category else "Compliance",
+                        "status": "Inprogress",
+                        "modules": [],
+                        "lessonsCount": 0,
+                        "assessmentsCount": 0
+                    }
+                    results.append(path_item)
+                
+                mod_overall = sum([a["bestScore"] for a in assessments_list]) / len(assessments_list) if assessments_list else 0
+                path_item["modules"].append({
+                    "id": mod.name,
+                    "title": mod.module_name,
+                    "status": "Needs attention" if any(a["result"] == "Needs attention" for a in assessments_list) else t.status,
+                    "assessments": assessments_list,
+                    "lessonsCount": len(mod.lessons),
+                    "assessmentsCount": len(assessments_list),
+                    "overallScore": int(mod_overall)
+                })
+                path_item["lessonsCount"] += len(mod.lessons)
+                path_item["assessmentsCount"] += len(assessments_list)
+            else:
+                mod_overall = sum([a["bestScore"] for a in assessments_list]) / len(assessments_list) if assessments_list else 0
+                results.append({
+                    "id": mod.name,
+                    "title": mod.module_name,
+                    "type": "Module",
+                    "category": mod.category[0].category if mod.category else "Compliance",
+                    "status": "Needs attention" if any(a["result"] == "Needs attention" for a in assessments_list) else t.status,
+                    "lessonsCount": len(mod.lessons),
+                    "assessmentsCount": len(assessments_list),
+                    "assessments": assessments_list,
+                    "overallScore": int(mod_overall)
+                })
+                
+        # Apply filters
+        if categories:
+            results = [r for r in results if any(c.lower() in r["category"].lower() for c in categories)]
+        if statuses:
+            results = [r for r in results if r["status"].lower() in [s.lower() for s in statuses]]
+        if types:
+            results = [r for r in results if r["type"].lower() in [ty.lower() for ty in types]]
+            
+        total_assessments_taken = 0
+        total_passed = 0
+        score_sum = 0
+        score_count = 0
+        pending_tests = 0
+        
+        for r in results:
+            mods = r.get("modules", []) if r["type"] == "Learning Path" else [r]
+            
+            # Determine path status based on modules
+            if r["type"] == "Learning Path":
+                if any(m["status"] == "Needs attention" for m in mods):
+                    r["status"] = "Needs attention"
+                elif any(m["status"] == "Failed" for m in mods):
+                    r["status"] = "Failed"
+                elif all(m["status"] == "Completed" for m in mods):
+                    r["status"] = "Passed"
+                else:
+                    r["status"] = "Inprogress"
+                    
+            for m in mods:
+                for a in m.get("assessments", []):
+                    total_assessments_taken += 1
+                    if a["result"] == "Passed":
+                        total_passed += 1
+                    elif a["result"] != "Passed":
+                        pending_tests += 1
+                    score_sum += a["bestScore"]
+                    score_count += 1
+                    
+        stats = {
+            "assessmentsTaken": total_assessments_taken,
+            "averageScore": int(score_sum / score_count) if score_count > 0 else 0,
+            "passingRate": total_passed,
+            "pendingTests": pending_tests
+        }
+        
+        return {
+            "stats": stats,
+            "cards": results
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Get Learner Assessments")
+        return {"error": str(e)}
+
+@frappe.whitelist(allow_guest=True)
+def get_assessment_details(user_id, quiz_name):
+    try:
+        quiz = frappe.get_doc("LMS Quiz", quiz_name)
+        
+        submissions = frappe.get_all(
+            "LMS Quiz Submission",
+            filters={"user": user_id, "quiz": quiz_name},
+            fields=["name", "score", "passed", "creation"],
+            order_by="creation asc"
+        )
+        
+        history = []
+        for i, s in enumerate(submissions):
+            attempt_num = i + 1
+            history.insert(0, {
+                "id": s.name,
+                "attempt": f"Attempt {attempt_num}",
+                "score": f"{int(s.score)}% {'Passed' if s.passed else 'Failed'}",
+                "date": s.creation.strftime("%b %-d, %Y"),
+                "duration": "14m 32s",
+                "raw_score": s.score
+            })
+            
+        total_attempts = len(submissions)
+        best_score = max([s.score for s in submissions]) if submissions else 0
+        latest_sub = submissions[-1] if submissions else None
+        
+        best_sub_name = None
+        if submissions:
+            best_sub = max(submissions, key=lambda x: x.score)
+            best_sub_name = best_sub.name
+            
+        questions_performance = []
+        correct_count = 0
+        incorrect_count = 0
+        
+        if best_sub_name:
+            responses = frappe.get_all(
+                "LMS Quiz Response",
+                filters={"parent": best_sub_name, "parenttype": "LMS Quiz Submission"},
+                fields=["question", "is_correct"],
+                order_by="idx asc"
+            )
+            
+            import re
+            for idx, r in enumerate(responses):
+                q_doc = frappe.get_doc("LMS Quiz Question", r.question)
+                is_correct = bool(r.is_correct)
+                if is_correct:
+                    correct_count += 1
+                else:
+                    incorrect_count += 1
+                    
+                q_text = re.sub('<[^<]+>', '', q_doc.question_text or '')
+                
+                questions_performance.append({
+                    "id": r.question,
+                    "index": idx + 1,
+                    "text": q_text.strip(),
+                    "isCorrect": is_correct
+                })
+                
+        stats = {
+            "questions": len(quiz.questions) if hasattr(quiz, "questions") else (correct_count + incorrect_count or 20),
+            "correct": correct_count,
+            "incorrect": incorrect_count,
+            "attempts": total_attempts,
+            "bestScore": f"{int(best_score)}%",
+            "passingScore": f"{int(quiz.passing_percentage)}%" if getattr(quiz, "is_passing_required", 0) else "--",
+            "timeTaken": "14m 32s",
+            "dateTaken": latest_sub.creation.strftime("%b %-d, %Y") if latest_sub else "--"
+        }
+        
+        return {
+            "stats": stats,
+            "history": history,
+            "questions": questions_performance,
+            "title": quiz.title
+        }
+        
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Get Assessment Details API")
+        return {"error": str(e)}
+
+
+
+@frappe.whitelist(allow_guest=True)
+def get_learning_filter_options():
+    categories = frappe.get_all("LMS Course Category", pluck="name")
+    return {
+        "categories": categories,
+        "statuses": [
+            {"label": "Completed", "color": "#138B47", "bg": "#DDF3E7"},
+            {"label": "Overdue", "color": "var(--status-overdue-fg)", "bg": "var(--status-overdue-bg)"},
+            {"label": "Inprogress", "color": "var(--status-in-progress-fg)", "bg": "var(--status-in-progress-bg)"},
+            {"label": "Not Started", "color": "#595F69", "bg": "#ECEDEF"},
+            {"label": "Needs attention", "color": "#D97706", "bg": "#F5E9DB"},
+            {"label": "Failed", "color": "#DC2626", "bg": "#FEE2E2"}
+        ]
+    }
