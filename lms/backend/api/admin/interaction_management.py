@@ -11,6 +11,7 @@ from lms.backend.api.common.interaction_management import (
 def add_interaction(
     chapter_name,
     interaction_type_name,
+    content_id=None,
     timeline_seconds=0,
     element_text=None,
     secondary_text=None,
@@ -36,10 +37,10 @@ def add_interaction(
     timeline_seconds = float(timeline_seconds or 0)
 
     chapter = frappe.get_doc("LMS Chapter", chapter_name)
-    interactive_content = _get_interactive_video_content(chapter)
+    interactive_content = _get_interactive_video_content(chapter, content_id=content_id)
 
     if not interactive_content:
-        interactive_content = _migrate_to_interactive_video(chapter)
+        interactive_content = _migrate_to_interactive_video(chapter, content_id=content_id)
 
     if not interactive_content:
         frappe.throw("Could not find or create Interactive Video Content for this chapter")
@@ -87,6 +88,7 @@ def add_interaction(
 def update_interaction(
     chapter_name,
     element_idx,
+    content_id=None,
     interaction_type_name=None,
     timeline_seconds=None,
     element_text=None,
@@ -112,7 +114,7 @@ def update_interaction(
 
     element_idx = int(element_idx)
     chapter = frappe.get_doc("LMS Chapter", chapter_name)
-    interactive_content = _get_interactive_video_content(chapter)
+    interactive_content = _get_interactive_video_content(chapter, content_id=content_id)
 
     if not interactive_content:
         frappe.throw("No Interactive Video Content found for this chapter")
@@ -207,13 +209,13 @@ def update_interaction(
 
 
 @frappe.whitelist(allow_guest=False)
-def remove_interaction(chapter_name, element_idx):
+def remove_interaction(chapter_name, element_idx, content_id=None):
     if not chapter_name or not element_idx:
         frappe.throw("Chapter Name and Element Index are required")
 
     element_idx = int(element_idx)
     chapter = frappe.get_doc("LMS Chapter", chapter_name)
-    interactive_content = _get_interactive_video_content(chapter)
+    interactive_content = _get_interactive_video_content(chapter, content_id=content_id)
 
     if not interactive_content:
         frappe.throw("No Interactive Video Content found for this chapter")
@@ -247,7 +249,7 @@ def remove_interaction(chapter_name, element_idx):
 
 
 @frappe.whitelist(allow_guest=False)
-def duplicate_interaction(chapter_name, element_idx):
+def duplicate_interaction(chapter_name, element_idx, content_id=None):
     """Deep-clone an interaction element, including linked Quiz records.
     Clones everything except learner progress.
     """
@@ -256,7 +258,7 @@ def duplicate_interaction(chapter_name, element_idx):
 
     element_idx = int(element_idx)
     chapter = frappe.get_doc("LMS Chapter", chapter_name)
-    interactive_content = _get_interactive_video_content(chapter)
+    interactive_content = _get_interactive_video_content(chapter, content_id=content_id)
 
     if not interactive_content:
         frappe.throw("No Interactive Video Content found for this chapter")
