@@ -49,8 +49,8 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
     return module_management.add_chapter(lesson_name, chapter_title, content_type, content_data)
 
 @frappe.whitelist()
-def add_content_block(chapter_name, content_type, content_data=None):
-    return module_management.add_content_block(chapter_name, content_type, content_data)
+def add_content_block(chapter_name, content_type, title=None, content_data=None):
+    return module_management.add_content_block(chapter_name, content_type, title, content_data)
 
 @frappe.whitelist()
 def remove_content_block(chapter_name, content_reference):

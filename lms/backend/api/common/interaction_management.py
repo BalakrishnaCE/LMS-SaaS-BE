@@ -2,13 +2,13 @@ import frappe
 import json
 
 @frappe.whitelist(allow_guest=False)
-def get_interactions(chapter_name):
-    """Get all interactive elements for a chapter, sorted by timeline_seconds."""
-    if not chapter_name:
-        frappe.throw("Chapter Name is required")
+def get_interactions(chapter_name=None, content_id=None):
+    """Get all interactive elements for a chapter or a specific content block, sorted by timeline_seconds."""
+    if not chapter_name and not content_id:
+        frappe.throw("Chapter Name or Content ID is required")
 
-    chapter = frappe.get_doc("LMS Chapter", chapter_name)
-    interactive_content = _get_interactive_video_content(chapter)
+    chapter = frappe.get_doc("LMS Chapter", chapter_name) if chapter_name else None
+    interactive_content = _get_interactive_video_content(chapter, content_id)
 
     if not interactive_content:
         return []
@@ -21,16 +21,27 @@ def get_interactions(chapter_name):
     return elements
 
 
-def _get_interactive_video_content(chapter):
-    """Find the LMS Interactive Video Content linked to a chapter."""
-    if not hasattr(chapter, "contents") or not chapter.contents:
+def _get_interactive_video_content(chapter, content_id=None):
+    """Find the LMS Interactive Video Content or LMS Image Content by content_id or fallback to the first one in the chapter."""
+    INTERACTIVE_DOCTYPES = ("LMS Interactive Video Content", "LMS Image Content")
+
+    if content_id:
+        for doctype in INTERACTIVE_DOCTYPES:
+            try:
+                doc = frappe.get_doc(doctype, content_id)
+                return doc
+            except Exception:
+                continue
+        return None
+
+    if not chapter or not hasattr(chapter, "contents") or not chapter.contents:
         return None
 
     for content_link in chapter.contents:
-        if content_link.content_type == "LMS Interactive Video Content":
+        if content_link.content_type in INTERACTIVE_DOCTYPES:
             try:
                 return frappe.get_doc(
-                    "LMS Interactive Video Content", content_link.content_reference
+                    content_link.content_type, content_link.content_reference
                 )
             except Exception:
                 return None
@@ -132,9 +143,9 @@ def _create_quiz_for_knowledge_check(question_text, options, is_required=False):
     return quiz_doc
 
 
-def _migrate_to_interactive_video(chapter):
+def _migrate_to_interactive_video(chapter, content_id=None):
     """Migrate a plain LMS Video Content chapter to LMS Interactive Video Content."""
-    if not hasattr(chapter, "contents") or not chapter.contents:
+    if not chapter or not hasattr(chapter, "contents") or not chapter.contents:
         return None
 
     old_content_link = None
@@ -142,12 +153,14 @@ def _migrate_to_interactive_video(chapter):
 
     for content_link in chapter.contents:
         if content_link.content_type == "LMS Video Content":
+            if content_id and content_link.content_reference != content_id:
+                continue
             try:
                 old_doc = frappe.get_doc("LMS Video Content", content_link.content_reference)
                 old_content_link = content_link
                 break
             except Exception:
-                return None
+                pass
 
     if not old_doc:
         return None

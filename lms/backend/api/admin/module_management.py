@@ -33,7 +33,8 @@ def get_curriculum(module_name):
                         'LMS Assessment Content': 'assessment',
                         'LMS Iframe Content': 'iframe',
                         'LMS Interactive Video Content': 'interactive_video',
-                        'LMS Flashcard Content': 'flashcard'
+                        'LMS Flashcard Content': 'flashcard',
+                        'LMS Image Content': 'image',
                     }
                     content_type = reverse_map.get(raw_type, 'document')
                     
@@ -69,23 +70,12 @@ def get_curriculum(module_name):
                                 
                             content_data['quiz_data'] = quiz_data
 
-                        # Serialize interactive_elements child table for Interactive Video
-                        if raw_type == 'LMS Interactive Video Content' and hasattr(content_doc, 'interactive_elements'):
+                        # Serialize interactive_elements child table for Interactive Video and Image Hotspots
+                        if raw_type in ('LMS Interactive Video Content', 'LMS Image Content') and hasattr(content_doc, 'interactive_elements'):
+                            from lms.backend.api.common.interaction_management import _serialize_element
                             elements = []
                             for el in content_doc.interactive_elements:
-                                el_data = {
-                                    'idx': el.idx,
-                                    'interaction_type': el.interaction_type,
-                                    'timeline_seconds': el.timeline_seconds,
-                                    'element_text': el.element_text,
-                                    'secondary_text': el.secondary_text,
-                                    'linked_record_type': el.linked_record_type,
-                                    'linked_record_name': el.linked_record_name,
-                                    'is_correct': el.is_correct,
-                                    'x_coordinate': el.x_coordinate,
-                                    'y_coordinate': el.y_coordinate
-                                }
-                                elements.append(el_data)
+                                elements.append(_serialize_element(el))
                             content_data['interactive_elements'] = elements
 
                     except Exception as e:
@@ -247,7 +237,7 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
         raise
 
 @frappe.whitelist(allow_guest=False)
-def add_content_block(chapter_name, content_type, content_data=None):
+def add_content_block(chapter_name, content_type, title=None, content_data=None):
     try:
         if not chapter_name or not content_type:
             frappe.throw("Chapter Name and Content Type are required")
@@ -262,7 +252,8 @@ def add_content_block(chapter_name, content_type, content_data=None):
             'iframe': 'LMS Iframe Content',
             'assessment': 'LMS Assessment Content',
             'ai': 'LMS Text Content',
-            'interactive_video': 'LMS Interactive Video Content'
+            'interactive_video': 'LMS Interactive Video Content',
+            'image': 'LMS Image Content',
         }
         doctype_name = type_map.get(content_type, 'LMS Text Content')
         
@@ -271,13 +262,15 @@ def add_content_block(chapter_name, content_type, content_data=None):
         # Create the content record to link
         content_doc = frappe.get_doc({
             "doctype": doctype_name,
-            "title": chapter.title or "Untitled Content"
+            "title": title or chapter.title or "Untitled Content"
         })
         
+        quiz_data = None
         # Inject dynamic fields from frontend
         if content_data:
             if isinstance(content_data, str):
                 content_data = json.loads(content_data)
+            quiz_data = content_data.pop("quiz_data", None)
             for key, value in content_data.items():
                 if value is not None:
                     content_doc.set(key, value)
@@ -293,6 +286,14 @@ def add_content_block(chapter_name, content_type, content_data=None):
         })
         chapter.save(ignore_permissions=True)
         
+        if quiz_data and doctype_name in ["LMS Quiz Content", "LMS Assessment Content"]:
+            chapter.reload()
+            sorted_contents = sorted(chapter.contents, key=lambda x: (x.order or 999, x.idx))
+            for idx, content in enumerate(sorted_contents):
+                if content.content_reference == content_doc.name:
+                    save_chapter_quiz(chapter_name, quiz_data, idx)
+                    break
+                    
         return {"status": "success", "content_reference": content_doc.name, "doctype": doctype_name}
     except Exception as e:
         import traceback
