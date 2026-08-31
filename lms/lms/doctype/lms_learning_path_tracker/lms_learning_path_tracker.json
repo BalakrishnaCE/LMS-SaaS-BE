@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:LLPT-{####}",
+ "creation": "2026-08-28 16:08:34.932719",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "learning_path",
+  "status",
+  "progress_percentage",
+  "total_score",
+  "started_on",
+  "completed_on",
+  "module_progress"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "description": "Link to the corresponding User enrolled in the learning path."
+  },
+  {
+   "fieldname": "learning_path",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Learning Path",
+   "options": "LMS Learning Path",
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Learning Path."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Not started\nIn Progress\nCompleted\nFailed",
+   "reqd": 1,
+   "description": "Select the overall progress status of the learning path."
+  },
+  {
+   "fieldname": "progress_percentage",
+   "fieldtype": "Float",
+   "label": "Progress Percentage",
+   "description": "Overall progress of the learning path from 0.0 to 100.0."
+  },
+  {
+   "fieldname": "total_score",
+   "fieldtype": "Float",
+   "label": "Total Score",
+   "description": "Aggregate score accumulated across modules in the path."
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "label": "Started On",
+   "description": "The exact date and time the user started the learning path."
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed On",
+   "description": "The exact date and time the user successfully completed the learning path."
+  },
+  {
+   "fieldname": "module_progress",
+   "fieldtype": "Table",
+   "label": "Module Progress",
+   "options": "LMS Path Module Progress",
+   "description": "Child table tracking the progress of individual modules within the learning path."
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-28 16:08:34.932719",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Learning Path Tracker",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
