@@ -19,6 +19,14 @@ def get_learner_modules(filter_type="all"):
         ORDER BY ma.creation DESC
     """, user, as_dict=True)
 
+    everyone_modules = frappe.db.sql("""
+        SELECT name as module, duration, is_mandatory
+        FROM `tabLMS Module`
+        WHERE status = 'Published' AND module_view = 'Everyone'
+    """, as_dict=True)
+
+    assignments = assignments + everyone_modules
+
     unique_assignments = []
     seen = set()
     for a in assignments:
@@ -39,10 +47,13 @@ def get_learner_modules(filter_type="all"):
         module_doc = frappe.get_value(
             "LMS Module",
             a.module,
-            ["module_name", "category", "status"],
+            ["module_name", "category", "status", "image"],
             as_dict=True
         )
         if not module_doc:
+            continue
+
+        if module_doc.status != 'Published':
             continue
 
         tracker = frappe.get_value(
@@ -85,6 +96,7 @@ def get_learner_modules(filter_type="all"):
             "completionRate": progress,
             "status": (tracker.status if tracker else "Not Started"),
             "isRequired": bool(a.is_mandatory),
+            "image": module_doc.image,
         })
 
     return results
@@ -228,3 +240,83 @@ def get_explore_modules():
             "isRequired": False,
         })
     return results
+
+@frappe.whitelist()
+def get_learner_module_viewer_data(module_id):
+    user = frappe.session.user
+    
+    # Check if published
+    module = frappe.get_doc("LMS Module", module_id)
+    if module.status != "Published":
+        frappe.throw("Module is not published", frappe.PermissionError)
+        
+    # Check access (Assigned or Everyone)
+    has_access = False
+    if getattr(module, "module_view", "Everyone") == "Everyone":
+        has_access = True
+    else:
+        assigned = frappe.db.sql("""
+            SELECT ma.name 
+            FROM `tabLMS Module Assignment` ma
+            INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+            WHERE au.user = %s AND ma.module = %s
+        """, (user, module_id))
+        if assigned:
+            has_access = True
+            
+    if not has_access and user != 'Administrator':
+        frappe.throw("You do not have access to this module.", frappe.PermissionError)
+        
+    from lms.backend.api.admin.module_management import get_curriculum
+    from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
+    
+    # Metadata
+    est_hours = get_estimated_hours_from_curriculum(module_id)
+    if est_hours > 0:
+        if est_hours < 1:
+            duration_str = f"{int(est_hours * 60)} min"
+        else:
+            duration_str = f"{est_hours:g} hr"
+    else:
+        duration_str = "0 min"
+        
+    metadata = {
+        "id": module.name,
+        "title": module.module_name,
+        "category": get_module_category(module.name),
+        "lessonsCount": len(module.get("lessons", [])),
+        "duration": duration_str,
+    }
+    
+    # Curriculum
+    curriculum = get_curriculum(module_id)
+    
+    # Trackers
+    tracker = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user, "module": module_id},
+        fields=["name", "status", "progress_percentage"],
+        limit=1
+    )
+    
+    progress_map = {}
+    if tracker:
+        t = tracker[0]
+        content_progress = frappe.get_all(
+            "LMS Content Progress",
+            filters={"parent": t.name},
+            fields=["content_reference", "status", "score"]
+        )
+        for cp in content_progress:
+            progress_map[cp.content_reference] = {
+                "status": cp.status,
+                "score": cp.score
+            }
+            
+    return {
+        "metadata": metadata,
+        "curriculum": curriculum,
+        "overallProgress": tracker[0].progress_percentage if tracker else 0,
+        "overallStatus": tracker[0].status if tracker else "Not started",
+        "progressMap": progress_map
+    }

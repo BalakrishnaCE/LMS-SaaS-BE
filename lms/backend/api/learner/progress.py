@@ -12,7 +12,8 @@ def get_learner_progress_breakdown(filter_mode="status"):
         SELECT DISTINCT ma.module, ma.duration
         FROM `tabLMS Module Assignment` ma
         INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        WHERE au.user = %s
+        INNER JOIN `tabLMS Module` m ON m.name = ma.module
+        WHERE au.user = %s AND m.status = 'Published'
     """, user, as_dict=True)
     assigned_module_names = [a.module for a in assigned_rows]
     total = len(assigned_module_names)
@@ -76,8 +77,8 @@ def get_learner_progress_breakdown(filter_mode="status"):
             counts["Completed"] += 1
             # Determine pass/fail from assessment score if available
             score = frappe.db.get_value(
-                "LMS Assessment Result",
-                {"user": user, "module": module_name},
+                "LMS Quiz Submission",
+                {"user": user, "enrollment": t.name},
                 "score"
             )
             passing_score = frappe.db.get_value("LMS Module", module_name, "certificate_passing_percentage") or 60
@@ -138,7 +139,8 @@ def get_learner_deadlines():
         SELECT DISTINCT ma.module, ma.duration
         FROM `tabLMS Module Assignment` ma
         INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        WHERE au.user = %s
+        INNER JOIN `tabLMS Module` m ON m.name = ma.module
+        WHERE au.user = %s AND m.status = 'Published'
     """, user, as_dict=True)
 
     today_dt = getdate(today())
@@ -177,3 +179,53 @@ def get_learner_deadlines():
         })
 
     return sorted(results, key=lambda x: x["daysLeft"])[:5]
+
+@frappe.whitelist()
+def update_content_progress(module, content_reference, status="Completed", score=None):
+    user = frappe.session.user
+    
+    tracker = frappe.get_all(
+        "LMS Module Tracker", 
+        filters={"user": user, "module": module}, 
+        limit=1
+    )
+    if not tracker:
+        doc = frappe.get_doc({
+            "doctype": "LMS Module Tracker",
+            "user": user,
+            "module": module,
+            "status": "In Progress"
+        })
+        doc.insert(ignore_permissions=True)
+        tracker_name = doc.name
+    else:
+        tracker_name = tracker[0].name
+        
+    cp = frappe.get_all(
+        "LMS Content Progress",
+        filters={"parent": tracker_name, "content_reference": content_reference},
+        limit=1
+    )
+    
+    if not cp:
+        frappe.get_doc({
+            "doctype": "LMS Content Progress",
+            "parent": tracker_name,
+            "parenttype": "LMS Module Tracker",
+            "parentfield": "content_progress",
+            "content_reference": content_reference,
+            "status": status,
+            "score": score
+        }).insert(ignore_permissions=True)
+    else:
+        doc = frappe.get_doc("LMS Content Progress", cp[0].name)
+        doc.status = status
+        if score is not None:
+            doc.score = score
+        doc.save(ignore_permissions=True)
+        
+    tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
+    tracker_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    
+    return {"status": "success"}
