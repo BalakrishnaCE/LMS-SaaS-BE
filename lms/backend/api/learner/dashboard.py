@@ -27,18 +27,26 @@ def get_learner_summary(timeframe="month"):
         SELECT DISTINCT ma.module, ma.duration
         FROM `tabLMS Module Assignment` ma
         INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        WHERE au.user = %s
+        INNER JOIN `tabLMS Module` m ON m.name = ma.module
+        WHERE au.user = %s AND m.status = 'Published'
     """, user, as_dict=True)
     assigned_module_names = list(set([a.module for a in assigned_rows]))
 
     total_assigned = len(assigned_module_names)
 
     # Count learning paths even for users with no module assignments
-    lp_trackers_early = frappe.get_all(
-        "LMS Learning Path Tracker",
-        filters={"user": user},
-        fields=["learning_path"]
-    )
+    lp_trackers_early = []
+    try:
+        lp_trackers_early = frappe.get_all(
+            "LMS Learning Path Tracker",
+            filters={"user": user},
+            fields=["learning_path"]
+        )
+    except frappe.exceptions.DoesNotExistError:
+        pass
+    except Exception as e:
+        # If doctype is completely missing from db schema, it throws pymysql.err.ProgrammingError which frappe catches
+        pass
     if not assigned_module_names:
         first_name = frappe.get_value("User", user, "first_name") or "Learner"
         lp_count = len(lp_trackers_early)
@@ -87,12 +95,18 @@ def get_learner_summary(timeframe="month"):
     first_name = frappe.get_value("User", user, "first_name") or "Learner"
 
     # Learning Paths assigned to this learner
-    learning_path_trackers = frappe.get_all(
-        "LMS Learning Path Tracker",
-        filters={"user": user},
-        fields=["learning_path", "status"]
-    )
-    total_learning_paths = len(learning_path_trackers)
+    # Attempt to fetch learning path trackers safely
+    lp_trackers = []
+    try:
+        lp_trackers = frappe.get_all(
+            "LMS Learning Path Tracker",
+            filters={"user": user},
+            fields=["learning_path"]
+        )
+    except Exception:
+        pass
+        
+    total_learning_paths = len(list(set([lp.learning_path for lp in lp_trackers])))
     total_assigned = len(assigned_module_names) + total_learning_paths
 
     # Due this week (modules only)
@@ -151,6 +165,43 @@ def get_learner_summary(timeframe="month"):
         progress_this_month = max(0, progress_history[-1] - progress_history[0])
 
 
+    # Calculate Average Score
+    avg_score_res = frappe.db.sql("""
+        SELECT AVG(score) as avg_score
+        FROM `tabLMS Quiz Submission`
+        WHERE user = %s
+    """, user, as_dict=True)
+    average_score = round(avg_score_res[0].avg_score or 0)
+
+    # Calculate Recently Completed Modules
+    recently_completed = []
+    recent_trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user, "status": "Completed"},
+        fields=["module", "modified", "name"],
+        order_by="modified desc",
+        limit=3
+    )
+    for t in recent_trackers:
+        module_title = frappe.get_value("LMS Module", t.module, "module_name")
+        latest_quiz = frappe.get_all(
+            "LMS Quiz Submission",
+            filters={"enrollment": t.name},
+            fields=["score"],
+            order_by="submitted_on desc",
+            limit=1
+        )
+        # If no quiz, assume 100% since it's completed (or leave as N/A, but 100 is better for UI)
+        score = round(latest_quiz[0].score) if latest_quiz else 100
+        
+        recently_completed.append({
+            "id": t.module,
+            "title": module_title,
+            "completedDate": frappe.utils.getdate(t.modified).strftime("%b %d"),
+            "score": score
+        })
+
+
     return {
         "overallProgress": overall_progress,
         "assignedModules": len(assigned_module_names),
@@ -165,6 +216,8 @@ def get_learner_summary(timeframe="month"):
         "progressHistory": progress_history,
         "progressLabels": progress_labels,
         "dueThisWeek": due_this_week_count,
+        "averageScore": average_score,
+        "recentlyCompleted": recently_completed,
     }
 
 
@@ -177,19 +230,31 @@ def get_continue_learning():
     """
     user = frappe.session.user
 
-    tracker = frappe.get_all(
-        "LMS Module Tracker",
-        filters={"user": user, "status": "In Progress"},
-        fields=["module", "progress_percentage", "modified"],
-        order_by="modified desc",
-        limit=1
-    )
+    tracker = frappe.db.sql("""
+        SELECT t.module, t.progress_percentage, t.modified
+        FROM `tabLMS Module Tracker` t
+        INNER JOIN `tabLMS Module` m ON m.name = t.module
+        WHERE t.user = %s AND t.status = 'In Progress' AND m.status = 'Published'
+        ORDER BY t.modified DESC
+        LIMIT 1
+    """, user, as_dict=True)
 
     if not tracker:
-        return None
-
-    t = tracker[0]
-    module_doc = frappe.get_value("LMS Module", t.module, ["module_name"], as_dict=True)
+        assigned = frappe.db.sql("""
+            SELECT ma.module, ma.creation
+            FROM `tabLMS Module Assignment` ma
+            INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+            INNER JOIN `tabLMS Module` m ON m.name = ma.module
+            WHERE au.user = %s AND m.status = 'Published'
+            ORDER BY ma.creation ASC
+            LIMIT 1
+        """, user, as_dict=True)
+        if not assigned:
+            return None
+        t = frappe._dict({"module": assigned[0].module, "progress_percentage": 0})
+    else:
+        t = tracker[0]
+    module_doc = frappe.get_value("LMS Module", t.module, ["module_name", "image"], as_dict=True)
     if not module_doc:
         return None
 
@@ -201,7 +266,8 @@ def get_continue_learning():
         SELECT DISTINCT ma.module, ma.creation
         FROM `tabLMS Module Assignment` ma
         INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        WHERE au.user = %s
+        INNER JOIN `tabLMS Module` m ON m.name = ma.module
+        WHERE au.user = %s AND m.status = 'Published'
         ORDER BY ma.creation ASC
     """, user, as_dict=True)
     module_index = next((i + 1 for i, a in enumerate(assigned) if a.module == t.module), 1)
@@ -214,6 +280,7 @@ def get_continue_learning():
         "moduleIndex": module_index,
         "totalModules": total_modules or 1,
         "totalLessons": total_lessons,
+        "thumbnail": module_doc.image,
     }
 
 
