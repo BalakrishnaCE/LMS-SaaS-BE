@@ -9,6 +9,7 @@
   "system_user",
   "theme",
   "designation",
+  "joining_date",
   "notification_preferences"
  ],
  "fields": [
@@ -35,6 +36,13 @@
    "label": "Designation",
    "in_list_view": 1,
    "description": "The learner's designation or job title, e.g. Software Engineer, Marketing Manager."
+  },
+  {
+   "fieldname": "joining_date",
+   "fieldtype": "Date",
+   "label": "Joining Date",
+   "in_list_view": 1,
+   "description": "The date the learner joined the organisation, used for group filtering during bulk import."
   },
   {
    "fieldname": "notification_preferences",

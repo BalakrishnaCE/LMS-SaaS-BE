@@ -1,0 +1,88 @@
+{
+ "actions": [],
+ "autoname": "LMS-LP-ASSIGN-.####",
+ "creation": "2026-09-01 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "learning_path",
+  "assignment_type",
+  "assigned_teams",
+  "learners",
+  "duration",
+  "is_mandatory"
+ ],
+ "fields": [
+  {
+   "fieldname": "learning_path",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Learning Path",
+   "options": "LMS Learning Path",
+   "reqd": 1,
+   "description": "Link to the corresponding LMS Learning Path."
+  },
+  {
+   "fieldname": "assignment_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Assignment Type",
+   "options": "Team\nManual",
+   "reqd": 1,
+   "description": "Select the assignment type from the dropdown options."
+  },
+  {
+   "fieldname": "assigned_teams",
+   "fieldtype": "Table",
+   "label": "Assigned Teams",
+   "options": "LMS Assignment Team",
+   "description": "Visible only when Assignment Type is \"Team\""
+  },
+  {
+   "fieldname": "learners",
+   "fieldtype": "Table",
+   "label": "Learners",
+   "options": "LMS LP Assignment User",
+   "description": "Visible only when Assignment Type is Manual"
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Int",
+   "label": "Duration (Days)",
+   "description": "Number of days the learner has to complete this learning path"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "label": "Is Mandatory",
+   "description": "Toggle to enable or disable is mandatory."
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-01 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Learning Path Assignment",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LMS-Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
