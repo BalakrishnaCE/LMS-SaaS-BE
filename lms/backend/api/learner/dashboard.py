@@ -1,43 +1,68 @@
 import frappe
-from frappe.utils import today, add_days, getdate, date_diff
+from frappe.utils import today, add_days, add_months, getdate, date_diff
+from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
+
+def get_module_category(module_name):
+    """Fetch the first category from the LMS Module Category child table."""
+    row = frappe.db.get_value(
+        "LMS Module Category",
+        {"parent": module_name, "parenttype": "LMS Module"},
+        "category"
+    )
+    return row or "General"
 
 # ─── Greeting ──────────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_learner_summary():
+def get_learner_summary(timeframe="month"):
     """
     Returns a summary of the current learner's dashboard stats:
     - overall progress %, assigned modules, in-progress modules, badges
     """
     user = frappe.session.user
 
-    # Modules assigned to this learner via LMS Module Assignment
-    assigned_modules = frappe.get_all(
-        "LMS Module Assignment",
-        filters={"learner": user},
-        fields=["module"],
-        distinct=True
-    )
-    assigned_module_names = [a.module for a in assigned_modules]
+    # Modules assigned to this learner via LMS Module Assignment child table
+    # LMS Module Assignment stores learners in child table 'LMS Assignment User' with field 'user'
+    assigned_rows = frappe.db.sql("""
+        SELECT DISTINCT ma.module, ma.duration
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+        WHERE au.user = %s
+    """, user, as_dict=True)
+    assigned_module_names = list(set([a.module for a in assigned_rows]))
 
     total_assigned = len(assigned_module_names)
 
+    # Count learning paths even for users with no module assignments
+    lp_trackers_early = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user},
+        fields=["learning_path"]
+    )
     if not assigned_module_names:
+        first_name = frappe.get_value("User", user, "first_name") or "Learner"
+        lp_count = len(lp_trackers_early)
         return {
             "overallProgress": 0,
             "assignedModules": 0,
+            "assignedLearningPaths": lp_count,
+            "totalAssigned": lp_count,
             "inProgressModules": 0,
             "completedModules": 0,
             "badgesEarned": 0,
             "badgesThisMonth": 0,
-            "firstName": frappe.get_value("User", user, "first_name") or "Learner"
+            "firstName": first_name,
+            "progressThisMonth": 0,
+            "progressHistory": [0, 0, 0, 0, 0] if timeframe == "month" else [0] * 12,
+            "progressLabels": ["Week 1", "Week 2", "Week 3", "Week 4", "Now"] if timeframe == "month" else ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+            "dueThisWeek": 0,
         }
 
-    # Get trackers for this learner
+    # Get trackers for this learner (LMS Module Tracker uses 'user' not 'learner')
     trackers = frappe.get_all(
         "LMS Module Tracker",
-        filters={"learner": user, "module": ["in", assigned_module_names]},
-        fields=["module", "status", "progress"]
+        filters={"user": user, "module": ["in", assigned_module_names]},
+        fields=["module", "status", "progress_percentage", "started_on"]
     )
 
     tracker_map = {t.module: t for t in trackers}
@@ -46,29 +71,100 @@ def get_learner_summary():
 
     # Overall progress = average progress across all assigned modules
     total_progress = sum(
-        (tracker_map.get(m, {}).get("progress") or 0) for m in assigned_module_names
+        (tracker_map.get(m, {}).get("progress_percentage") or 0) for m in assigned_module_names
     )
     overall_progress = int(total_progress / total_assigned) if total_assigned else 0
 
-    # Badges (via LMS Badge Assignment)
+    # Badges (via LMS Learner Badge - uses 'user' field and 'awarded_on' date)
     badges = frappe.get_all(
-        "LMS Badge Assignment",
-        filters={"learner": user},
-        fields=["badge", "creation"]
+        "LMS Learner Badge",
+        filters={"user": user},
+        fields=["badge", "awarded_on"]
     )
     badges_this_month_start = frappe.utils.get_first_day(today())
-    badges_this_month = [b for b in badges if getdate(b.creation) >= getdate(badges_this_month_start)]
+    badges_this_month = [b for b in badges if b.awarded_on and getdate(b.awarded_on) >= getdate(badges_this_month_start)]
 
     first_name = frappe.get_value("User", user, "first_name") or "Learner"
 
+    # Learning Paths assigned to this learner
+    learning_path_trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user},
+        fields=["learning_path", "status"]
+    )
+    total_learning_paths = len(learning_path_trackers)
+    total_assigned = len(assigned_module_names) + total_learning_paths
+
+    # Due this week (modules only)
+    today_dt = getdate(today())
+    due_this_week_count = 0
+    
+    for a in assigned_rows:
+        if not a.duration:
+            continue
+        tracker = tracker_map.get(a.module, {})
+        if tracker.get("status") == "Completed":
+            continue
+            
+        start = getdate(tracker.get("started_on")) if tracker.get("started_on") else today_dt
+        due_date = getdate(add_days(start, int(a.duration)))
+        days_left = date_diff(due_date, today_dt)
+        if 0 <= days_left <= 7:
+            due_this_week_count += 1
+
+    # Real progress history from LMS Module Tracker modification timestamps
+    today_dt2 = getdate(today())
+    # Build IN clause with one %s per module to avoid mixing positional/named params
+    in_placeholders = ", ".join(["%s"] * len(assigned_module_names))
+
+    if timeframe == "year":
+        progress_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        progress_history = []
+        for month_offset in range(11, -1, -1):
+            period_end = getdate(add_months(today_dt2, -month_offset))
+            total_prog = frappe.db.sql(f"""
+                SELECT COALESCE(SUM(progress_percentage), 0) as total
+                FROM `tabLMS Module Tracker`
+                WHERE user = %s AND module IN ({in_placeholders})
+                  AND DATE(modified) <= %s
+            """, [user] + assigned_module_names + [str(period_end)], as_dict=True)
+            t_prog = float(total_prog[0].total) if total_prog else 0.0
+            snap = int(t_prog / total_assigned) if total_assigned else 0
+            progress_history.append(snap)
+        progress_history = progress_history[::-1]
+        progress_this_month = max(0, progress_history[-1] - (progress_history[-2] if len(progress_history) > 1 else 0))
+    else:
+        # Weekly: 4 past weeks + current
+        progress_labels = ["Week 1", "Week 2", "Week 3", "Week 4", "Now"]
+        progress_history = []
+        for week_offset in range(4, -1, -1):
+            period_end = getdate(add_days(today_dt2, -(week_offset * 7)))
+            total_prog = frappe.db.sql(f"""
+                SELECT COALESCE(SUM(progress_percentage), 0) as total
+                FROM `tabLMS Module Tracker`
+                WHERE user = %s AND module IN ({in_placeholders})
+                  AND DATE(modified) <= %s
+            """, [user] + assigned_module_names + [str(period_end)], as_dict=True)
+            t_prog = float(total_prog[0].total) if total_prog else 0.0
+            snap = int(t_prog / total_assigned) if total_assigned else 0
+            progress_history.append(snap)
+        progress_this_month = max(0, progress_history[-1] - progress_history[0])
+
+
     return {
         "overallProgress": overall_progress,
-        "assignedModules": total_assigned,
+        "assignedModules": len(assigned_module_names),
+        "assignedLearningPaths": total_learning_paths,
+        "totalAssigned": total_assigned,
         "inProgressModules": len(in_progress),
         "completedModules": len(completed),
         "badgesEarned": len(badges),
         "badgesThisMonth": len(badges_this_month),
         "firstName": first_name,
+        "progressThisMonth": progress_this_month,
+        "progressHistory": progress_history,
+        "progressLabels": progress_labels,
+        "dueThisWeek": due_this_week_count,
     }
 
 
@@ -83,8 +179,8 @@ def get_continue_learning():
 
     tracker = frappe.get_all(
         "LMS Module Tracker",
-        filters={"learner": user, "status": "In Progress"},
-        fields=["module", "progress", "modified"],
+        filters={"user": user, "status": "In Progress"},
+        fields=["module", "progress_percentage", "modified"],
         order_by="modified desc",
         limit=1
     )
@@ -93,346 +189,33 @@ def get_continue_learning():
         return None
 
     t = tracker[0]
-    module_doc = frappe.get_value("LMS Module", t.module, ["module_name", "total_lessons"], as_dict=True)
+    module_doc = frappe.get_value("LMS Module", t.module, ["module_name"], as_dict=True)
     if not module_doc:
         return None
 
+    # Count lessons from the child link table
+    total_lessons = frappe.db.count("LMS Module Lesson Child", {"parent": t.module})
+
     # Find which module number this is in assigned sequence
-    assigned = frappe.get_all(
-        "LMS Module Assignment",
-        filters={"learner": user},
-        fields=["module"],
-        order_by="creation asc"
-    )
+    assigned = frappe.db.sql("""
+        SELECT DISTINCT ma.module, ma.creation
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+        WHERE au.user = %s
+        ORDER BY ma.creation ASC
+    """, user, as_dict=True)
     module_index = next((i + 1 for i, a in enumerate(assigned) if a.module == t.module), 1)
     total_modules = len(assigned)
 
     return {
         "moduleId": t.module,
         "moduleName": module_doc.module_name,
-        "progress": t.progress or 0,
+        "progress": t.progress_percentage or 0,
         "moduleIndex": module_index,
-        "totalModules": total_modules,
+        "totalModules": total_modules or 1,
+        "totalLessons": total_lessons,
     }
 
 
-# ─── Progress Breakdown ────────────────────────────────────────────────────────
-
-@frappe.whitelist()
-def get_learner_progress_breakdown():
-    """
-    Returns progress statistics broken down by status for the learner.
-    """
-    user = frappe.session.user
-
-    assigned_modules = frappe.get_all(
-        "LMS Module Assignment",
-        filters={"learner": user},
-        fields=["module", "duration"],
-        distinct=True
-    )
-    assigned_module_names = [a.module for a in assigned_modules]
-    total = len(assigned_module_names)
-
-    if not total:
-        return {
-            "overallProgress": 0,
-            "stats": [
-                {"label": "Passed", "value": "0%"},
-                {"label": "Failed", "value": "0%"},
-                {"label": "Overdue", "value": "0%"},
-                {"label": "In Progress", "value": "0%"},
-                {"label": "Not Started", "value": "0%"},
-            ]
-        }
-
-    trackers = frappe.get_all(
-        "LMS Module Tracker",
-        filters={"learner": user, "module": ["in", assigned_module_names]},
-        fields=["module", "status", "progress", "started_on"]
-    )
-    tracker_map = {t.module: t for t in trackers}
-    assignment_map = {a.module: a for a in assigned_modules}
-
-    today_dt = getdate(today())
-    counts = {"Passed": 0, "Failed": 0, "Overdue": 0, "In Progress": 0, "Not Started": 0}
-
-    for module_name in assigned_module_names:
-        t = tracker_map.get(module_name)
-        a = assignment_map.get(module_name)
-
-        if not t:
-            # Check if overdue
-            if a and a.duration and assigned_modules[0]:
-                counts["Not Started"] += 1
-            else:
-                counts["Not Started"] += 1
-            continue
-
-        status = t.status
-        if status == "Completed":
-            # Determine pass/fail from assessment score if available
-            score = frappe.db.get_value(
-                "LMS Assessment Result",
-                {"learner": user, "module": module_name},
-                "score"
-            )
-            passing_score = frappe.db.get_value("LMS Module", module_name, "passing_score") or 60
-            if score is not None:
-                counts["Passed" if score >= passing_score else "Failed"] += 1
-            else:
-                counts["Passed"] += 1
-        elif status == "In Progress":
-            # Check if overdue
-            if a and a.duration and t.started_on:
-                due_date = getdate(add_days(getdate(t.started_on), int(a.duration)))
-                if due_date < today_dt:
-                    counts["Overdue"] += 1
-                else:
-                    counts["In Progress"] += 1
-            else:
-                counts["In Progress"] += 1
-        else:
-            counts["Not Started"] += 1
-
-    def pct(n):
-        return f"{round((n / total) * 100)}%" if total else "0%"
-
-    # Overall progress = total passed / total * 100
-    overall = round(((counts["Passed"]) / total) * 100) if total else 0
-
-    return {
-        "overallProgress": overall,
-        "stats": [
-            {"label": "Passed", "value": pct(counts["Passed"])},
-            {"label": "Failed", "value": pct(counts["Failed"])},
-            {"label": "Overdue", "value": pct(counts["Overdue"])},
-            {"label": "In Progress", "value": pct(counts["In Progress"])},
-            {"label": "Not Started", "value": pct(counts["Not Started"])},
-        ]
-    }
 
 
-# ─── Upcoming Deadlines (Learner-scoped) ───────────────────────────────────────
-
-@frappe.whitelist()
-def get_learner_deadlines():
-    """
-    Returns upcoming deadlines for the current learner's assigned modules.
-    """
-    user = frappe.session.user
-
-    assignments = frappe.get_all(
-        "LMS Module Assignment",
-        filters={"learner": user},
-        fields=["module", "duration"]
-    )
-
-    today_dt = getdate(today())
-    results = []
-
-    for a in assignments:
-        if not a.duration:
-            continue
-
-        tracker = frappe.get_value(
-            "LMS Module Tracker",
-            {"learner": user, "module": a.module},
-            ["started_on", "status"],
-            as_dict=True
-        )
-
-        if not tracker or tracker.status == "Completed":
-            continue
-
-        start = getdate(tracker.started_on) if tracker and tracker.started_on else today_dt
-        due_date = getdate(add_days(start, int(a.duration)))
-
-        days_left = date_diff(due_date, today_dt)
-        if days_left < 0 or days_left > 30:
-            continue
-
-        module_name = frappe.get_value("LMS Module", a.module, "module_name") or a.module
-
-        results.append({
-            "id": a.module,
-            "title": module_name,
-            "dueDate": f"Due {due_date.strftime('%b %d')}",
-            "daysLeft": f"{abs(days_left)} days {'overdue' if days_left < 0 else 'left'}",
-            "isOverdue": days_left < 0,
-            "isUrgent": 0 <= days_left <= 3,
-        })
-
-    return sorted(results, key=lambda x: x["daysLeft"])[:5]
-
-
-# ─── Required / Assigned Modules ───────────────────────────────────────────────
-
-@frappe.whitelist()
-def get_learner_modules(filter_type="all"):
-    """
-    Returns modules assigned to the current learner, with their progress.
-    filter_type: 'all' | 'mandatory' | 'optional'
-    """
-    user = frappe.session.user
-
-    filters = {"learner": user}
-    if filter_type == "mandatory":
-        filters["is_mandatory"] = 1
-    elif filter_type == "optional":
-        filters["is_mandatory"] = 0
-
-    assignments = frappe.get_all(
-        "LMS Module Assignment",
-        filters=filters,
-        fields=["module", "duration", "is_mandatory"],
-        order_by="creation desc"
-    )
-
-    today_dt = getdate(today())
-    results = []
-
-    for a in assignments:
-        module_doc = frappe.get_value(
-            "LMS Module",
-            a.module,
-            ["module_name", "category", "total_lessons", "status"],
-            as_dict=True
-        )
-        if not module_doc:
-            continue
-
-        tracker = frappe.get_value(
-            "LMS Module Tracker",
-            {"learner": user, "module": a.module},
-            ["status", "progress", "started_on"],
-            as_dict=True
-        )
-
-        progress = (tracker.progress or 0) if tracker else 0
-
-        # Days left calculation
-        days_left = None
-        is_overdue = False
-        if a.duration:
-            start = getdate(tracker.started_on) if tracker and tracker.started_on else today_dt
-            due_date = getdate(add_days(start, int(a.duration)))
-            days_left = date_diff(due_date, today_dt)
-            is_overdue = days_left < 0
-
-        results.append({
-            "id": a.module,
-            "title": module_doc.module_name,
-            "category": module_doc.category or "General",
-            "type": "Module",
-            "lessonsCount": module_doc.total_lessons or 0,
-            "duration": f"{a.duration} days" if a.duration else "No limit",
-            "daysLeft": days_left,
-            "isOverdue": is_overdue,
-            "completionRate": progress,
-            "status": (tracker.status if tracker else "Not Started"),
-            "isRequired": bool(a.is_mandatory),
-        })
-
-    return results
-
-
-# ─── Badges ────────────────────────────────────────────────────────────────────
-
-@frappe.whitelist()
-def get_learner_badges():
-    """Returns badges earned by the current learner."""
-    user = frappe.session.user
-
-    badges = frappe.get_all(
-        "LMS Badge Assignment",
-        filters={"learner": user},
-        fields=["badge", "creation"],
-        order_by="creation desc",
-        limit=10
-    )
-
-    results = []
-    for b in badges:
-        badge_doc = frappe.get_value("LMS Badge", b.badge, ["badge_name", "description", "image"], as_dict=True)
-        if not badge_doc:
-            continue
-        results.append({
-            "id": b.badge,
-            "name": badge_doc.badge_name,
-            "description": badge_doc.description,
-            "image": badge_doc.image,
-            "earnedOn": str(b.creation),
-        })
-
-    return results
-
-# ─── Legacy Admin Endpoints (DO NOT REMOVE - used by Admin Dashboard) ────────
-
-@frappe.whitelist(allow_guest=True)
-def get_upcoming_deadlines():
-    assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "is_mandatory"])
-    assignment_map = {a.module: a for a in assignments}
-    
-    approaching = {}
-    today_dt = getdate(today())
-    next_week = getdate(add_days(today_dt, 30))
-    
-    trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["!=", "Completed"]}, fields=["module", "started_on"])
-    for t in trackers:
-        if not t.started_on:
-            continue
-        a = assignment_map.get(t.module)
-        if a and a.duration:
-            due = getdate(add_days(getdate(t.started_on), a.duration))
-            if today_dt <= due <= next_week:
-                if t.module not in approaching:
-                    approaching[t.module] = {"count": 0, "mandatory": a.is_mandatory}
-                approaching[t.module]["count"] += 1
-                
-    results = []
-    for module_name, data in approaching.items():
-        results.append({
-            "id": module_name,
-            "name": module_name,
-            "type": "Module",
-            "date": "Approaching in 30 days",
-            "pending": data['count'],
-            "critical": bool(data['mandatory'])
-        })
-        
-    return sorted(results, key=lambda x: x["pending"], reverse=True)[:5]
-
-@frappe.whitelist(allow_guest=True)
-def get_recently_assigned():
-    assignments = frappe.get_all("LMS Module Assignment", 
-        fields=["name", "module", "creation", "duration"],
-        limit=20,
-        order_by="creation desc"
-    )
-    
-    seen_modules = set()
-    unique_assignments = []
-    for a in assignments:
-        if a.module not in seen_modules:
-            seen_modules.add(a.module)
-            unique_assignments.append(a)
-        if len(unique_assignments) == 5:
-            break
-            
-    results = []
-    for a in unique_assignments:
-        trackers = frappe.get_all("LMS Module Tracker", filters={"module": a.module}, fields=["status"])
-        total_assigned = len(trackers)
-        completed = len([t for t in trackers if t.status == "Completed"])
-        progress = int((completed / total_assigned) * 100) if total_assigned > 0 else 0
-        
-        results.append({
-            "id": a.name,
-            "name": a.module,
-            "assignedLearners": total_assigned,
-            "dueDate": f"{a.duration} Days" if a.duration else "No Limit",
-            "progress": progress,
-            "actions": ["View Progress", "Send Reminder"]
-        })
-    return results

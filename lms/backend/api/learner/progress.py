@@ -1,0 +1,179 @@
+import frappe
+from frappe.utils import today, add_days, getdate, date_diff
+
+@frappe.whitelist()
+def get_learner_progress_breakdown(filter_mode="status"):
+    """
+    Returns progress statistics broken down by status or completion for the learner.
+    """
+    user = frappe.session.user
+
+    assigned_rows = frappe.db.sql("""
+        SELECT DISTINCT ma.module, ma.duration
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+        WHERE au.user = %s
+    """, user, as_dict=True)
+    assigned_module_names = [a.module for a in assigned_rows]
+    total = len(assigned_module_names)
+
+    if not total:
+        if filter_mode == "completion":
+            return {
+                "overallProgress": 0,
+                "stats": [
+                    {"label": "Highest Completion", "value": "0%"},
+                    {"label": "Lowest Completion", "value": "0%"},
+                    {"label": "Completed", "value": "0%"},
+                    {"label": "In Progress", "value": "0%"},
+                    {"label": "Not Started", "value": "0%"},
+                ]
+            }
+        else:
+            return {
+                "overallProgress": 0,
+                "stats": [
+                    {"label": "Passed", "value": "0%"},
+                    {"label": "Failed", "value": "0%"},
+                    {"label": "Overdue", "value": "0%"},
+                    {"label": "In Progress", "value": "0%"},
+                    {"label": "Not Started", "value": "0%"},
+                ]
+            }
+
+    trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user, "module": ["in", assigned_module_names]},
+        fields=["module", "status", "progress_percentage", "started_on"]
+    )
+    tracker_map = {t.module: t for t in trackers}
+    assignment_map = {a.module: a for a in assigned_rows}
+
+    today_dt = getdate(today())
+    counts = {
+        "Passed": 0, "Failed": 0, "Overdue": 0, "In Progress": 0, "Not Started": 0,
+        "Completed": 0, "Highest Completion": 0, "Lowest Completion": 0
+    }
+
+    for module_name in assigned_module_names:
+        t = tracker_map.get(module_name)
+        a = assignment_map.get(module_name)
+
+        if not t:
+            counts["Not Started"] += 1
+            counts["Lowest Completion"] += 1 # Not started is 0% progress
+            continue
+
+        status = t.status
+        progress = t.progress_percentage or 0
+
+        if progress >= 80:
+            counts["Highest Completion"] += 1
+        elif progress < 30:
+            counts["Lowest Completion"] += 1
+
+        if status == "Completed":
+            counts["Completed"] += 1
+            # Determine pass/fail from assessment score if available
+            score = frappe.db.get_value(
+                "LMS Assessment Result",
+                {"user": user, "module": module_name},
+                "score"
+            )
+            passing_score = frappe.db.get_value("LMS Module", module_name, "certificate_passing_percentage") or 60
+            if score is not None:
+                counts["Passed" if score >= passing_score else "Failed"] += 1
+            else:
+                counts["Passed"] += 1
+        elif status == "In Progress":
+            # Check if overdue
+            if a and a.duration and t.started_on:
+                due_date = getdate(add_days(getdate(t.started_on), int(a.duration)))
+                if due_date < today_dt:
+                    counts["Overdue"] += 1
+                else:
+                    counts["In Progress"] += 1
+            else:
+                counts["In Progress"] += 1
+        else:
+            counts["Not Started"] += 1
+
+    def pct(n):
+        return f"{round((n / total) * 100)}%" if total else "0%"
+
+    # Overall progress = total passed / total * 100 for status, total completed / total * 100 for completion
+    if filter_mode == "completion":
+        overall = round(((counts["Completed"]) / total) * 100) if total else 0
+        return {
+            "overallProgress": overall,
+            "stats": [
+                {"label": "Highest Completion", "value": pct(counts["Highest Completion"])},
+                {"label": "Lowest Completion", "value": pct(counts["Lowest Completion"])},
+                {"label": "Completed", "value": pct(counts["Completed"])},
+                {"label": "In Progress", "value": pct(counts["In Progress"] + counts["Overdue"])},
+                {"label": "Not Started", "value": pct(counts["Not Started"])},
+            ]
+        }
+    else:
+        overall = round(((counts["Passed"]) / total) * 100) if total else 0
+        return {
+            "overallProgress": overall,
+            "stats": [
+                {"label": "Passed", "value": pct(counts["Passed"])},
+                {"label": "Failed", "value": pct(counts["Failed"])},
+                {"label": "Overdue", "value": pct(counts["Overdue"])},
+                {"label": "In Progress", "value": pct(counts["In Progress"])},
+                {"label": "Not Started", "value": pct(counts["Not Started"])},
+            ]
+        }
+
+@frappe.whitelist()
+def get_learner_deadlines():
+    """
+    Returns upcoming deadlines for the current learner's assigned modules.
+    """
+    user = frappe.session.user
+
+    assignments = frappe.db.sql("""
+        SELECT DISTINCT ma.module, ma.duration
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+        WHERE au.user = %s
+    """, user, as_dict=True)
+
+    today_dt = getdate(today())
+    results = []
+
+    for a in assignments:
+        if not a.duration:
+            continue
+
+        tracker = frappe.get_value(
+            "LMS Module Tracker",
+            {"user": user, "module": a.module},
+            ["started_on", "status"],
+            as_dict=True
+        )
+
+        if not tracker or tracker.status == "Completed":
+            continue
+
+        start = getdate(tracker.started_on) if tracker and tracker.started_on else today_dt
+        due_date = getdate(add_days(start, int(a.duration)))
+
+        days_left = date_diff(due_date, today_dt)
+        if days_left < 0 or days_left > 30:
+            continue
+
+        module_name = frappe.get_value("LMS Module", a.module, "module_name") or a.module
+
+        results.append({
+            "id": a.module,
+            "title": module_name,
+            "dueDate": f"Due {due_date.strftime('%b %d')}",
+            "daysLeft": f"{abs(days_left)} days {'overdue' if days_left < 0 else 'left'}",
+            "isOverdue": days_left < 0,
+            "isUrgent": 0 <= days_left <= 3,
+        })
+
+    return sorted(results, key=lambda x: x["daysLeft"])[:5]
