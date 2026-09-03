@@ -305,12 +305,13 @@ def get_learner_module_viewer_data(module_id):
         content_progress = frappe.get_all(
             "LMS Content Progress",
             filters={"parent": t.name},
-            fields=["content_reference", "status", "score"]
+            fields=["content_reference", "status", "score", "last_position"]
         )
         for cp in content_progress:
             progress_map[cp.content_reference] = {
                 "status": cp.status,
-                "score": cp.score
+                "score": cp.score,
+                "last_position": cp.last_position
             }
             
     return {

@@ -100,7 +100,8 @@ def get_curriculum(module_name):
                                     flashcards.append({
                                         "id": str(el.name or el.idx),
                                         "front": el.element_text,
-                                        "back": el.secondary_text
+                                        "back": el.secondary_text,
+                                        "content_id": content_link.content_reference
                                     })
                         except Exception as e:
                             pass

@@ -5,12 +5,16 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
-  "content_type",
-  "content_reference",
-  "status",
-  "score"
- ],
+  "field_order": [
+   "content_type",
+   "content_reference",
+   "status",
+   "score",
+   "last_position",
+   "highest_position",
+   "time_spent",
+   "is_completed"
+  ],
  "fields": [
   {
    "fieldname": "content_type",
@@ -44,6 +48,31 @@
    "fieldtype": "Float",
    "label": "Score",
    "description": "Score achieved on this content item if it is scored."
+  },
+  {
+   "fieldname": "last_position",
+   "fieldtype": "Float",
+   "label": "Last Position",
+   "description": "Last watched/read position for resuming."
+  },
+  {
+   "fieldname": "highest_position",
+   "fieldtype": "Float",
+   "label": "Highest Position",
+   "description": "Maximum progress reached (e.g. max timestamp)."
+  },
+  {
+   "fieldname": "time_spent",
+   "fieldtype": "Int",
+   "label": "Time Spent",
+   "description": "Total active seconds spent on this content."
+  },
+  {
+   "default": "0",
+   "fieldname": "is_completed",
+   "fieldtype": "Check",
+   "label": "Is Completed",
+   "description": "True if the user has met completion criteria."
   }
  ],
  "grid_page_length": 50,

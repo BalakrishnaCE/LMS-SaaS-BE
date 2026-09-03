@@ -247,7 +247,7 @@ def update_content_progress(module, content_reference, content_type=None, status
     )
     
     if not cp:
-        frappe.get_doc({
+        doc = frappe.get_doc({
             "doctype": "LMS Content Progress",
             "parent": tracker_name,
             "parenttype": "LMS Module Tracker",
@@ -255,13 +255,16 @@ def update_content_progress(module, content_reference, content_type=None, status
             "content_type": content_type or "LMS Text Content",
             "content_reference": content_reference,
             "status": status,
-            "score": score
+            "score": score,
+            "is_completed": 1 if status == "Completed" else 0
         }).insert(ignore_permissions=True)
     else:
         doc = frappe.get_doc("LMS Content Progress", cp[0].name)
         doc.status = status
         if score is not None:
             doc.score = score
+        if status == "Completed":
+            doc.is_completed = 1
         doc.save(ignore_permissions=True)
         
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
@@ -269,6 +272,77 @@ def update_content_progress(module, content_reference, content_type=None, status
     frappe.db.commit()
     
     return {"status": "success"}
+
+@frappe.whitelist()
+def heartbeat(module, content_reference, content_type, current_position=0, total_duration=0, time_spent_increment=10):
+    user = frappe.session.user
+    
+    current_position = float(current_position)
+    total_duration = float(total_duration)
+    time_spent_increment = int(time_spent_increment)
+
+    tracker = frappe.get_all(
+        "LMS Module Tracker", 
+        filters={"user": user, "module": module}, 
+        limit=1
+    )
+    if not tracker:
+        doc = frappe.get_doc({
+            "doctype": "LMS Module Tracker",
+            "user": user,
+            "module": module,
+            "status": "In Progress"
+        })
+        doc.insert(ignore_permissions=True)
+        tracker_name = doc.name
+    else:
+        tracker_name = tracker[0].name
+        
+    cp = frappe.get_all(
+        "LMS Content Progress",
+        filters={"parent": tracker_name, "content_reference": content_reference},
+        limit=1
+    )
+    
+    if not cp:
+        doc = frappe.get_doc({
+            "doctype": "LMS Content Progress",
+            "parent": tracker_name,
+            "parenttype": "LMS Module Tracker",
+            "parentfield": "content_progress",
+            "content_type": content_type or "LMS Video Content",
+            "content_reference": content_reference,
+            "status": "In Progress",
+            "last_position": current_position,
+            "highest_position": current_position,
+            "time_spent": time_spent_increment,
+            "is_completed": 1 if total_duration > 0 and current_position >= (total_duration * 0.9) else 0
+        })
+        if doc.is_completed:
+            doc.status = "Completed"
+        doc.insert(ignore_permissions=True)
+    else:
+        doc = frappe.get_doc("LMS Content Progress", cp[0].name)
+        doc.last_position = current_position
+        doc.time_spent = (doc.time_spent or 0) + time_spent_increment
+        
+        highest = doc.highest_position or 0
+        if current_position > highest:
+            doc.highest_position = current_position
+            highest = current_position
+            
+        if not doc.is_completed and total_duration > 0:
+            if highest >= (total_duration * 0.9):
+                doc.is_completed = 1
+                doc.status = "Completed"
+                
+        doc.save(ignore_permissions=True)
+        
+    tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
+    tracker_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    
+    return {"status": "success", "is_completed": doc.is_completed, "highest_position": doc.highest_position, "last_position": doc.last_position}
 
 @frappe.whitelist()
 def submit_interaction_response(module, content_reference, interaction_id, interaction_type, response_data, content_type=None):
