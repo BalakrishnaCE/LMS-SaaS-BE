@@ -58,7 +58,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Draft\nPublished\nArchived",
+   "options": "Draft\nPublished\nArchived\nUnarchived",
    "reqd": 1
   },
   {

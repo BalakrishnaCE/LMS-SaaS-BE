@@ -64,7 +64,7 @@ def get_recently_assigned():
             "name": a.module,
             "assignedLearners": total_assigned,
             "dueDate": f"{a.duration} Days" if a.duration else "No Limit",
-            "progress_percentage": progress,
+            "progress": progress,
             "actions": ["View Progress", "Send Reminder"]
         })
     return results
