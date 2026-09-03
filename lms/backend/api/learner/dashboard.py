@@ -22,7 +22,6 @@ def get_learner_summary(timeframe="month"):
     user = frappe.session.user
 
     # Modules assigned to this learner via LMS Module Assignment child table
-    # LMS Module Assignment stores learners in child table 'LMS Assignment User' with field 'user'
     assigned_rows = frappe.db.sql("""
         SELECT DISTINCT ma.module, ma.duration
         FROM `tabLMS Module Assignment` ma
@@ -30,8 +29,17 @@ def get_learner_summary(timeframe="month"):
         INNER JOIN `tabLMS Module` m ON m.name = ma.module
         WHERE au.user = %s AND m.status = 'Published'
     """, user, as_dict=True)
-    assigned_module_names = list(set([a.module for a in assigned_rows]))
+    explicitly_assigned = list(set([a.module for a in assigned_rows]))
 
+    # Also include any module the user has started (has a tracker)
+    all_trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user},
+        fields=["module", "status", "progress_percentage", "started_on"]
+    )
+    tracked_modules = [t.module for t in all_trackers]
+    
+    assigned_module_names = list(set(explicitly_assigned + tracked_modules))
     total_assigned = len(assigned_module_names)
 
     # Count learning paths even for users with no module assignments
@@ -66,20 +74,14 @@ def get_learner_summary(timeframe="month"):
             "dueThisWeek": 0,
         }
 
-    # Get trackers for this learner (LMS Module Tracker uses 'user' not 'learner')
-    trackers = frappe.get_all(
-        "LMS Module Tracker",
-        filters={"user": user, "module": ["in", assigned_module_names]},
-        fields=["module", "status", "progress_percentage", "started_on"]
-    )
-
-    tracker_map = {t.module: t for t in trackers}
+    tracker_map = {t.module: t for t in all_trackers}
     completed = [m for m in assigned_module_names if tracker_map.get(m, {}).get("status") == "Completed"]
     in_progress = [m for m in assigned_module_names if tracker_map.get(m, {}).get("status") == "In Progress"]
 
-    # Overall progress = average progress across all assigned modules
+    # Overall progress = average progress across all active modules
     total_progress = sum(
-        (tracker_map.get(m, {}).get("progress_percentage") or 0) for m in assigned_module_names
+        (100 if tracker_map.get(m, {}).get("status") == "Completed" else (tracker_map.get(m, {}).get("progress_percentage") or 0)) 
+        for m in assigned_module_names
     )
     overall_progress = int(total_progress / total_assigned) if total_assigned else 0
 
@@ -91,6 +93,9 @@ def get_learner_summary(timeframe="month"):
     )
     badges_this_month_start = frappe.utils.get_first_day(today())
     badges_this_month = [b for b in badges if b.awarded_on and getdate(b.awarded_on) >= getdate(badges_this_month_start)]
+
+    # Certificates
+    certificates_earned = frappe.db.count("LMS Certificate", {"user": user})
 
     first_name = frappe.get_value("User", user, "first_name") or "Learner"
 
@@ -112,9 +117,10 @@ def get_learner_summary(timeframe="month"):
     # Due this week (modules only)
     today_dt = getdate(today())
     due_this_week_count = 0
+    modules_counted_as_due = set()
     
     for a in assigned_rows:
-        if not a.duration:
+        if not a.duration or a.module in modules_counted_as_due:
             continue
         tracker = tracker_map.get(a.module, {})
         if tracker.get("status") == "Completed":
@@ -125,45 +131,53 @@ def get_learner_summary(timeframe="month"):
         days_left = date_diff(due_date, today_dt)
         if 0 <= days_left <= 7:
             due_this_week_count += 1
+            modules_counted_as_due.add(a.module)
 
     # Real progress history from LMS Module Tracker modification timestamps
     today_dt2 = getdate(today())
     # Build IN clause with one %s per module to avoid mixing positional/named params
     in_placeholders = ", ".join(["%s"] * len(assigned_module_names))
 
+    import calendar
+    from frappe.utils import now
+    
+    current_year = getdate(now()).year
+    current_month = getdate(now()).month
+
     if timeframe == "year":
-        progress_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        progress_history = []
-        for month_offset in range(11, -1, -1):
-            period_end = getdate(add_months(today_dt2, -month_offset))
-            total_prog = frappe.db.sql(f"""
-                SELECT COALESCE(SUM(progress_percentage), 0) as total
-                FROM `tabLMS Module Tracker`
-                WHERE user = %s AND module IN ({in_placeholders})
-                  AND DATE(modified) <= %s
-            """, [user] + assigned_module_names + [str(period_end)], as_dict=True)
-            t_prog = float(total_prog[0].total) if total_prog else 0.0
-            snap = int(t_prog / total_assigned) if total_assigned else 0
-            progress_history.append(snap)
-        progress_history = progress_history[::-1]
+        intervals = [getdate(f"{current_year}-{m:02d}-28") for m in range(1, 13)]
+        progress_labels = [getdate(dt).strftime("%b") for dt in intervals]
+    else:
+        num_days = calendar.monthrange(current_year, current_month)[1]
+        intervals = [
+            getdate(f"{current_year}-{current_month:02d}-07"),
+            getdate(f"{current_year}-{current_month:02d}-14"),
+            getdate(f"{current_year}-{current_month:02d}-21"),
+            getdate(f"{current_year}-{current_month:02d}-{num_days}")
+        ]
+        progress_labels = [f"Week {i+1}" for i, dt in enumerate(intervals)]
+
+    progress_history = []
+    
+    for period_end in intervals:
+        if not assigned_module_names:
+            progress_history.append(0)
+            continue
+            
+        total_prog = frappe.db.sql(f"""
+            SELECT COALESCE(SUM(progress_percentage), 0) as total
+            FROM `tabLMS Module Tracker`
+            WHERE user = %s AND module IN ({in_placeholders})
+              AND DATE(modified) <= %s
+        """, [user] + assigned_module_names + [str(period_end)], as_dict=True)
+        t_prog = float(total_prog[0].total) if total_prog else 0.0
+        snap = int(t_prog / total_assigned) if total_assigned else 0
+        progress_history.append(snap)
+        
+    if timeframe == "year":
         progress_this_month = max(0, progress_history[-1] - (progress_history[-2] if len(progress_history) > 1 else 0))
     else:
-        # Weekly: 4 past weeks + current
-        progress_labels = ["Week 1", "Week 2", "Week 3", "Week 4", "Now"]
-        progress_history = []
-        for week_offset in range(4, -1, -1):
-            period_end = getdate(add_days(today_dt2, -(week_offset * 7)))
-            total_prog = frappe.db.sql(f"""
-                SELECT COALESCE(SUM(progress_percentage), 0) as total
-                FROM `tabLMS Module Tracker`
-                WHERE user = %s AND module IN ({in_placeholders})
-                  AND DATE(modified) <= %s
-            """, [user] + assigned_module_names + [str(period_end)], as_dict=True)
-            t_prog = float(total_prog[0].total) if total_prog else 0.0
-            snap = int(t_prog / total_assigned) if total_assigned else 0
-            progress_history.append(snap)
         progress_this_month = max(0, progress_history[-1] - progress_history[0])
-
 
     # Calculate Average Score
     avg_score_res = frappe.db.sql("""
@@ -200,8 +214,6 @@ def get_learner_summary(timeframe="month"):
             "completedDate": frappe.utils.getdate(t.modified).strftime("%b %d"),
             "score": score
         })
-
-
     return {
         "overallProgress": overall_progress,
         "assignedModules": len(assigned_module_names),
@@ -211,6 +223,7 @@ def get_learner_summary(timeframe="month"):
         "completedModules": len(completed),
         "badgesEarned": len(badges),
         "badgesThisMonth": len(badges_this_month),
+        "certificatesEarned": certificates_earned,
         "firstName": first_name,
         "progressThisMonth": progress_this_month,
         "progressHistory": progress_history,
@@ -226,34 +239,44 @@ def get_learner_summary(timeframe="month"):
 @frappe.whitelist()
 def get_continue_learning():
     """
-    Returns the most recently accessed in-progress module for the learner.
+    Returns the best module to resume for the learner.
+    Priority:
+      1. Most recently modified In Progress module (never Completed)
+      2. First assigned module that is Not Started yet (no tracker at all)
+    Completed modules are never shown.
     """
     user = frappe.session.user
 
+    # Priority 1: most recently modified In Progress module
     tracker = frappe.db.sql("""
         SELECT t.module, t.progress_percentage, t.modified
         FROM `tabLMS Module Tracker` t
-        INNER JOIN `tabLMS Module` m ON m.name = t.module
-        WHERE t.user = %s AND t.status = 'In Progress' AND m.status = 'Published'
+        WHERE t.user = %s AND t.status = 'In Progress'
         ORDER BY t.modified DESC
         LIMIT 1
     """, user, as_dict=True)
 
-    if not tracker:
-        assigned = frappe.db.sql("""
-            SELECT ma.module, ma.creation
+    if tracker:
+        t = tracker[0]
+    else:
+        # Priority 2: first assigned module the user hasn't started at all
+        not_started = frappe.db.sql("""
+            SELECT ma.module
             FROM `tabLMS Module Assignment` ma
             INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-            INNER JOIN `tabLMS Module` m ON m.name = ma.module
-            WHERE au.user = %s AND m.status = 'Published'
+            LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
+            WHERE au.user = %s
+              AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
             ORDER BY ma.creation ASC
             LIMIT 1
-        """, user, as_dict=True)
-        if not assigned:
+        """, (user, user), as_dict=True)
+
+        if not not_started:
             return None
-        t = frappe._dict({"module": assigned[0].module, "progress_percentage": 0})
-    else:
-        t = tracker[0]
+
+        t = frappe._dict({"module": not_started[0].module, "progress_percentage": 0})
+
+
     module_doc = frappe.get_value("LMS Module", t.module, ["module_name", "image"], as_dict=True)
     if not module_doc:
         return None
@@ -261,7 +284,7 @@ def get_continue_learning():
     # Count lessons from the child link table
     total_lessons = frappe.db.count("LMS Module Lesson Child", {"parent": t.module})
 
-    # Find which module number this is in assigned sequence
+    # Find which module number this is in the assigned sequence
     assigned = frappe.db.sql("""
         SELECT DISTINCT ma.module, ma.creation
         FROM `tabLMS Module Assignment` ma
@@ -271,18 +294,14 @@ def get_continue_learning():
         ORDER BY ma.creation ASC
     """, user, as_dict=True)
     module_index = next((i + 1 for i, a in enumerate(assigned) if a.module == t.module), 1)
-    total_modules = len(assigned)
+    total_modules = len(assigned) or 1
 
     return {
         "moduleId": t.module,
         "moduleName": module_doc.module_name,
         "progress": t.progress_percentage or 0,
         "moduleIndex": module_index,
-        "totalModules": total_modules or 1,
+        "totalModules": total_modules,
         "totalLessons": total_lessons,
         "thumbnail": module_doc.image,
     }
-
-
-
-

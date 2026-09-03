@@ -45,7 +45,7 @@ def get_learner_progress_breakdown(filter_mode="status"):
     trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user, "module": ["in", assigned_module_names]},
-        fields=["module", "status", "progress_percentage", "started_on"]
+        fields=["name", "module", "status", "progress_percentage", "started_on"]
     )
     tracker_map = {t.module: t for t in trackers}
     assignment_map = {a.module: a for a in assigned_rows}
@@ -102,11 +102,12 @@ def get_learner_progress_breakdown(filter_mode="status"):
     def pct(n):
         return f"{round((n / total) * 100)}%" if total else "0%"
 
-    # Overall progress = total passed / total * 100 for status, total completed / total * 100 for completion
+    total_progress_percentage = sum((100 if t.status == 'Completed' else (t.progress_percentage or 0)) for t in trackers)
+    overall_progress = round(total_progress_percentage / total) if total else 0
+
     if filter_mode == "completion":
-        overall = round(((counts["Completed"]) / total) * 100) if total else 0
         return {
-            "overallProgress": overall,
+            "overallProgress": overall_progress,
             "stats": [
                 {"label": "Highest Completion", "value": pct(counts["Highest Completion"])},
                 {"label": "Lowest Completion", "value": pct(counts["Lowest Completion"])},
@@ -116,9 +117,8 @@ def get_learner_progress_breakdown(filter_mode="status"):
             ]
         }
     else:
-        overall = round(((counts["Passed"]) / total) * 100) if total else 0
         return {
-            "overallProgress": overall,
+            "overallProgress": overall_progress,
             "stats": [
                 {"label": "Passed", "value": pct(counts["Passed"])},
                 {"label": "Failed", "value": pct(counts["Failed"])},
@@ -131,54 +131,93 @@ def get_learner_progress_breakdown(filter_mode="status"):
 @frappe.whitelist()
 def get_learner_deadlines():
     """
-    Returns upcoming deadlines for the current learner's assigned modules.
+    Returns upcoming deadlines for the learner.
+    Driven by LMS Module Tracker and LMS Learning Path Tracker (not assignments).
+    - start_date : tracker.started_on
+    - duration   : LMS Module.duration or LMS Learning Path.duration (days)
+    Only non-completed trackers with a duration set on the module/path are included.
     """
     user = frappe.session.user
-
-    assignments = frappe.db.sql("""
-        SELECT DISTINCT ma.module, ma.duration
-        FROM `tabLMS Module Assignment` ma
-        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        INNER JOIN `tabLMS Module` m ON m.name = ma.module
-        WHERE au.user = %s AND m.status = 'Published'
-    """, user, as_dict=True)
-
     today_dt = getdate(today())
     results = []
+    seen_ids = set()
 
-    for a in assignments:
-        if not a.duration:
+    # ── Module Trackers ────────────────────────────────────────────────────────
+    module_trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user, "status": ["!=", "Completed"]},
+        fields=["name", "module", "status", "started_on"]
+    )
+
+    for t in module_trackers:
+        if not t.started_on or t.module in seen_ids:
             continue
 
-        tracker = frappe.get_value(
-            "LMS Module Tracker",
-            {"user": user, "module": a.module},
-            ["started_on", "status"],
-            as_dict=True
-        )
-
-        if not tracker or tracker.status == "Completed":
+        duration = frappe.get_value("LMS Module", t.module, "duration")
+        if not duration:
             continue
 
-        start = getdate(tracker.started_on) if tracker and tracker.started_on else today_dt
-        due_date = getdate(add_days(start, int(a.duration)))
-
+        start = getdate(t.started_on)
+        due_date = getdate(add_days(start, int(duration)))
         days_left = date_diff(due_date, today_dt)
-        if days_left < 0 or days_left > 30:
+
+        if days_left < -30 or days_left > 30:
             continue
 
-        module_name = frappe.get_value("LMS Module", a.module, "module_name") or a.module
+        module_name = frappe.get_value("LMS Module", t.module, "module_name") or t.module
+        seen_ids.add(t.module)
 
         results.append({
-            "id": a.module,
+            "id": t.module,
             "title": module_name,
+            "type": "module",
             "dueDate": f"Due {due_date.strftime('%b %d')}",
             "daysLeft": f"{abs(days_left)} days {'overdue' if days_left < 0 else 'left'}",
             "isOverdue": days_left < 0,
             "isUrgent": 0 <= days_left <= 3,
         })
 
-    return sorted(results, key=lambda x: x["daysLeft"])[:5]
+    # ── Learning Path Trackers ─────────────────────────────────────────────────
+    try:
+        lp_trackers = frappe.get_all(
+            "LMS Learning Path Tracker",
+            filters={"user": user, "status": ["!=", "Completed"]},
+            fields=["name", "learning_path", "status", "started_on"]
+        )
+
+        for t in lp_trackers:
+            if not t.started_on or t.learning_path in seen_ids:
+                continue
+
+            duration = frappe.get_value("LMS Learning Path", t.learning_path, "duration")
+            if not duration:
+                continue
+
+            start = getdate(t.started_on)
+            due_date = getdate(add_days(start, int(duration)))
+            days_left = date_diff(due_date, today_dt)
+
+            if days_left < -30 or days_left > 30:
+                continue
+
+            path_name = frappe.get_value("LMS Learning Path", t.learning_path, "path_name") or t.learning_path
+            seen_ids.add(t.learning_path)
+
+            results.append({
+                "id": t.learning_path,
+                "title": path_name,
+                "type": "learning_path",
+                "dueDate": f"Due {due_date.strftime('%b %d')}",
+                "daysLeft": f"{abs(days_left)} days {'overdue' if days_left < 0 else 'left'}",
+                "isOverdue": days_left < 0,
+                "isUrgent": 0 <= days_left <= 3,
+            })
+    except Exception:
+        pass
+
+    # Sort: overdue first, then soonest deadline
+    results.sort(key=lambda x: (not x["isOverdue"], x["daysLeft"]))
+    return results[:5]
 
 @frappe.whitelist()
 def update_content_progress(module, content_reference, content_type=None, status="Completed", score=None):
