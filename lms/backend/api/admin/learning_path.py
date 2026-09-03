@@ -136,14 +136,17 @@ def duplicate_learning_path(path_name):
         
     original = frappe.get_doc("LMS Learning Path", path_name)
     
-    # Generate unique name
-    base_name = f"{original.path_name} (Copy)"
-    new_name = base_name
+    import re
+    # Extract base name by removing any trailing " (Copy)" or " (Copy X)"
+    match = re.match(r'^(.*?)(?:\s*\(Copy(?:\s+\d+)?\))?$', original.path_name)
+    base_name = match.group(1).strip() if match else original.path_name.strip()
+    
+    new_name = f"{base_name} (Copy)"
     counter = 1
     
-    # Check if a path with this path_name already exists (not the doc name, but the field path_name)
+    # Check if a path with this path_name already exists
     while frappe.db.exists("LMS Learning Path", {"path_name": new_name}):
-        new_name = f"{base_name} {counter}"
+        new_name = f"{base_name} (Copy {counter})"
         counter += 1
         
     # Create copy
