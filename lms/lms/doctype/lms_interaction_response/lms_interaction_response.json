@@ -1,0 +1,116 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:LMS-IR-{####}",
+ "creation": "2026-09-01 18:22:27.502920",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "content_type",
+  "content_reference",
+  "interactive_element",
+  "interaction_type",
+  "response_data",
+  "attempt_number",
+  "answered_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "description": "DocType of the parent content block (e.g. LMS Interactive Video Content, LMS Image Content)",
+   "fieldname": "content_type",
+   "fieldtype": "Link",
+   "label": "Content Type",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "description": "The specific interactive video or image content block this response belongs to",
+   "fieldname": "content_reference",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Content Reference",
+   "options": "content_type",
+   "reqd": 1
+  },
+  {
+   "description": "Name (row ID) of the interactive element child row this response is for",
+   "fieldname": "interactive_element",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Interactive Element",
+   "reqd": 1
+  },
+  {
+   "description": "Type of interaction (e.g. fill_in_blank, hotspot, quiz)",
+   "fieldname": "interaction_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Interaction Type",
+   "options": "LMS Interactive Type",
+   "reqd": 1
+  },
+  {
+   "description": "JSON representation of the user's answer",
+   "fieldname": "response_data",
+   "fieldtype": "Code",
+   "label": "Response Data",
+   "options": "JSON"
+  },
+  {
+   "default": "1",
+   "description": "The attempt number for this specific interaction.",
+   "fieldname": "attempt_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Attempt Number"
+  },
+  {
+   "description": "Timestamp of when the learner submitted this response",
+   "fieldname": "answered_on",
+   "fieldtype": "Datetime",
+   "label": "Answered On"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-02 06:18:00.000000",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Interaction Response",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

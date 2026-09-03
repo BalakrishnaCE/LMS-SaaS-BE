@@ -181,7 +181,7 @@ def get_learner_deadlines():
     return sorted(results, key=lambda x: x["daysLeft"])[:5]
 
 @frappe.whitelist()
-def update_content_progress(module, content_reference, status="Completed", score=None):
+def update_content_progress(module, content_reference, content_type=None, status="Completed", score=None):
     user = frappe.session.user
     
     tracker = frappe.get_all(
@@ -213,6 +213,7 @@ def update_content_progress(module, content_reference, status="Completed", score
             "parent": tracker_name,
             "parenttype": "LMS Module Tracker",
             "parentfield": "content_progress",
+            "content_type": content_type or "LMS Text Content",
             "content_reference": content_reference,
             "status": status,
             "score": score
@@ -229,3 +230,73 @@ def update_content_progress(module, content_reference, status="Completed", score
     frappe.db.commit()
     
     return {"status": "success"}
+
+@frappe.whitelist()
+def submit_interaction_response(module, content_reference, interaction_id, interaction_type, response_data, content_type=None):
+    import json
+    user = frappe.session.user
+
+    # Default content_type if not provided (backward compatibility)
+    if not content_type:
+        content_type = "LMS Interactive Video Content"
+
+    # Get the tracker to link
+    tracker = frappe.get_all(
+        "LMS Module Tracker", 
+        filters={"user": user, "module": module}, 
+        limit=1
+    )
+    if not tracker:
+        doc = frappe.get_doc({
+            "doctype": "LMS Module Tracker",
+            "user": user,
+            "module": module,
+            "status": "In Progress"
+        })
+        doc.insert(ignore_permissions=True)
+        tracker_name = doc.name
+    else:
+        tracker_name = tracker[0].name
+
+    # Load the tracker document
+    tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
+
+    # Get the latest attempt number for this interaction from the child table
+    last_attempt = 0
+    for row in tracker_doc.get("interaction_responses", []):
+        if row.interactive_element == interaction_id:
+            if row.attempt_number > last_attempt:
+                last_attempt = row.attempt_number
+
+    # Append a new row to keep track of every attempt
+    tracker_doc.append("interaction_responses", {
+        "user": user,
+        "content_type": content_type,
+        "content_reference": content_reference,
+        "interactive_element": interaction_id,
+        "interaction_type": interaction_type,
+        "response_data": _serialize_response(response_data),
+        "attempt_number": last_attempt + 1,
+        "answered_on": frappe.utils.now_datetime()
+    })
+    tracker_doc.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    return {"status": "success"}
+
+
+def _serialize_response(response_data):
+    """Always return a clean JSON string regardless of input type.
+    frappeCall sends objects as JSON strings via GET params, but Frappe
+    whitelisted methods may also auto-parse them back to dicts/lists.
+    """
+    import json as _json
+    if isinstance(response_data, (dict, list)):
+        return _json.dumps(response_data)
+    if isinstance(response_data, str):
+        try:
+            _json.loads(response_data)  # already valid JSON string
+            return response_data
+        except (ValueError, TypeError):
+            return _json.dumps(response_data)  # wrap plain string as JSON
+    return _json.dumps(response_data)

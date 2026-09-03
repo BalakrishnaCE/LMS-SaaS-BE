@@ -15,7 +15,8 @@
   "completed_on",
   "lesson_progress",
   "chapter_progress",
-  "content_progress"
+  "content_progress",
+  "interaction_responses"
  ],
  "fields": [
   {
@@ -89,6 +90,13 @@
    "fieldtype": "Table",
    "label": "Content Progress",
    "options": "LMS Content Progress"
+  },
+  {
+   "description": "Child table tracking all interactions for contents in this module.",
+   "fieldname": "interaction_responses",
+   "fieldtype": "Table",
+   "label": "Interaction Responses",
+   "options": "LMS Interaction Response"
   }
  ],
  "grid_page_length": 50,

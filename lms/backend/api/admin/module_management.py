@@ -446,25 +446,20 @@ def duplicate_module(module_name):
         
     original = frappe.get_doc("LMS Module", module_name)
     
-    # Generate unique name
-    base_name = f"{original.module_name} (Copy)"
-    new_name = base_name
+    import re
+    # Extract base name by removing any trailing " (Copy)" or " (Copy X)"
+    match = re.match(r'^(.*?)(?:\s*\(Copy(?:\s+\d+)?\))?$', original.module_name)
+    base_name = match.group(1).strip() if match else original.module_name.strip()
+    
+    new_name = f"{base_name} (Copy)"
     counter = 1
     
-    while frappe.db.exists("LMS Module", new_name):
-        new_name = f"{base_name} {counter}"
+    while frappe.db.exists("LMS Module", {"module_name": new_name}):
+        new_name = f"{base_name} (Copy {counter})"
         counter += 1
         
     # Create copy
     new_module = frappe.copy_doc(original)
-    
-    base_name = f"{original.module_name} (Copy)"
-    new_name = base_name
-    count = 1
-    
-    while frappe.db.exists("LMS Module", new_name):
-        new_name = f"{base_name} {count}"
-        count += 1
         
     new_module.module_name = new_name
     new_module.status = "Draft"
