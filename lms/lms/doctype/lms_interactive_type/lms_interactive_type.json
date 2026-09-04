@@ -1,7 +1,8 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2026-08-10 06:39:00.000000",
+ "autoname": "field:type_name",
+ "creation": "2026-08-10 06:39:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -10,33 +11,29 @@
  ],
  "fields": [
   {
+   "description": "e.g., \"Text Popup\", \"Video Popup\", \"Hotspot\", \"Drag Item\", \"Drop Zone\", \"Flashcard\", \"Branching Button\", \"Embedded Quiz\". This is also the document name.",
    "fieldname": "type_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Type Name",
    "reqd": 1,
-   "unique": 1,
-   "description": "e.g., \"Text Popup\", \"Video Popup\", \"Hotspot\", \"Drag Item\", \"Drop Zone\", \"Flashcard\", \"Branching Button\", \"Embedded Quiz\". This is also the document name."
+   "unique": 1
   },
   {
+   "description": "Explanation of what this interaction type does",
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description",
-   "description": "Explanation of what this interaction type does"
+   "label": "Description"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 06:39:00.000000",
- "modified_by": "Administrator",
+ "modified": "2026-09-03 16:35:31.016169",
+ "modified_by": "harshitha.k@noveloffice.in",
  "module": "LMS",
  "name": "LMS Interactive Type",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
  "permissions": [
   {
    "create": 1,
@@ -51,5 +48,8 @@
    "write": 1
   }
  ],
- "autoname": "field:type_name"
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
 }

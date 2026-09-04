@@ -58,5 +58,11 @@
     "name": "Resource Link",
     "type_name": "Resource Link",
     "description": "Link to external resources or files"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Hotspot",
+    "type_name": "Hotspot",
+    "description": "Interactive image hotspot marker"
   }
 ]
