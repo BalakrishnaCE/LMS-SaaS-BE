@@ -63,6 +63,24 @@
     "doctype": "LMS Interactive Type",
     "name": "Hotspot",
     "type_name": "Hotspot",
-    "description": "Interactive image hotspot marker"
+    "description": "Place an interactive hotspot marker"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Table Overlay",
+    "type_name": "Table Overlay",
+    "description": "Display a table overlay on the content"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Label Overlay",
+    "type_name": "Label Overlay",
+    "description": "Display a text label overlay"
+  },
+  {
+    "doctype": "LMS Interactive Type",
+    "name": "Link Overlay",
+    "type_name": "Link Overlay",
+    "description": "Place a clickable link area"
   }
 ]
