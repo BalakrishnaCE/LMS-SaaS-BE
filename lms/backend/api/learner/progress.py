@@ -254,7 +254,7 @@ def update_content_progress(module, content_reference, content_type=None, status
             "parent": tracker_name,
             "parenttype": "LMS Module Tracker",
             "parentfield": "content_progress",
-            "content_type": "LMS Chapter Content",
+            "content_type": content_type,
             "content_reference": content_reference,
             "status": status,
             "score": score,
@@ -262,7 +262,8 @@ def update_content_progress(module, content_reference, content_type=None, status
         }).insert(ignore_permissions=True)
     else:
         doc = frappe.get_doc("LMS Content Progress", cp[0].name)
-        doc.content_type = "LMS Chapter Content"
+        if content_type:
+            doc.content_type = content_type
         doc.status = status
         if score is not None:
             doc.score = score
@@ -270,17 +271,6 @@ def update_content_progress(module, content_reference, content_type=None, status
             doc.is_completed = 1
         doc.save(ignore_permissions=True)
         
-    # Sanitize all existing child rows to prevent validation errors on tracker save
-    frappe.db.sql("""
-        UPDATE `tabLMS Content Progress` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
-    frappe.db.sql("""
-        UPDATE `tabLMS Interaction Response` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
         
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
     tracker_doc.save(ignore_permissions=True)
@@ -325,7 +315,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
             "parent": tracker_name,
             "parenttype": "LMS Module Tracker",
             "parentfield": "content_progress",
-            "content_type": "LMS Chapter Content",
+            "content_type": content_type,
             "content_reference": content_reference,
             "status": "In Progress",
             "last_position": current_position,
@@ -338,7 +328,8 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         doc.insert(ignore_permissions=True)
     else:
         doc = frappe.get_doc("LMS Content Progress", cp[0].name)
-        doc.content_type = "LMS Chapter Content"
+        if content_type:
+            doc.content_type = content_type
         doc.last_position = current_position
         doc.time_spent = (doc.time_spent or 0) + time_spent_increment
         
@@ -354,18 +345,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
                 
         doc.save(ignore_permissions=True)
         
-    # Sanitize all existing child rows to prevent validation errors on tracker save
-    frappe.db.sql("""
-        UPDATE `tabLMS Content Progress` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
-    frappe.db.sql("""
-        UPDATE `tabLMS Interaction Response` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
-        
+
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
     tracker_doc.save(ignore_permissions=True)
     frappe.db.commit()
@@ -412,7 +392,7 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
     # Append a new row to keep track of every attempt
     tracker_doc.append("interaction_responses", {
         "user": user,
-        "content_type": "LMS Chapter Content",
+        "content_type": content_type,
         "content_reference": content_reference,
         "interactive_element": interaction_id,
         "interaction_type": interaction_type,
@@ -421,17 +401,6 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
         "answered_on": frappe.utils.now_datetime()
     })
 
-    # Sanitize all existing child rows to prevent validation errors on tracker save
-    frappe.db.sql("""
-        UPDATE `tabLMS Content Progress` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
-    frappe.db.sql("""
-        UPDATE `tabLMS Interaction Response` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
 
     tracker_doc.save(ignore_permissions=True)
 
