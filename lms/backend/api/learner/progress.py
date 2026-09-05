@@ -8,14 +8,10 @@ def get_learner_progress_breakdown(filter_mode="status"):
     """
     user = frappe.session.user
 
-    assigned_rows = frappe.db.sql("""
-        SELECT DISTINCT ma.module, ma.duration
-        FROM `tabLMS Module Assignment` ma
-        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        INNER JOIN `tabLMS Module` m ON m.name = ma.module
-        WHERE au.user = %s AND m.status = 'Published'
-    """, user, as_dict=True)
-    assigned_module_names = [a.module for a in assigned_rows]
+    from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
+    assigned_rows = get_all_assigned_modules_for_learner(user)
+    
+    assigned_module_names = [a["module"] for a in assigned_rows]
     total = len(assigned_module_names)
 
     if not total:
@@ -58,7 +54,12 @@ def get_learner_progress_breakdown(filter_mode="status"):
 
     for module_name in assigned_module_names:
         t = tracker_map.get(module_name)
-        a = assignment_map.get(module_name)
+        
+        a = None
+        for row in assigned_rows:
+            if row["module"] == module_name:
+                a = row
+                break
 
         if not t:
             counts["Not Started"] += 1
@@ -88,8 +89,9 @@ def get_learner_progress_breakdown(filter_mode="status"):
                 counts["Passed"] += 1
         elif status == "In Progress":
             # Check if overdue
-            if a and a.duration and t.started_on:
-                due_date = getdate(add_days(getdate(t.started_on), int(a.duration)))
+            duration = a.get("duration") if a else None
+            if duration and t.started_on:
+                due_date = getdate(add_days(getdate(t.started_on), int(duration)))
                 if due_date < today_dt:
                     counts["Overdue"] += 1
                 else:

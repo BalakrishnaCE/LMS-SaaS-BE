@@ -29,7 +29,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Assignment Type",
-   "options": "Team\nManual",
+   "options": "Everyone\nTeam\nManual",
    "reqd": 1,
    "description": "Select the assignment type from the dropdown options."
   },

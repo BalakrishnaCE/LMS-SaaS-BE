@@ -9,7 +9,7 @@ def _evaluate_user_risks(users):
     user_names = [u.name for u in users]
 
     # Fetch User Roles (for active/inactive check)
-    roles = frappe.get_all("Has Role", filters={"parent": ("in", user_names), "role": "LMS-Learner"}, fields=["parent", "role"])
+    roles = frappe.get_all("Has Role", filters={"parent": ("in", user_names), "role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent", "role"])
     user_has_learner_role = set(r.parent for r in roles)
 
     # Fetch User Settings (for designation)
@@ -26,11 +26,16 @@ def _evaluate_user_risks(users):
     modules_dict = {m.name: m for m in modules}
 
     trackers = frappe.get_all("LMS Module Tracker", filters={"user": ("in", user_names)}, fields=["name", "user", "module", "status", "progress_percentage", "started_on", "creation", "modified"])
+    lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": ("in", user_names)}, fields=["name", "user", "learning_path", "status", "progress_percentage", "started_on", "creation", "modified"])
     submissions = frappe.get_all("LMS Quiz Submission", filters={"user": ("in", user_names)}, fields=["name", "user", "quiz", "passed", "creation"], order_by="creation desc")
     
     user_trackers = {u: [] for u in user_names}
     for t in trackers:
         user_trackers[t.user].append(t)
+        
+    user_lp_trackers = {u: [] for u in user_names}
+    for t in lp_trackers:
+        user_lp_trackers[t.user].append(t)
         
     user_submissions = {u: [] for u in user_names}
     for s in submissions:
@@ -43,13 +48,14 @@ def _evaluate_user_risks(users):
     
     for u in users:
         u_trackers = user_trackers[u.name]
+        u_lp_trackers = user_lp_trackers[u.name]
         u_submissions = user_submissions[u.name]
         
-        assigned = len(u_trackers)
-        completed = sum(1 for t in u_trackers if t.status == "Completed")
-        failed = sum(1 for t in u_trackers if t.status == "Failed")
+        assigned = len(u_trackers) + len(u_lp_trackers)
+        completed = sum(1 for t in u_trackers if t.status == "Completed") + sum(1 for t in u_lp_trackers if t.status == "Completed")
+        failed = sum(1 for t in u_trackers if t.status == "Failed") + sum(1 for t in u_lp_trackers if t.status == "Failed")
         
-        total_progress = sum(float(t.progress_percentage or 0) for t in u_trackers)
+        total_progress = sum(float(t.progress_percentage or 0) for t in u_trackers) + sum(float(t.progress_percentage or 0) for t in u_lp_trackers)
         
         avg_progress = total_progress / assigned if assigned > 0 else 0
         
@@ -72,6 +78,10 @@ def _evaluate_user_risks(users):
                         
                     if not next_deadline or due_date < next_deadline:
                         next_deadline = due_date
+
+        for t in u_lp_trackers:
+            if not last_activity_date or getdate(t.modified) > getdate(last_activity_date):
+                last_activity_date = t.modified
                         
         no_activity_14_days = False
         if last_activity_date and getdate(last_activity_date) < getdate(fourteen_days_ago):
@@ -128,7 +138,7 @@ def _evaluate_user_risks(users):
             "risk_factors": risk_factors,
             "last_activity": last_activity_date,
             "next_deadline": next_deadline.strftime("%b %d, %Y") if next_deadline else "None",
-            "department": user_teams[u.name][0] if user_teams.get(u.name) else "No Team",
+            "department": ", ".join(user_teams[u.name]) if user_teams.get(u.name) else "No Team",
             "designation": user_designation.get(u.name) or "",
             "has_trackers": len(u_trackers) > 0,
             "has_learner_role": u.name in user_has_learner_role
@@ -139,7 +149,7 @@ def _evaluate_user_risks(users):
 
 @frappe.whitelist(allow_guest=True)
 def get_learner_kpis():
-    learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent", ignore_permissions=True)
+    learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     filters = {"name": ("!=", "Administrator")}
     if learner_roles:
         filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
@@ -150,15 +160,16 @@ def get_learner_kpis():
     user_evals = _evaluate_user_risks(users)
     
     fourteen_days_ago = getdate(add_days(today(), -14))
+    thirty_days_ago = getdate(add_days(today(), -30))
     active = 0
     at_risk = 0
     
     for u in users:
         eval_data = user_evals.get(u.name, {})
         has_lms_learner = eval_data.get("has_learner_role", False)
-        has_trackers = eval_data.get("has_trackers", False)
+        last_activity = eval_data.get("last_activity")
         
-        if has_lms_learner and has_trackers:
+        if has_lms_learner and last_activity and getdate(last_activity) >= thirty_days_ago:
             active += 1
             
         if eval_data.get("risk") in ["Overdue", "Needs Attention"]:
@@ -184,7 +195,7 @@ def get_learners(search="", limit=10, status="all", risk="all", offset=0):
         offset = 0
 
     filters = {"name": ("!=", "Administrator")}
-    learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent", ignore_permissions=True)
+    learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     if learner_roles:
         filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
     if search:
@@ -195,13 +206,17 @@ def get_learners(search="", limit=10, status="all", risk="all", offset=0):
 
     user_evals = _evaluate_user_risks(users)
     
+    thirty_days_ago = getdate(add_days(today(), -30))
     results = []
     for u in users:
         eval_data = user_evals.get(u.name, {})
         
         has_lms_learner = eval_data.get("has_learner_role", False)
-        has_trackers = eval_data.get("has_trackers", False)
-        learner_status = "Active" if (has_lms_learner and has_trackers) else "Inactive"
+        last_activity = eval_data.get("last_activity")
+        
+        learner_status = "Inactive"
+        if has_lms_learner and last_activity and getdate(last_activity) >= thirty_days_ago:
+            learner_status = "Active"
         
         avatar = u.user_image
         if not avatar:
@@ -281,8 +296,46 @@ def get_learner_details(user_id):
     optional_completed = 0
 
     for t in trackers:
-        is_mand = mod_dict.get(t.module, 1)
-        if is_mand:
+        # Check manual assignment
+        is_mand = frappe.db.sql("""
+            SELECT ma.is_mandatory
+            FROM `tabLMS Module Assignment` ma
+            INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+            WHERE ma.module = %s AND au.user = %s
+            ORDER BY ma.is_mandatory DESC LIMIT 1
+        """, (t.module, user.name))
+        
+        # Check team assignment
+        is_mand_team = frappe.db.sql("""
+            SELECT ma.is_mandatory
+            FROM `tabLMS Module Assignment` ma
+            INNER JOIN `tabLMS Assignment Team` ta ON ta.parent = ma.name
+            INNER JOIN `tabLMS Team Member` tm ON tm.parent = ta.team
+            WHERE ma.module = %s AND tm.user = %s
+            ORDER BY ma.is_mandatory DESC LIMIT 1
+        """, (t.module, user.name))
+        
+        # Check everyone assignment
+        is_mand_everyone = frappe.db.sql("""
+            SELECT is_mandatory FROM `tabLMS Module Assignment`
+            WHERE module = %s AND assignment_type = 'Everyone'
+            ORDER BY is_mandatory DESC LIMIT 1
+        """, (t.module,))
+        
+        is_mandatory = 0
+        if is_mand and is_mand[0][0]:
+            is_mandatory = 1
+        elif is_mand_team and is_mand_team[0][0]:
+            is_mandatory = 1
+        elif is_mand_everyone and is_mand_everyone[0][0]:
+            is_mandatory = 1
+            
+        if not is_mandatory:
+            mod_doc_mand = frappe.db.get_value("LMS Module", t.module, "is_mandatory")
+            if mod_doc_mand:
+                is_mandatory = 1
+
+        if is_mandatory:
             mandatory_assigned += 1
             if t.status == "Completed":
                 mandatory_completed += 1
@@ -291,18 +344,46 @@ def get_learner_details(user_id):
             if t.status == "Completed":
                 optional_completed += 1
                 
-    lp_enrollments = frappe.get_all("LMS Learning Path Enrollment", filters={"learner": user.name}, fields=["name", "learning_path", "status"])
-    learning_paths = frappe.get_all("LMS Learning Path", fields=["name", "is_mandatory"])
-    lp_dict = {lp.name: lp.is_mandatory for lp in learning_paths}
+    lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": user.name}, fields=["name", "learning_path", "status"])
 
     lp_mandatory_assigned = 0
     lp_mandatory_completed = 0
     lp_optional_assigned = 0
     lp_optional_completed = 0
 
-    for lpe in lp_enrollments:
-        is_mand = lp_dict.get(lpe.learning_path, 0)
-        if is_mand:
+    for lpe in lp_trackers:
+        # Check if mandatory via Learning Path Assignment (Manual)
+        is_mand = frappe.db.sql("""
+            SELECT ma.is_mandatory
+            FROM `tabLMS Learning Path Assignment` ma
+            INNER JOIN `tabLMS LP Assignment User` au ON au.parent = ma.name
+            WHERE ma.learning_path = %s AND au.user = %s
+            ORDER BY ma.is_mandatory DESC LIMIT 1
+        """, (lpe.learning_path, user.name))
+        
+        # Check if mandatory via Learning Path Assignment (Team)
+        is_mand_team = frappe.db.sql("""
+            SELECT ma.is_mandatory
+            FROM `tabLMS Learning Path Assignment` ma
+            INNER JOIN `tabLMS Assignment Team` ta ON ta.parent = ma.name
+            INNER JOIN `tabLMS Team Member` tm ON tm.parent = ta.team
+            WHERE ma.learning_path = %s AND tm.user = %s
+            ORDER BY ma.is_mandatory DESC LIMIT 1
+        """, (lpe.learning_path, user.name))
+        
+        is_mandatory = 0
+        if is_mand and is_mand[0][0]:
+            is_mandatory = 1
+        elif is_mand_team and is_mand_team[0][0]:
+            is_mandatory = 1
+            
+        if not is_mandatory:
+            # Fallback to LP document if no explicit assignment found (e.g. self-enrolled)
+            lp_doc_mand = frappe.db.get_value("LMS Learning Path", lpe.learning_path, "is_mandatory")
+            if lp_doc_mand:
+                is_mandatory = 1
+
+        if is_mandatory:
             lp_mandatory_assigned += 1
             if lpe.status == "Completed":
                 lp_mandatory_completed += 1

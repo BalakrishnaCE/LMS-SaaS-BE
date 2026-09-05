@@ -688,3 +688,220 @@ def get_teams():
         learner_count = frappe.db.count("LMS Team Member", {"parent": team.name, "parenttype": "LMS Team"})
         team.learner_count = learner_count
     return teams
+
+@frappe.whitelist()
+def reissue_certificates(certificate_ids):
+    import json
+    if isinstance(certificate_ids, str):
+        certificate_ids = json.loads(certificate_ids)
+        
+    for cert_id in certificate_ids:
+        cert = frappe.get_doc("LMS Certificate", cert_id)
+        # Update the issue date to today
+        cert.issued_on = frappe.utils.nowdate()
+        # Reset the generated PDF so it regenerates on next download
+        cert.certificate_pdf = None
+        cert.flags.ignore_links = True
+        cert.save(ignore_permissions=True)
+        
+    frappe.db.commit()
+    return True
+
+@frappe.whitelist(allow_guest=False)
+def get_module_learners(module_name):
+    from frappe.utils import add_days, getdate, today
+    
+    # Fetch assignments
+    assignments = frappe.get_all("LMS Module Assignment", filters={"module": module_name}, fields=["name", "assignment_type", "duration"])
+    
+    users = {}
+    
+    for a in assignments:
+        duration = a.duration or 0
+        creation_date = a.creation
+        if a.assignment_type == "Everyone":
+            # Dynamically resolve to all active learners (has LMS-Learner or LMS-TL role)
+            lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
+            valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
+            
+            all_users = frappe.get_all(
+                "User",
+                filters={
+                    "enabled": 1,
+                    "name": ["in", valid_users] if valid_users else ["in", ["__nobody__"]]
+                },
+                fields=["name"]
+            )
+            for u in all_users:
+                if u.name not in users:
+                    users[u.name] = {"duration": duration, "assigned_via": "Everyone", "creation": creation_date}
+        elif a.assignment_type == "Manual":
+            learners = frappe.get_all("LMS Assignment User", filters={"parent": a.name}, fields=["user"])
+            for l in learners:
+                if l.user not in users:
+                    users[l.user] = {"duration": duration, "assigned_via": "Manual", "creation": creation_date}
+        else:
+            teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
+            for t in teams:
+                members = frappe.get_all("LMS Team Member", filters={"parent": t.team}, fields=["user"])
+                for m in members:
+                    if m.user not in users:
+                        users[m.user] = {"duration": duration, "assigned_via": "Team", "team": t.team, "creation": creation_date}
+
+
+    if not users:
+        return {
+            "stats": {"totalAssigned": 0, "notStarted": 0, "inProgress": 0, "completed": 0, "overdue": 0},
+            "needsAttention": {"overdueLearning": 0, "inactiveLearners": 0, "lowAssessmentScores": 0},
+            "learners": []
+        }
+        
+    user_docs = frappe.get_all("User", filters={"name": ["in", list(users.keys())]}, fields=["name", "full_name", "user_image"])
+    user_map = {u.name: u for u in user_docs}
+    
+    team_members = frappe.get_all("LMS Team Member", filters={"user": ["in", list(users.keys())]}, fields=["user", "parent"])
+    user_team_map = {u: [] for u in users.keys()}
+    if team_members:
+        team_names = frappe.get_all("LMS Team", filters={"name": ["in", [m.parent for m in team_members]]}, fields=["name", "team_name"])
+        team_name_map = {t.name: t.team_name for t in team_names}
+        for m in team_members:
+            team_name = team_name_map.get(m.parent, m.parent)
+            if team_name not in user_team_map[m.user]:
+                user_team_map[m.user].append(team_name)
+    
+    # Create final map joining with commas
+    user_team_map = {u: ", ".join(teams) for u, teams in user_team_map.items()}
+    
+    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_name, "user": ["in", list(users.keys())]}, fields=["user", "status", "progress_percentage", "total_score", "started_on", "modified", "completed_on"])
+    tracker_map = {t.user: t for t in trackers}
+
+    # ── Resolve passing percentage and quiz submissions ───────────────────
+    PASSING_PERCENTAGE = 60  # default fallback
+    quiz_name = None
+    try:
+        # Assessments are stored in the LMS Module Assessment child table
+        assessments = frappe.get_all(
+            "LMS Module Assessment",
+            filters={"parent": module_name, "parenttype": "LMS Module"},
+            fields=["assessment"],
+            limit=1
+        )
+        if assessments:
+            quiz_name = assessments[0].assessment
+            quiz_doc = frappe.get_doc("LMS Quiz", quiz_name)
+            if quiz_doc.passing_percentage and quiz_doc.passing_percentage > 0:
+                PASSING_PERCENTAGE = float(quiz_doc.passing_percentage)
+    except Exception:
+        pass
+
+    # Map user -> best quiz submission score (None if no submission)
+    submission_score_map = {}  # user -> score (0-100) or None
+    if quiz_name:
+        # Fetch tracker name -> user mapping in one clean query
+        tracker_name_docs = frappe.get_all(
+            "LMS Module Tracker",
+            filters={"module": module_name, "user": ["in", list(users.keys())]},
+            fields=["name", "user"]
+        )
+        tracker_name_to_user = {t.name: t.user for t in tracker_name_docs}
+        tracker_name_list = list(tracker_name_to_user.keys())
+
+        if tracker_name_list:
+            submissions = frappe.get_all(
+                "LMS Quiz Submission",
+                filters={"quiz": quiz_name, "enrollment": ["in", tracker_name_list]},
+                fields=["enrollment", "score"]
+            )
+            # Keep the best (highest) score per tracker/enrollment
+            for sub in submissions:
+                user_key = tracker_name_to_user.get(sub.enrollment)
+                if user_key:
+                    current_best = submission_score_map.get(user_key)
+                    sub_score = float(sub.score) if sub.score is not None else 0.0
+                    if current_best is None or sub_score > current_best:
+                        submission_score_map[user_key] = sub_score
+
+    results = []
+
+    stats = {"totalAssigned": len(users), "notStarted": 0, "inProgress": 0, "completed": 0, "overdue": 0}
+    needs_attention = {"overdueLearning": 0, "inactiveLearners": 0, "lowAssessmentScores": 0}
+    
+    seven_days_ago = add_days(today(), -7)
+    
+    for user, data in users.items():
+        tracker = tracker_map.get(user)
+        u_info = user_map.get(user)
+        department = user_team_map.get(user, "Unknown")
+        
+        learner_info = {
+            "name": user,
+            "fullName": u_info.full_name if u_info else user,
+            "avatar": u_info.user_image if u_info else None,
+            "department": department,
+            "progress": 0,
+            "status": "Not Started",
+            "score": None,
+            "dueDate": None,
+            "lastActivity": None,
+            "isOverdue": False,
+            "isInactive": False,
+            "needsAttention": False,
+            "hasAssessment": bool(quiz_name),
+            "assignedDate": data.get("creation")
+        }
+        
+        start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else getdate(data["creation"])
+        if data["duration"]:
+            due = add_days(start_dt, data["duration"])
+            learner_info["dueDate"] = str(due)
+            if getdate(due) < getdate(today()) and (not tracker or tracker.status != "Completed"):
+                learner_info["isOverdue"] = True
+                stats["overdue"] += 1
+                needs_attention["overdueLearning"] += 1
+
+        if tracker:
+            learner_info["status"] = tracker.status
+            learner_info["progress"] = tracker.progress_percentage or 0
+            learner_info["lastActivity"] = tracker.modified
+
+            # Score resolution — two-tier:
+            #   1. LMS Quiz Submission (accurate per-attempt record)
+            #   2. tracker.total_score fallback when status is Completed/Failed
+            #      (legacy path: score was written directly to the tracker)
+            submitted_score = submission_score_map.get(user)  # None if no submission record
+            if submitted_score is not None:
+                learner_info["score"] = float(submitted_score)
+                if float(submitted_score) < PASSING_PERCENTAGE:
+                    needs_attention["lowAssessmentScores"] += 1
+            elif tracker.status in ("Completed", "Failed") and tracker.total_score:
+                # Legacy: score stored only in tracker, not in a submission record
+                learner_info["score"] = float(tracker.total_score)
+                if float(tracker.total_score) < PASSING_PERCENTAGE:
+                    needs_attention["lowAssessmentScores"] += 1
+            else:
+                learner_info["score"] = None  # Not attempted
+
+            learner_info["passingPercentage"] = PASSING_PERCENTAGE
+
+            if tracker.status == "Completed":
+                stats["completed"] += 1
+            elif tracker.status in ["In Progress", "Failed"]:
+                stats["inProgress"] += 1
+            else:
+                stats["notStarted"] += 1
+                
+            if getdate(tracker.modified) < getdate(seven_days_ago) and tracker.status != "Completed":
+                learner_info["isInactive"] = True
+                needs_attention["inactiveLearners"] += 1
+        else:
+            stats["notStarted"] += 1
+            learner_info["isInactive"] = True
+            needs_attention["inactiveLearners"] += 1
+            
+        results.append(learner_info)
+        
+    return {
+        "stats": stats,
+        "needsAttention": needs_attention,
+        "learners": results
+    }

@@ -19,9 +19,6 @@
   "duration",
   "is_mandatory",
   "enable_certificate",
-  "path_access",
-  "assigned_learners",
-  "assigned_teams",
   "courses"
  ],
  "fields": [
@@ -97,27 +94,6 @@
    "fieldname": "enable_certificate",
    "fieldtype": "Check",
    "label": "Enable certificate on completion"
-  },
-  {
-   "default": "Everyone",
-   "fieldname": "path_access",
-   "fieldtype": "Select",
-   "label": "Path Access",
-   "options": "Everyone\nSelected Learners\nSelected Departments"
-  },
-  {
-   "depends_on": "eval:doc.path_access==\"Selected Learners\"",
-   "fieldname": "assigned_learners",
-   "fieldtype": "Table",
-   "label": "Assigned Learners",
-   "options": "LMS Learning Path Learner"
-  },
-  {
-   "depends_on": "eval:doc.path_access==\"Selected Departments\"",
-   "fieldname": "assigned_teams",
-   "fieldtype": "Table",
-   "label": "Assigned Teams",
-   "options": "LMS Learning Path Team"
   },
   {
    "fieldname": "courses",

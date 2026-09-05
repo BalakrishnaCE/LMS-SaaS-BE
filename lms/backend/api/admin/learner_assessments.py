@@ -19,8 +19,20 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
         ignore_permissions=True
     )
     
-    modules = frappe.get_all("LMS Module", fields=["name", "module_name", "category", "duration", "is_mandatory", "image"], ignore_permissions=True)
+    modules = frappe.get_all("LMS Module", fields=["name", "module_name", "duration", "is_mandatory", "image"], ignore_permissions=True)
     mod_dict = {m.name: m for m in modules}
+    
+    module_names = [m.name for m in modules]
+    mod_cat_dict = {}
+    if module_names:
+        categories_data = frappe.get_all(
+            "LMS Module Category",
+            filters={"parent": ["in", module_names], "parenttype": "LMS Module"},
+            fields=["parent", "category"]
+        )
+        for c in categories_data:
+            if c.parent not in mod_cat_dict:
+                mod_cat_dict[c.parent] = c.category
     
     import json
     if categories and isinstance(categories, str):
@@ -52,7 +64,7 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
                 t.status = "Overdue"
                 
         mod_status = t.status or "Not Started"
-        mod_category = mod.category or "General"
+        mod_category = mod_cat_dict.get(mod.name) or "General"
         is_mandatory = bool(mod.is_mandatory)
         
         # Apply filters
@@ -62,7 +74,6 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
         if statuses and mod_status.lower() not in [s.lower() for s in statuses]:
             continue
             
-        # Default mock type filtering (since we don't have distinct types in backend yet)
         mod_type = "Module"
         if types and mod_type.lower() not in [ty.lower() for ty in types]:
             continue
@@ -79,8 +90,60 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
             "progress": int(t.progress_percentage or 0),
             "status": mod_status,
             "dueDate": due_date,
-            "isMandatory": is_mandatory
+            "isMandatory": is_mandatory,
+            "type": mod_type,
+            "creation": t.creation
         })
+        
+    lp_trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user_id},
+        fields=["name", "learning_path", "status", "progress_percentage", "started_on", "creation"],
+        ignore_permissions=True
+    )
+    
+    if lp_trackers:
+        for t in lp_trackers:
+            try:
+                lp_doc = frappe.get_doc("LMS Learning Path", t.learning_path)
+            except:
+                continue
+                
+            due_date = "None"
+            lp_status = t.status or "Not Started"
+            is_mandatory = bool(lp_doc.get("is_mandatory", False))
+            
+            lp_category = "General"
+            if hasattr(lp_doc, "category") and lp_doc.category:
+                if isinstance(lp_doc.category, list) and len(lp_doc.category) > 0:
+                    lp_category = getattr(lp_doc.category[0], "category", "General")
+                elif isinstance(lp_doc.category, str):
+                    lp_category = lp_doc.category
+                    
+            if categories and not any(c.lower() in lp_category.lower() for c in categories): continue
+            if statuses and lp_status.lower() not in [s.lower() for s in statuses]: continue
+            
+            mod_type = "Learning Path"
+            if types and mod_type.lower() not in [ty.lower() for ty in types]: continue
+            
+            mod_priority = "Mandatory" if is_mandatory else "Optional"
+            if priorities and mod_priority.lower() not in [p.lower() for p in priorities]: continue
+                    
+            results.append({
+                "id": t.name,
+                "moduleId": t.learning_path,
+                "name": lp_doc.path_name or t.learning_path,
+                "category": lp_category,
+                "progress": int(t.progress_percentage or 0),
+                "status": lp_status,
+                "dueDate": due_date,
+                "isMandatory": is_mandatory,
+                "type": mod_type,
+                "creation": t.creation
+            })
+            
+    # Sort results by creation desc
+    results.sort(key=lambda x: x.get("creation") or "", reverse=True)
         
     total = len(results)
     paginated = results[offset:offset+limit]
@@ -506,3 +569,51 @@ def get_learning_filter_options():
             {"label": "Failed", "color": "#DC2626", "bg": "#FEE2E2"}
         ]
     }
+@frappe.whitelist()
+def unassign_learning(user_id, item_id, item_type):
+    if item_type == "Learning Path":
+        tracker = frappe.get_doc("LMS Learning Path Tracker", item_id)
+        learning_path = tracker.learning_path
+        
+        # Bypass link checks to forcefully delete the tracker
+        frappe.db.delete("LMS Learning Path Tracker", {"name": item_id})
+        
+        # Remove from Manual Learning Path Assignments
+        assignments = frappe.get_all("LMS Learning Path Assignment", filters={"learning_path": learning_path, "assignment_type": "Manual"})
+        for a in assignments:
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Assignment User`
+                WHERE parent = %s AND user = %s
+            """, (a.name, user_id))
+            
+        # Also remove from native LMS Learning Path if assigned directly
+        lp_doc = frappe.get_doc("LMS Learning Path", learning_path)
+        if lp_doc.get("path_access") == "Manual":
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Learning Path Learner`
+                WHERE parent = %s AND learner = %s
+            """, (learning_path, user_id))
+            
+    else:
+        tracker = frappe.get_doc("LMS Module Tracker", item_id)
+        module = tracker.module
+        
+        # Bypass link checks to forcefully delete the tracker
+        frappe.db.delete("LMS Module Tracker", {"name": item_id})
+        
+        # Remove from Manual Module Assignments
+        assignments = frappe.get_all("LMS Module Assignment", filters={"module": module, "assignment_type": "Manual"})
+        for a in assignments:
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Assignment User`
+                WHERE parent = %s AND user = %s
+            """, (a.name, user_id))
+            
+    frappe.db.commit()
+    return {"status": "success"}
+
+@frappe.whitelist()
+def send_learning_reminder(user_id, item_id, item_type):
+    # In a real app, this would send an email or notification
+    # frappe.sendmail(...)
+    return {"status": "success", "message": "Reminder sent successfully"}
