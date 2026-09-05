@@ -1,20 +1,43 @@
 import frappe
 
 @frappe.whitelist(allow_guest=True)
-def get_tenant_theme():
-    # Gets the saved color directly from Redis High-Speed RAM
-    color = frappe.cache().get_value("theme_color")
-    
-    # Redis sometimes returns binary strings, so we decode it safely
-    if color and isinstance(color, bytes):
-        color = color.decode('utf-8')
+def get_tenant_settings():
+    try:
+        settings = frappe.get_single("LMS Settings")
         
-    return {"color": color or "#2563eb"}
+        features = {}
+        if hasattr(settings, "feature_toggles"):
+            for toggle in settings.feature_toggles:
+                features[toggle.feature_name] = bool(toggle.enabled)
+                
+        # Merge the distinct discussion toggle into features for unified frontend access
+        features["Discussions"] = bool(settings.enable_discussions)
+        
+        return {
+            "color": settings.primary_color or "#2563eb",
+            "logo": settings.brand_logo or None,
+            "features": features
+        }
+    except Exception:
+        return {
+            "color": "#2563eb",
+            "logo": None,
+            "features": {}
+        }
 
-@frappe.whitelist(allow_guest=True)
-def save_tenant_theme(color):
-    # Saves the color instantly to Redis (Bypassing Guest DB restrictions!)
-    frappe.cache().set_value("theme_color", color)
+@frappe.whitelist()
+def save_tenant_settings(color=None, logo=None):
+    # Security: Ensure only authorized users (System Managers) can modify tenant branding
+    if not frappe.has_permission("LMS Settings", "write"):
+        frappe.throw("Not permitted", frappe.PermissionError)
+        
+    settings = frappe.get_single("LMS Settings")
+    if color:
+        settings.primary_color = color
+    if logo is not None:
+        settings.brand_logo = logo
+        
+    settings.save(ignore_permissions=True)
     return {"status": "success"}
 
 @frappe.whitelist(allow_guest=True)
