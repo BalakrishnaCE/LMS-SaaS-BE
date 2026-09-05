@@ -94,17 +94,76 @@ def get_module_overview(module_id):
             delta = (getdate(due) - getdate(today())).days
             days_remaining = max(delta, 0)
 
+    # ── Step 1: resolve all assigned users from LMS Module Assignment ──────
+    assignments = frappe.get_all(
+        "LMS Module Assignment",
+        filters={"module": module_id},
+        fields=["name", "assignment_type", "duration", "creation"]
+    )
+
+    assigned_users = {}  # user -> {duration, creation}
+    for a in assignments:
+        duration = a.duration or 0
+        creation_date = a.creation
+        if a.assignment_type == "Everyone":
+            lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
+            valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
+            
+            all_users = frappe.get_all(
+                "User",
+                filters={"enabled": 1, "name": ["in", valid_users] if valid_users else ["in", ["__nobody__"]]},
+                fields=["name"]
+            )
+            for u in all_users:
+                if u.name not in assigned_users:
+                    assigned_users[u.name] = {"duration": duration, "creation": creation_date}
+        elif a.assignment_type == "Manual":
+            learners = frappe.get_all("LMS Assignment User", filters={"parent": a.name}, fields=["user"])
+            for l in learners:
+                if l.user not in assigned_users:
+                    assigned_users[l.user] = {"duration": duration, "creation": creation_date}
+        else:  # Team
+            teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
+            for t in teams:
+                members = frappe.get_all("LMS Team Member", filters={"parent": t.team}, fields=["user"])
+                for m in members:
+                    if m.user not in assigned_users:
+                        assigned_users[m.user] = {"duration": duration, "creation": creation_date}
+
+    # ── Step 2: fetch tracker data for users who have started ───────────────
     trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"module": module_id},
         fields=["status", "user", "total_score", "started_on", "creation"]
     )
+    tracker_map = {t.user: t for t in trackers}
 
-    total_learners = len(trackers)
-    passed  = sum(1 for t in trackers if t.status == "Completed")
-    in_prog = sum(1 for t in trackers if t.status == "In Progress")
-    failed  = sum(1 for t in trackers if t.status == "Failed")
-    ns      = sum(1 for t in trackers if t.status == "Not started")
+    # ── Step 3: merge — use assigned_users as the source of truth ───────────
+    # If there are no assignment records, fall back to tracker-only (legacy behaviour)
+    if assigned_users:
+        all_user_keys = list(assigned_users.keys())
+    else:
+        all_user_keys = [t.user for t in trackers if t.user]
+
+    total_learners = len(all_user_keys)
+    passed   = 0
+    in_prog  = 0
+    failed   = 0
+    ns       = 0
+
+    for user in all_user_keys:
+        t = tracker_map.get(user)
+        if t is None:
+            ns += 1
+        elif t.status == "Completed":
+            passed += 1
+        elif t.status == "In Progress":
+            in_prog += 1
+        elif t.status == "Failed":
+            failed += 1
+        else:
+            ns += 1
+
     pending = total_learners - passed
 
     passed_pct  = round((passed  / total_learners * 100) if total_learners else 0)
@@ -112,7 +171,8 @@ def get_module_overview(module_id):
     failed_pct  = round((failed / total_learners * 100) if total_learners else 0)
     ns_pct      = max(0, 100 - passed_pct - inprog_pct - failed_pct) if total_learners else 0
 
-    user_emails = list({t.user for t in trackers if t.user})
+    # ── Step 4: department breakdown (based on all assigned users) ──────────
+    user_emails = list(set(all_user_keys))
     dept_map = {}
     if user_emails:
         members = frappe.get_all(
@@ -122,17 +182,18 @@ def get_module_overview(module_id):
         )
         teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
         team_name_map = {t.name: t.team_name for t in teams}
-        
+
         for m in members:
             dept_map[m.user] = team_name_map.get(m.parent, "Unknown")
 
     dept_stats = {}
-    for t in trackers:
-        dept = dept_map.get(t.user, "Unknown")
+    for user in all_user_keys:
+        dept = dept_map.get(user, "Unknown")
+        t = tracker_map.get(user)
         if dept not in dept_stats:
             dept_stats[dept] = {"total": 0, "passed": 0, "pending": 0}
         dept_stats[dept]["total"] += 1
-        if t.status == "Completed":
+        if t and t.status == "Completed":
             dept_stats[dept]["passed"] += 1
         else:
             dept_stats[dept]["pending"] += 1
@@ -148,6 +209,7 @@ def get_module_overview(module_id):
             "progress": progress,
         })
     departments.sort(key=lambda x: x["progress"], reverse=True)
+
 
     estimated_hours = getattr(module, "duration", None)
     if estimated_hours is None or estimated_hours == 0:
@@ -230,11 +292,17 @@ def get_module_certificates(module_id):
         fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf"]
     )
     
+    validity_days = module.certificate_validity_period or 0
+    
     certificate_data = []
     for cert in certs:
         try:
             user_doc = frappe.get_doc("User", cert.user)
             status = "Issued" if cert.is_valid else "Revoked"
+            
+            expiry_date = None
+            if cert.issued_on and validity_days > 0:
+                expiry_date = frappe.utils.add_days(cert.issued_on, validity_days)
             
             certificate_data.append({
                 "id": cert.name,
@@ -242,7 +310,7 @@ def get_module_certificates(module_id):
                 "learnerName": user_doc.full_name,
                 "email": user_doc.email,
                 "issueDate": str(cert.issued_on) if cert.issued_on else None,
-                "expiryDate": None,
+                "expiryDate": str(expiry_date) if expiry_date else None,
                 "status": status,
                 "certificate_pdf": cert.certificate_pdf or None
             })
@@ -266,4 +334,61 @@ def get_module_certificates(module_id):
         "course_name": module.module_name
     }
 
+def get_all_assigned_modules_for_learner(user):
+    """
+    Returns a list of dicts: [{"module": "Mod1", "duration": 10, "is_mandatory": 1, "creation": ...}]
+    Resolves Manual, Team, and Everyone assignments for the given user.
+    Only includes Published modules.
+    """
+    assigned_modules = {}
 
+    user_roles = frappe.get_all("Has Role", filters={"parent": user}, fields=["role"])
+    role_names = [r.role for r in user_roles]
+    is_learner_or_tl = ("LMS-Learner" in role_names or "LMS-TL" in role_names)
+    is_admin_or_guest = ("Administrator" in role_names or "Guest" in role_names)
+    qualifies_for_everyone = is_learner_or_tl and not is_admin_or_guest
+
+    # 1. Manual
+    manual_rows = frappe.db.sql("""
+        SELECT ma.module, ma.duration, ma.is_mandatory, ma.creation
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+        WHERE au.user = %s AND ma.assignment_type = 'Manual'
+    """, user, as_dict=True)
+    for row in manual_rows:
+        if row.module not in assigned_modules:
+            assigned_modules[row.module] = row
+
+    # 2. Team
+    team_rows = frappe.db.sql("""
+        SELECT ma.module, ma.duration, ma.is_mandatory, ma.creation
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment Team` at ON at.parent = ma.name
+        INNER JOIN `tabLMS Team Member` tm ON tm.parent = at.team
+        WHERE tm.user = %s AND ma.assignment_type = 'Team'
+    """, user, as_dict=True)
+    for row in team_rows:
+        if row.module not in assigned_modules:
+            assigned_modules[row.module] = row
+
+    # 3. Everyone
+    if qualifies_for_everyone:
+        everyone_rows = frappe.db.sql("""
+            SELECT ma.module, ma.duration, ma.is_mandatory, ma.creation
+            FROM `tabLMS Module Assignment` ma
+            WHERE ma.assignment_type = 'Everyone'
+        """, as_dict=True)
+        for row in everyone_rows:
+            if row.module not in assigned_modules:
+                assigned_modules[row.module] = row
+
+    published_modules = set([
+        m.name for m in frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name"])
+    ])
+
+    final_list = []
+    for mod, data in assigned_modules.items():
+        if mod in published_modules:
+            final_list.append(data)
+            
+    return final_list

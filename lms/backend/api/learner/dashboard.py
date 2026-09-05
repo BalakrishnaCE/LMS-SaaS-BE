@@ -1,6 +1,9 @@
 import frappe
 from frappe.utils import today, add_days, add_months, getdate, date_diff
-from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
+from lms.backend.api.common.module_detail import (
+    get_estimated_hours_from_curriculum, 
+    get_all_assigned_modules_for_learner
+)
 
 def get_module_category(module_name):
     """Fetch the first category from the LMS Module Category child table."""
@@ -22,14 +25,9 @@ def get_learner_summary(timeframe="month"):
     user = frappe.session.user
 
     # Modules assigned to this learner via LMS Module Assignment child table
-    assigned_rows = frappe.db.sql("""
-        SELECT DISTINCT ma.module, ma.duration
-        FROM `tabLMS Module Assignment` ma
-        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        INNER JOIN `tabLMS Module` m ON m.name = ma.module
-        WHERE au.user = %s AND m.status = 'Published'
-    """, user, as_dict=True)
-    explicitly_assigned = list(set([a.module for a in assigned_rows]))
+    from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
+    assigned_rows = get_all_assigned_modules_for_learner(user)
+    explicitly_assigned = list(set([a["module"] for a in assigned_rows]))
 
     # Also include any module the user has started (has a tracker)
     all_trackers = frappe.get_all(
@@ -285,15 +283,10 @@ def get_continue_learning():
     total_lessons = frappe.db.count("LMS Module Lesson Child", {"parent": t.module})
 
     # Find which module number this is in the assigned sequence
-    assigned = frappe.db.sql("""
-        SELECT DISTINCT ma.module, ma.creation
-        FROM `tabLMS Module Assignment` ma
-        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        INNER JOIN `tabLMS Module` m ON m.name = ma.module
-        WHERE au.user = %s AND m.status = 'Published'
-        ORDER BY ma.creation ASC
-    """, user, as_dict=True)
-    module_index = next((i + 1 for i, a in enumerate(assigned) if a.module == t.module), 1)
+    assigned = get_all_assigned_modules_for_learner(user)
+    assigned.sort(key=lambda x: x.get("creation") or "", reverse=False)
+    
+    module_index = next((i + 1 for i, a in enumerate(assigned) if a["module"] == t.module), 1)
     total_modules = len(assigned) or 1
 
     return {

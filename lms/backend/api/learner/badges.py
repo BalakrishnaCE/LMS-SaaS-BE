@@ -170,9 +170,14 @@ class BadgeEvaluator:
         return total_progress, "Elite Status"
 
 @frappe.whitelist()
-def get_learner_badges():
+def get_learner_badges(user_id=None):
     """Returns badges earned by the current learner, and badges in progress, evaluating dynamically."""
-    user = frappe.session.user
+    if user_id and user_id != frappe.session.user:
+        roles = frappe.get_roles(frappe.session.user)
+        if not any(r in roles for r in ["System Manager", "Administrator", "LMS Administrator"]):
+            frappe.throw("Not permitted to view other user's badges", frappe.PermissionError)
+            
+    user = user_id or frappe.session.user
 
     earned_badges = frappe.get_all(
         "LMS Learner Badge",

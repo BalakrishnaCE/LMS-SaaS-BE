@@ -11,29 +11,12 @@ def get_learner_modules(filter_type="all"):
     """
     user = frappe.session.user
 
-    assignments = frappe.db.sql("""
-        SELECT ma.module, ma.duration, ma.is_mandatory
-        FROM `tabLMS Module Assignment` ma
-        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-        WHERE au.user = %s
-        ORDER BY ma.creation DESC
-    """, user, as_dict=True)
-
-    everyone_modules = frappe.db.sql("""
-        SELECT name as module, duration, is_mandatory
-        FROM `tabLMS Module`
-        WHERE status = 'Published' AND module_view = 'Everyone'
-    """, as_dict=True)
-
-    assignments = assignments + everyone_modules
-
-    unique_assignments = []
-    seen = set()
-    for a in assignments:
-        if a.module not in seen:
-            seen.add(a.module)
-            unique_assignments.append(a)
-    assignments = unique_assignments
+    from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
+    assigned_rows = get_all_assigned_modules_for_learner(user)
+    
+    # Sort by creation desc to match original behavior
+    assigned_rows.sort(key=lambda x: x.get("creation") or "", reverse=True)
+    assignments = assigned_rows
 
     if filter_type == "mandatory":
         assignments = [a for a in assignments if a.is_mandatory]
