@@ -87,6 +87,10 @@ def get_learner_progress_breakdown(filter_mode="status"):
                 counts["Passed" if score >= passing_score else "Failed"] += 1
             else:
                 counts["Passed"] += 1
+        elif status == "Failed":
+            # Tracker is explicitly marked as Failed (e.g. quiz failed)
+            counts["Failed"] += 1
+            counts["Completed"] += 1  # count as attempted/completed for completion-mode
         elif status == "In Progress":
             # Check if overdue
             duration = a.get("duration") if a else None

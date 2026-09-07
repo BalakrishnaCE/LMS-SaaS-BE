@@ -41,9 +41,18 @@ class LMSModuleAssignment(Document):
             for u in all_users:
                 users.add(u.name)
                 
+        # Find existing trackers
+        existing_trackers = frappe.get_all("LMS Module Tracker", filters={"module": self.module}, fields=["name", "user"])
+        existing_users = set(t.user for t in existing_trackers)
+        
+        # Delete trackers for users no longer assigned
+        for t in existing_trackers:
+            if t.user not in users:
+                frappe.db.delete("LMS Module Tracker", {"name": t.name})
+                
+        # Create trackers for new users
         for user in users:
-            exists = frappe.db.exists("LMS Module Tracker", {"user": user, "module": self.module})
-            if not exists:
+            if user not in existing_users:
                 tracker = frappe.new_doc("LMS Module Tracker")
                 tracker.user = user
                 tracker.module = self.module
