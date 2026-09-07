@@ -660,12 +660,11 @@ def get_reminder_activity(user_id, assessment_id=None):
     scheduled_tomorrow = False
     reminder_rules = frappe.get_all(
         "LMS Reminder Rule",
-        filters={"is_active": 1},
-        fields=["days_before_due", "trigger_type"]
+        fields=["trigger_days", "trigger_type"]
     ) if frappe.db.exists("DocType", "LMS Reminder Rule") else []
     # Simple heuristic: if any rule triggers, flag it
     if reminder_rules:
-        scheduled_tomorrow = any(r.get("days_before_due") == 1 for r in reminder_rules)
+        scheduled_tomorrow = any(r.get("trigger_days") == 1 for r in reminder_rules)
 
     return {
         "automatedCount": automated_count,
