@@ -238,6 +238,7 @@ def get_learner_module_viewer_data(module_id):
     if getattr(module, "module_view", "Everyone") == "Everyone":
         has_access = True
     else:
+        # Check direct manual assignment
         assigned = frappe.db.sql("""
             SELECT ma.name 
             FROM `tabLMS Module Assignment` ma
@@ -247,6 +248,18 @@ def get_learner_module_viewer_data(module_id):
         if assigned:
             has_access = True
             
+        # Check team assignment
+        if not has_access:
+            team_assigned = frappe.db.sql("""
+                SELECT ma.name
+                FROM `tabLMS Module Assignment` ma
+                INNER JOIN `tabLMS Assignment Team` at ON at.parent = ma.name
+                INNER JOIN `tabLMS Team Member` tm ON tm.parent = at.team
+                WHERE tm.user = %s AND ma.module = %s
+            """, (user, module_id))
+            if team_assigned:
+                has_access = True
+                
     if not has_access and user != 'Administrator':
         frappe.throw("You do not have access to this module.", frappe.PermissionError)
         

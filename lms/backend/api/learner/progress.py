@@ -87,6 +87,10 @@ def get_learner_progress_breakdown(filter_mode="status"):
                 counts["Passed" if score >= passing_score else "Failed"] += 1
             else:
                 counts["Passed"] += 1
+        elif status == "Failed":
+            # Tracker is explicitly marked as Failed (e.g. quiz failed)
+            counts["Failed"] += 1
+            counts["Completed"] += 1  # count as attempted/completed for completion-mode
         elif status == "In Progress":
             # Check if overdue
             duration = a.get("duration") if a else None
@@ -270,17 +274,6 @@ def update_content_progress(module, content_reference, content_type=None, status
             doc.is_completed = 1
         doc.save(ignore_permissions=True)
         
-    # Sanitize all existing child rows to prevent validation errors on tracker save
-    frappe.db.sql("""
-        UPDATE `tabLMS Content Progress` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
-    frappe.db.sql("""
-        UPDATE `tabLMS Interaction Response` 
-        SET content_type = 'LMS Chapter Content' 
-        WHERE parent = %s AND content_type != 'LMS Chapter Content'
-    """, tracker_name)
         
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
     tracker_doc.save(ignore_permissions=True)
@@ -325,7 +318,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
             "parent": tracker_name,
             "parenttype": "LMS Module Tracker",
             "parentfield": "content_progress",
-            "content_type": "LMS Chapter Content",
+            "content_type": content_type,
             "content_reference": content_reference,
             "status": "In Progress",
             "last_position": current_position,
@@ -338,7 +331,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         doc.insert(ignore_permissions=True)
     else:
         doc = frappe.get_doc("LMS Content Progress", cp[0].name)
-        doc.content_type = "LMS Chapter Content"
+        doc.content_type = content_type
         doc.last_position = current_position
         doc.time_spent = (doc.time_spent or 0) + time_spent_increment
         

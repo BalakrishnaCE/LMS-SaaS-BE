@@ -204,16 +204,18 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
             submissions = frappe.get_all(
                 "LMS Quiz Submission",
                 filters={"enrollment": tracker_name},
-                fields=["quiz", "score", "passed"]
+                fields=["quiz", "score", "passed", "extra_attempts_granted"]
             )
 
             # Aggregate submissions per quiz
             ass_dict = {}
             for s in submissions:
+                extra = s.get("extra_attempts_granted") or 0
                 if s.quiz not in ass_dict:
-                    ass_dict[s.quiz] = {"best_score": s.score, "attempts": 1, "passed": bool(s.passed)}
+                    ass_dict[s.quiz] = {"best_score": s.score, "attempts": 1, "passed": bool(s.passed), "extra_attempts": extra}
                 else:
                     ass_dict[s.quiz]["attempts"] += 1
+                    ass_dict[s.quiz]["extra_attempts"] += extra
                     if s.score > ass_dict[s.quiz]["best_score"]:
                         ass_dict[s.quiz]["best_score"] = s.score
                     if s.passed:
@@ -224,14 +226,24 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                 assessment_type: "Quiz", "Assessment", or "Interactive"
                 - Interactive: no pass score, no attempts limit, result is Completed/Not Started
                 """
-                data = ass_dict.get(quiz_name, {"best_score": 0, "attempts": 0, "passed": False})
+                data = ass_dict.get(quiz_name, {"best_score": 0, "attempts": 0, "passed": False, "extra_attempts": 0})
                 quiz = frappe.get_doc("LMS Quiz", quiz_name)
                 max_att = quiz.max_attempts or 0
+                if max_att > 0:
+                    max_att += data.get("extra_attempts", 0)
+                    
                 is_interactive = not quiz.is_passing_required and max_att == 0
                 pass_pct = quiz.passing_percentage if quiz.is_passing_required else None
 
                 # Override type to Interactive if quiz has no passing requirement and no max attempts
                 display_type = "Interactive" if is_interactive else assessment_type
+
+                best_score_raw = data.get("best_score", 0)
+                total_score = quiz.total_score or 0
+                if total_score > 0:
+                    best_score_pct = int(round((best_score_raw / total_score) * 100))
+                else:
+                    best_score_pct = int(round(best_score_raw))
 
                 if is_interactive:
                     # Interactive: result is Completed if submitted, else Not Started
@@ -243,7 +255,7 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                         "id": quiz_name,
                         "title": quiz.title,
                         "type": "Interactive",
-                        "bestScore": data["best_score"],
+                        "bestScore": best_score_pct,
                         "passScore": "--",
                         "attempts": "--",
                         "attemptsUsed": data["attempts"],
@@ -265,7 +277,7 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                     "id": quiz_name,
                     "title": quiz.title,
                     "type": display_type,
-                    "bestScore": data["best_score"],
+                    "bestScore": best_score_pct,
                     "passScore": pass_pct if pass_pct is not None else "--",
                     "attempts": f"{data['attempts']}/{max_att}" if max_att > 0 else str(data["attempts"]),
                     "attemptsUsed": data["attempts"],
@@ -613,7 +625,228 @@ def unassign_learning(user_id, item_id, item_type):
     return {"status": "success"}
 
 @frappe.whitelist()
+def get_reminder_activity(user_id, assessment_id=None):
+    """
+    Returns automated and admin reminder counts/dates for a user (and optionally a specific assessment).
+    Uses LMS Notification Log for automated reminders and a custom admin_reminder field for manual ones.
+    """
+    from frappe.utils import today, add_days, getdate, format_date
+
+    # Automated reminders: from LMS Notification Log
+    filters = {"user": user_id, "status": "Sent"}
+    auto_logs = frappe.get_all(
+        "LMS Notification Log",
+        filters=filters,
+        fields=["name", "sent_on", "rule_triggered"],
+        order_by="sent_on desc"
+    )
+
+    automated_count = len(auto_logs)
+
+    # Admin reminders: logs where rule_triggered is None/empty (manual sends)
+    admin_logs = [l for l in auto_logs if not l.get("rule_triggered")]
+    auto_logs_real = [l for l in auto_logs if l.get("rule_triggered")]
+
+    automated_count = len(auto_logs_real)
+    admin_count = len(admin_logs)
+    last_admin_date = None
+    if admin_logs:
+        last_admin_date = admin_logs[0].sent_on
+        if last_admin_date:
+            last_admin_date = frappe.utils.formatdate(str(last_admin_date)[:10], "d MMM")
+
+    # Check if an automated reminder is scheduled for tomorrow
+    # by checking LMS Reminder Rule trigger windows
+    scheduled_tomorrow = False
+    reminder_rules = frappe.get_all(
+        "LMS Reminder Rule",
+        filters={"is_active": 1},
+        fields=["days_before_due", "trigger_type"]
+    ) if frappe.db.exists("DocType", "LMS Reminder Rule") else []
+    # Simple heuristic: if any rule triggers, flag it
+    if reminder_rules:
+        scheduled_tomorrow = any(r.get("days_before_due") == 1 for r in reminder_rules)
+
+    return {
+        "automatedCount": automated_count,
+        "adminCount": admin_count,
+        "lastAdminDate": last_admin_date,
+        "scheduledTomorrow": scheduled_tomorrow,
+    }
+
+
+@frappe.whitelist()
+def send_priority_reminder(user_id, assessment_id, learner_name=None):
+    """
+    Sends a priority (admin) reminder to a learner and logs it.
+    """
+    try:
+        user_doc = frappe.get_doc("User", user_id)
+        full_name = user_doc.full_name or user_doc.first_name or user_id
+
+        # Log the admin reminder
+        log = frappe.get_doc({
+            "doctype": "LMS Notification Log",
+            "user": user_id,
+            "rule_triggered": None,
+            "message_sent": f"Priority reminder sent by admin for assessment {assessment_id}",
+            "sent_on": frappe.utils.now(),
+            "status": "Sent"
+        })
+        log.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        # In a real app, send actual email here:
+        # frappe.sendmail(recipients=[user_doc.email], ...)
+
+        return {"status": "success", "message": f"Priority reminder sent to {full_name}"}
+    except Exception as e:
+        frappe.log_error("send_priority_reminder failed", str(e))
+        return {"status": "error", "message": str(e)}
+
+
+@frappe.whitelist()
 def send_learning_reminder(user_id, item_id, item_type):
     # In a real app, this would send an email or notification
     # frappe.sendmail(...)
     return {"status": "success", "message": "Reminder sent successfully"}
+
+
+@frappe.whitelist()
+def get_team_lead_for_user(user_id):
+    """
+    Looks up the LMS Team Lead(s) for a learner's team and returns the lead's profile info.
+    Also returns the automated reminder count to power the Lumi recommendation.
+    """
+    # Find the team the user belongs to
+    team_member = frappe.get_all(
+        "LMS Team Member",
+        filters={"user": user_id},
+        fields=["parent"],
+        limit=1
+    )
+
+    lead_info = None
+    team_name = None
+
+    if team_member:
+        team_name_val = team_member[0].parent
+        # Look up team leads for that team
+        team_leads = frappe.get_all(
+            "LMS Team Lead",
+            filters={"parent": team_name_val},
+            fields=["user"],
+            limit=1
+        )
+        if team_leads:
+            lead_user = team_leads[0].user
+            lead_doc = frappe.get_doc("User", lead_user)
+            team_doc = frappe.get_doc("LMS Team", team_name_val)
+            team_name = team_doc.team_name or team_name_val
+
+            # Get lead designation from HR or fallback
+            designation = getattr(lead_doc, "designation", None) or "Team Lead"
+
+            lead_info = {
+                "user": lead_user,
+                "name": lead_doc.full_name or lead_doc.first_name or lead_user,
+                "avatar": lead_doc.user_image or None,
+                "designation": designation,
+                "team": team_name,
+            }
+
+    # Get automated reminder count for Lumi recommendation
+    auto_logs = frappe.get_all(
+        "LMS Notification Log",
+        filters={"user": user_id, "status": "Sent"},
+        fields=["rule_triggered"]
+    )
+    automated_count = len([l for l in auto_logs if l.get("rule_triggered")])
+
+    return {
+        "lead": lead_info,
+        "automatedCount": automated_count,
+    }
+
+
+@frappe.whitelist()
+def escalate_to_lead(user_id, assessment_id, reason, note=None):
+    """
+    Logs an escalation to the team lead.
+    """
+    try:
+        user_doc = frappe.get_doc("User", user_id)
+        learner_name = user_doc.full_name or user_doc.first_name or user_id
+
+        # Log escalation as a notification log entry
+        log = frappe.get_doc({
+            "doctype": "LMS Notification Log",
+            "user": user_id,
+            "rule_triggered": None,
+            "message_sent": f"Escalation to team lead | Reason: {reason} | Note: {note or ''} | Assessment: {assessment_id}",
+            "sent_on": frappe.utils.now(),
+            "status": "Sent"
+        })
+        log.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {"status": "success", "message": f"Escalation logged for {learner_name}"}
+    except Exception as e:
+        frappe.log_error("escalate_to_lead failed", str(e))
+        return {"status": "error", "message": str(e)}
+
+@frappe.whitelist()
+def get_assessment_attempts(user_id, quiz_name):
+    submissions = frappe.get_all(
+        "LMS Quiz Submission",
+        filters={"user": user_id, "quiz": quiz_name},
+        fields=["name", "score", "passed", "creation", "extra_attempts_granted", "grant_reason", "enrollment", "time_taken"],
+        order_by="creation asc"
+    )
+    
+    quiz = frappe.get_doc("LMS Quiz", quiz_name)
+    total_score = quiz.total_score or 0
+    
+    history = []
+    for idx, s in enumerate(submissions):
+        score_pct = int(round((s.score / total_score) * 100)) if total_score > 0 else int(round(s.score))
+        
+        duration_str = "--"
+        if s.time_taken:
+            mins = int(s.time_taken // 60)
+            secs = int(s.time_taken % 60)
+            if mins > 0:
+                duration_str = f"{mins}m {secs}s"
+            else:
+                duration_str = f"{secs}s"
+        
+        history.append({
+            "attempt": idx + 1,
+            "score": score_pct,
+            "passed": bool(s.passed),
+            "duration": duration_str
+        })
+        
+    return history
+
+@frappe.whitelist()
+def grant_additional_attempt(user_id, quiz_name, attempts, reason):
+    submissions = frappe.get_all(
+        "LMS Quiz Submission",
+        filters={"user": user_id, "quiz": quiz_name},
+        fields=["name", "extra_attempts_granted"],
+        order_by="creation desc",
+        limit=1
+    )
+    
+    if not submissions:
+        frappe.throw("Cannot grant additional attempt: No previous submissions found.")
+        
+    sub = frappe.get_doc("LMS Quiz Submission", submissions[0].name)
+    current_extra = sub.extra_attempts_granted or 0
+    sub.extra_attempts_granted = current_extra + int(attempts)
+    sub.grant_reason = reason
+    sub.save(ignore_permissions=True)
+    frappe.db.commit()
+    
+    return {"status": "success"}

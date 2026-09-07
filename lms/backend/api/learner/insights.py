@@ -6,9 +6,11 @@ def get_upcoming_deadlines():
     assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "is_mandatory"])
     assignment_map = {a.module: a for a in assignments}
     
+    modules = frappe.get_all("LMS Module", fields=["name", "module_name"])
+    module_name_map = {m.name: m.module_name for m in modules}
+    
     approaching = {}
     today_dt = getdate(today())
-    next_week = getdate(add_days(today_dt, 30))
     
     trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["!=", "Completed"]}, fields=["module", "started_on"])
     for t in trackers:
@@ -17,23 +19,45 @@ def get_upcoming_deadlines():
         a = assignment_map.get(t.module)
         if a and a.duration:
             due = getdate(add_days(getdate(t.started_on), a.duration))
-            if today_dt <= due <= next_week:
-                if t.module not in approaching:
-                    approaching[t.module] = {"count": 0, "mandatory": a.is_mandatory}
-                approaching[t.module]["count"] += 1
+            days_left = frappe.utils.date_diff(due, today_dt)
+            
+            if days_left < 0:
+                category = "Overdue"
+            elif 0 <= days_left <= 7:
+                category = "Approaching in 7 days"
+            elif 7 < days_left <= 30:
+                category = "Approaching in 30 days"
+            else:
+                continue
+                
+            key = (t.module, category)
+            if key not in approaching:
+                approaching[key] = {"count": 0, "mandatory": a.is_mandatory}
+            approaching[key]["count"] += 1
                 
     results = []
-    for module_name, data in approaching.items():
+    # Sort order for categories: Overdue first, then 7 days, then 30 days
+    category_weight = {"Overdue": 0, "Approaching in 7 days": 1, "Approaching in 30 days": 2}
+    
+    for key, data in approaching.items():
+        module_id, category = key
         results.append({
-            "id": module_name,
-            "name": module_name,
+            "id": f"{module_id}-{category}",
+            "name": module_name_map.get(module_id, module_id),
             "type": "Module",
-            "date": "Approaching in 30 days",
+            "date": category,
             "pending": data['count'],
-            "critical": bool(data['mandatory'])
+            "critical": bool(data['mandatory']) or category == "Overdue",
+            "_weight": category_weight.get(category, 3)
         })
         
-    return sorted(results, key=lambda x: x["pending"], reverse=True)[:5]
+    results = sorted(results, key=lambda x: (x["_weight"], -x["pending"]))[:5]
+    
+    # Clean up internal sort key
+    for r in results:
+        r.pop("_weight", None)
+        
+    return results
 
 @frappe.whitelist(allow_guest=True)
 def get_recently_assigned():

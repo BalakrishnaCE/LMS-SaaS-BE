@@ -5,70 +5,92 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
-  "user",
-  "quiz",
-  "enrollment",
-  "score",
-  "passed",
-  "submitted_on",
-  "responses"
- ],
- "fields": [
-  {
-   "fieldname": "user",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "User",
-   "options": "User",
-   "reqd": 1,
-   "description": "Link to the corresponding User."
-  },
-  {
-   "fieldname": "quiz",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Quiz",
-   "options": "LMS Quiz",
-   "reqd": 1,
-   "description": "Link to the corresponding LMS Quiz."
-  },
-  {
-   "fieldname": "enrollment",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Enrollment",
-   "options": "LMS Module Tracker",
-   "reqd": 1,
-   "description": "Link to the corresponding LMS Module Tracker."
-  },
-  {
-   "fieldname": "score",
-   "fieldtype": "Float",
-   "label": "Score",
-   "description": "Numeric value for score."
-  },
-  {
-   "default": "0",
-   "fieldname": "passed",
-   "fieldtype": "Check",
-   "label": "Passed",
-   "description": "Toggle to enable or disable passed."
-  },
-  {
-   "fieldname": "submitted_on",
-   "fieldtype": "Datetime",
-   "label": "Submitted On",
-   "description": "The exact submitted on."
-  },
-  {
-   "fieldname": "responses",
-   "fieldtype": "Table",
-   "label": "Responses",
-   "options": "LMS Quiz Response",
-   "description": "Child table for LMS Quiz Response."
-  }
- ],
+   "field_order": [
+    "user",
+    "quiz",
+    "enrollment",
+    "score",
+    "passed",
+    "time_taken",
+    "submitted_on",
+    "extra_attempts_granted",
+    "grant_reason",
+    "responses"
+   ],
+   "fields": [
+   {
+    "fieldname": "user",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "User",
+    "options": "User",
+    "reqd": 1,
+    "description": "Link to the corresponding User."
+   },
+   {
+    "fieldname": "quiz",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Quiz",
+    "options": "LMS Quiz",
+    "reqd": 1,
+    "description": "Link to the corresponding LMS Quiz."
+   },
+   {
+    "fieldname": "enrollment",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Enrollment",
+    "options": "LMS Module Tracker",
+    "reqd": 1,
+    "description": "Link to the corresponding LMS Module Tracker."
+   },
+   {
+    "fieldname": "score",
+    "fieldtype": "Float",
+    "label": "Score",
+    "description": "Numeric value for score."
+   },
+   {
+    "default": "0",
+    "fieldname": "passed",
+    "fieldtype": "Check",
+    "label": "Passed",
+    "description": "Toggle to enable or disable passed."
+   },
+   {
+    "fieldname": "time_taken",
+    "fieldtype": "Float",
+    "label": "Time Taken",
+    "description": "Time taken to complete the quiz in seconds."
+   },
+   {
+    "fieldname": "submitted_on",
+    "fieldtype": "Datetime",
+    "label": "Submitted On",
+    "description": "The exact submitted on."
+   },
+   {
+    "default": "0",
+    "fieldname": "extra_attempts_granted",
+    "fieldtype": "Int",
+    "label": "Extra Attempts Granted",
+    "description": "Additional attempts granted to the learner for this quiz."
+   },
+   {
+    "fieldname": "grant_reason",
+    "fieldtype": "Data",
+    "label": "Grant Reason",
+    "description": "Reason for granting additional attempts."
+   },
+   {
+    "fieldname": "responses",
+    "fieldtype": "Table",
+    "label": "Responses",
+    "options": "LMS Quiz Response",
+    "description": "Child table for LMS Quiz Response."
+   }
+  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],

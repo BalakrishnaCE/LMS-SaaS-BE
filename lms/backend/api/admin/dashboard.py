@@ -138,7 +138,7 @@ def get_metrics_summary():
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_content_summary():
-    trackers = frappe.get_all("LMS Module Tracker", fields=["status", "module", "started_on", "creation"])
+    trackers = frappe.get_all("LMS Module Tracker", fields=["name", "status", "module", "started_on", "creation", "user"])
     
     assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
     assignment_map = {a.module: a for a in assignments}
@@ -152,8 +152,21 @@ def get_learning_content_summary():
     }
     
     for t in trackers:
-        if t.status == "Completed":
-            status_counts["Passed"] += 1
+        if t.status == "Failed":
+            # Tracker explicitly marked Failed — always count as Failed
+            status_counts["Failed"] += 1
+        elif t.status == "Completed":
+            # Check quiz score to split Passed vs Failed
+            score = frappe.db.get_value(
+                "LMS Quiz Submission",
+                {"user": t.user, "enrollment": t.name},
+                "score"
+            )
+            passing_score = frappe.db.get_value("LMS Module", t.module, "certificate_passing_percentage") or 60
+            if score is not None and score < passing_score:
+                status_counts["Failed"] += 1
+            else:
+                status_counts["Passed"] += 1
         else:
             is_overdue = False
             if t.started_on:
@@ -165,23 +178,25 @@ def get_learning_content_summary():
 
             if is_overdue:
                 status_counts["Overdue"] += 1
-            elif t.status == "Failed":
-                status_counts["Failed"] += 1
             elif t.status == "In Progress":
                 status_counts["In Progress"] += 1
             else:
                 status_counts["Not Started"] += 1
                 
     total = sum(status_counts.values())
+    total_modules = frappe.db.count("LMS Module", {"status": "Published"})
     
     results = []
     for k, v in status_counts.items():
         results.append({
             "name": k,
-            "value": int((v / total) * 100) if total > 0 else 0
+            "value": v,  # raw count
         })
         
-    return results
+    return {
+        "items": results,
+        "total": total_modules,  # published modules from LMS Module
+    }
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_content_by_completion():
@@ -195,10 +210,12 @@ def get_learning_content_by_completion():
         "Not Started":        0,
     }
 
+    # Group trackers by module
     module_trackers = {}
     for t in trackers:
         module_trackers.setdefault(t.module, []).append(t)
 
+    # Classify each module by its completion rate
     for module, module_t_list in module_trackers.items():
         total = len(module_t_list)
         if total == 0:
@@ -206,10 +223,11 @@ def get_learning_content_by_completion():
         completed_count = sum(1 for t in module_t_list if t.status == "Completed")
         rate = (completed_count / total) * 100
         if rate >= 80:
-            counts["Highest Completion"] += total
+            counts["Highest Completion"] += 1   # count modules, not tracker rows
         elif rate < 30:
-            counts["Lowest Completion"] += total
+            counts["Lowest Completion"] += 1
 
+    # Count individual tracker records by status
     for t in trackers:
         if t.status == "Completed":
             counts["Completed"] += 1
@@ -218,15 +236,21 @@ def get_learning_content_by_completion():
         else:
             counts["Not Started"] += 1
 
-    total_all = sum(counts.values())
+    # Total from LMS Module published count (source of truth)
+    total_modules = frappe.db.count("LMS Module", {"status": "Published"})
+
+    # Return raw counts — frontend computes percentages
     results = []
     for k, v in counts.items():
         results.append({
             "name": k,
-            "value": int((v / total_all) * 100) if total_all > 0 else 0
+            "value": v,          # raw count, not percentage
         })
 
-    return results
+    return {
+        "items": results,
+        "total": total_modules,  # total number of distinct modules
+    }
 
 @frappe.whitelist(allow_guest=True)
 def get_needs_attention_metrics():
