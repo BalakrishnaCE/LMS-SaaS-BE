@@ -39,13 +39,22 @@ def get_learner_path_detail(path_id):
     )
     
     tracker_doc = None
-    module_progress_map = {}
     if tracker_name:
         tracker_doc = frappe.get_doc("LMS Learning Path Tracker", tracker_name)
-        for progress in tracker_doc.get("module_progress", []):
-            module_progress_map[progress.module] = {
-                "status": progress.status,
-                "score": progress.score
+        
+    # Get Module Trackers directly as the source of truth
+    module_names = [pc.module for pc in path_courses]
+    module_progress_map = {}
+    if module_names:
+        module_trackers = frappe.get_all(
+            "LMS Module Tracker",
+            filters={"user": user, "module": ["in", module_names]},
+            fields=["module", "status", "progress_percentage"]
+        )
+        for mt in module_trackers:
+            module_progress_map[mt.module] = {
+                "status": mt.status,
+                "score": mt.progress_percentage
             }
 
     modules = []
@@ -130,4 +139,62 @@ def get_learner_path_detail(path_id):
             "assessments": 0,
             "certificates": 1 # Assume 1 certificate for now
         }
+    }
+
+@frappe.whitelist()
+def get_learner_paths():
+    """
+    Returns all published Learning Paths for the Learner along with their progress.
+    """
+    user = frappe.session.user
+
+    # Get all published paths
+    paths = frappe.get_all(
+        "LMS Learning Path",
+        filters={"status": "Published"},
+        fields=["name", "path_name", "description", "image", "is_mandatory"]
+    )
+
+    # Get user's module trackers
+    module_trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user},
+        fields=["module", "status"]
+    )
+    module_status_map = {mt.module: mt.status for mt in module_trackers}
+
+    for path in paths:
+        # Get category from child table
+        categories = frappe.get_all(
+            "LMS Module Category",
+            filters={"parent": path.name, "parenttype": "LMS Learning Path"},
+            fields=["category"]
+        )
+        path.category = categories[0].category if categories else "General"
+
+        # Get modules for this path
+        modules = frappe.get_all("LMS Learning Path Course", filters={"parent": path.name}, fields=["module"])
+        path.module_count = len(modules)
+        
+        completed_modules = 0
+        for m in modules:
+            if module_status_map.get(m.module) == "Completed":
+                completed_modules += 1
+        
+        if path.module_count > 0:
+            path.progress_percentage = (completed_modules / path.module_count) * 100
+        else:
+            path.progress_percentage = 0
+            
+        if path.progress_percentage == 100:
+            path.learner_status = "Completed"
+        elif path.progress_percentage > 0:
+            path.learner_status = "In Progress"
+        else:
+            path.learner_status = "Not Started"
+            
+        path.id = path.name
+
+    return {
+        "paths": paths
     }

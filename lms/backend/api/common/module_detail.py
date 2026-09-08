@@ -382,6 +382,43 @@ def get_all_assigned_modules_for_learner(user):
             if row.module not in assigned_modules:
                 assigned_modules[row.module] = row
 
+    # 4. Learning Path Assignments - Manual
+    lp_manual_rows = frappe.db.sql("""
+        SELECT lpc.module, lpa.duration, lpa.is_mandatory, lpa.creation
+        FROM `tabLMS Learning Path Assignment` lpa
+        INNER JOIN `tabLMS LP Assignment User` au ON au.parent = lpa.name
+        INNER JOIN `tabLMS Learning Path Course` lpc ON lpc.parent = lpa.learning_path
+        WHERE au.user = %s AND lpa.assignment_type = 'Manual'
+    """, user, as_dict=True)
+    for row in lp_manual_rows:
+        if row.module not in assigned_modules:
+            assigned_modules[row.module] = row
+
+    # 5. Learning Path Assignments - Team
+    lp_team_rows = frappe.db.sql("""
+        SELECT lpc.module, lpa.duration, lpa.is_mandatory, lpa.creation
+        FROM `tabLMS Learning Path Assignment` lpa
+        INNER JOIN `tabLMS Assignment Team` at ON at.parent = lpa.name
+        INNER JOIN `tabLMS Team Member` tm ON tm.parent = at.team
+        INNER JOIN `tabLMS Learning Path Course` lpc ON lpc.parent = lpa.learning_path
+        WHERE tm.user = %s AND lpa.assignment_type = 'Team'
+    """, user, as_dict=True)
+    for row in lp_team_rows:
+        if row.module not in assigned_modules:
+            assigned_modules[row.module] = row
+
+    # 6. Learning Path Assignments - Everyone
+    if qualifies_for_everyone:
+        lp_everyone_rows = frappe.db.sql("""
+            SELECT lpc.module, lpa.duration, lpa.is_mandatory, lpa.creation
+            FROM `tabLMS Learning Path Assignment` lpa
+            INNER JOIN `tabLMS Learning Path Course` lpc ON lpc.parent = lpa.learning_path
+            WHERE lpa.assignment_type = 'Everyone'
+        """, as_dict=True)
+        for row in lp_everyone_rows:
+            if row.module not in assigned_modules:
+                assigned_modules[row.module] = row
+
     published_modules = set([
         m.name for m in frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name"])
     ])
