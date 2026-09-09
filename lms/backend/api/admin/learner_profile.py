@@ -186,7 +186,7 @@ def get_learner_kpis():
 
 
 @frappe.whitelist(allow_guest=True)
-def get_learners(search="", limit=10, status="all", risk="all", offset=0):
+def get_learners(search="", limit=10, status="all", risk="all", department="all", designation="all", offset=0):
     try:
         limit = int(limit)
         offset = int(offset)
@@ -254,16 +254,34 @@ def get_learners(search="", limit=10, status="all", risk="all", offset=0):
         }
         filter_risk = risk.lower()
         if filter_risk in risk_map:
-            results = [item for item in results if item["risk"].lower() in risk_map[filter_risk]]
+            target_risks = risk_map[filter_risk]
+            results = [r for r in results if r["risk"].lower() in target_risks]
+
+    # Filter by department and designation
+    if department and department.lower() != "all":
+        results = [r for r in results if r["department"] and department.lower() in r["department"].lower()]
+        
+    if designation and designation.lower() != "all":
+        results = [r for r in results if r["designation"] and designation.lower() == r["designation"].lower()]
+        
+    # Fetch all possible departments (Teams) and designations from the database
+    teams = frappe.get_all("LMS Team", pluck="name", ignore_permissions=True)
+    all_departments = set(teams)
+    
+    settings = frappe.get_all("LMS User Settings", fields=["designation"], distinct=1, ignore_permissions=True)
+    all_designations = set(s.designation for s in settings if s.designation)
 
     total = len(results)
+    
     paginated = results[offset:offset+limit]
 
     return {
         "learners": paginated,
         "total": total,
+        "offset": offset,
         "limit": limit,
-        "offset": offset
+        "departments": sorted(list(all_departments)),
+        "designations": sorted(list(all_designations))
     }
 
 

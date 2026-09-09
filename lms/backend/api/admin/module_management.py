@@ -558,7 +558,7 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
 
 
 @frappe.whitelist(allow_guest=False)
-def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, slides_json=None, content_idx=0):
+def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, slides_json=None, duration=None, content_idx=0):
     if not chapter_name:
         frappe.throw("Chapter Name is required")
         
@@ -584,7 +584,12 @@ def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_u
         content_doc.slides_json = slides_json
         if hasattr(content_doc, "source_type"):
             content_doc.source_type = "Native"
-        
+    if duration is not None and hasattr(content_doc, "duration"):
+        try:
+            content_doc.duration = float(duration)
+        except (ValueError, TypeError):
+            pass
+            
     content_doc.save(ignore_permissions=True)
     return {"status": "success"}
 
