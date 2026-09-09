@@ -15,7 +15,11 @@
   "score",
   "issued_on",
   "certificate_pdf",
-  "is_valid"
+  "is_valid",
+  "revocation_reason",
+  "custom_revocation_reason",
+  "revoked_by",
+  "revoked_on"
  ],
  "fields": [
   {
@@ -87,6 +91,27 @@
    "fieldtype": "Check",
    "label": "Is Valid",
    "description": "Admin can uncheck to revoke a certificate."
+  },
+  {
+   "fieldname": "revocation_reason",
+   "fieldtype": "Data",
+   "label": "Revocation Reason"
+  },
+  {
+   "fieldname": "custom_revocation_reason",
+   "fieldtype": "Text",
+   "label": "Custom Revocation Reason"
+  },
+  {
+   "fieldname": "revoked_by",
+   "fieldtype": "Link",
+   "label": "Revoked By",
+   "options": "User"
+  },
+  {
+   "fieldname": "revoked_on",
+   "fieldtype": "Datetime",
+   "label": "Revoked On"
   }
  ],
  "grid_page_length": 50,

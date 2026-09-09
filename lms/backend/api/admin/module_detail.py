@@ -96,17 +96,19 @@ def get_assessment_analytics(module_id):
     sub_names = [s.name for s in submissions]
     responses = frappe.get_all("LMS Quiz Response", 
         filters={"parent": ["in", sub_names]},
-        fields=["question", "is_correct"]
+        fields=["question", "is_correct", "selected_option"]
     )
     
     question_stats = {}
     for r in responses:
         q = r.question
         if q not in question_stats:
-            question_stats[q] = {"total": 0, "correct": 0}
+            question_stats[q] = {"total": 0, "correct": 0, "skipped": 0}
         question_stats[q]["total"] += 1
         if r.is_correct:
             question_stats[q]["correct"] += 1
+        elif not r.selected_option:
+            question_stats[q]["skipped"] += 1
             
     analytics = []
     most_missed = None
@@ -118,9 +120,15 @@ def get_assessment_analytics(module_id):
             fields=["name", "question_text", "question_type"]
         )
         
+        total_subs = len(submissions)
         for q in questions:
-            stats = question_stats.get(str(q.name), {"total": 0, "correct": 0})
+            stats = question_stats.get(str(q.name), {"total": 0, "correct": 0, "skipped": 0})
+            
+            missing_rows = max(0, total_subs - stats["total"])
+            total_skipped = missing_rows + stats.get("skipped", 0)
+            
             pass_pct = round((stats["correct"] / stats["total"]) * 100) if stats["total"] > 0 else 0
+            skipped_rate = round((total_skipped / total_subs) * 100) if total_subs > 0 else 0
             miss_rate = 100 - pass_pct
             
             q_type_label = "Multiple Choice"
@@ -148,6 +156,7 @@ def get_assessment_analytics(module_id):
                 "question": raw_text,
                 "type": q_type_label,
                 "passRate": pass_pct,
+                "skippedRate": skipped_rate,
                 "isMostMissed": False
             })
             

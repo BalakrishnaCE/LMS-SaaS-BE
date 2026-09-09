@@ -237,64 +237,77 @@ def get_learner_summary(timeframe="month"):
 @frappe.whitelist()
 def get_continue_learning():
     """
-    Returns the best module to resume for the learner.
+    Returns the best module or path to resume for the learner.
     Priority:
-      1. Most recently modified In Progress module (never Completed)
-      2. First assigned module that is Not Started yet (no tracker at all)
-    Completed modules are never shown.
+      1. Most progressed In Progress module or path
+      2. First assigned module or path that is Not Started yet
     """
     user = frappe.session.user
 
-    # Priority 1: most recently modified In Progress module
+    # Priority 1: In Progress item with highest progress percentage
     tracker = frappe.db.sql("""
-        SELECT t.module, t.progress_percentage, t.modified
+        SELECT 'Module' as type, t.module as id, t.progress_percentage, t.modified
         FROM `tabLMS Module Tracker` t
         WHERE t.user = %s AND t.status = 'In Progress'
-        ORDER BY t.modified DESC
+        UNION ALL
+        SELECT 'Path' as type, t.learning_path as id, t.progress_percentage, t.modified
+        FROM `tabLMS Learning Path Tracker` t
+        WHERE t.user = %s AND t.status = 'In Progress'
+        ORDER BY progress_percentage DESC, modified DESC
         LIMIT 1
-    """, user, as_dict=True)
+    """, (user, user), as_dict=True)
 
     if tracker:
         t = tracker[0]
     else:
-        # Priority 2: first assigned module the user hasn't started at all
+        # Priority 2: first assigned module or path the user hasn't started at all
         not_started = frappe.db.sql("""
-            SELECT ma.module
+            SELECT 'Module' as type, ma.module as id, ma.creation
             FROM `tabLMS Module Assignment` ma
             INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
             LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
             WHERE au.user = %s
               AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
-            ORDER BY ma.creation ASC
+            UNION ALL
+            SELECT 'Path' as type, lp.name as id, lp.creation
+            FROM `tabLMS Learning Path` lp
+            LEFT JOIN `tabLMS Learning Path Tracker` t ON t.learning_path = lp.name AND t.user = %s
+            WHERE lp.status = 'Published'
+              AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
+            ORDER BY creation ASC
             LIMIT 1
-        """, (user, user), as_dict=True)
+        """, (user, user, user), as_dict=True)
 
         if not not_started:
             return None
 
-        t = frappe._dict({"module": not_started[0].module, "progress_percentage": 0})
+        t = frappe._dict({"type": not_started[0].type, "id": not_started[0].id, "progress_percentage": 0})
 
-
-    module_doc = frappe.get_value("LMS Module", t.module, ["module_name", "image"], as_dict=True)
-    if not module_doc:
-        return None
-
-    # Count lessons from the child link table
-    total_lessons = frappe.db.count("LMS Module Lesson Child", {"parent": t.module})
-
-    # Find which module number this is in the assigned sequence
-    assigned = get_all_assigned_modules_for_learner(user)
-    assigned.sort(key=lambda x: x.get("creation") or "", reverse=False)
-    
-    module_index = next((i + 1 for i, a in enumerate(assigned) if a["module"] == t.module), 1)
-    total_modules = len(assigned) or 1
-
-    return {
-        "moduleId": t.module,
-        "moduleName": module_doc.module_name,
-        "progress": t.progress_percentage or 0,
-        "moduleIndex": module_index,
-        "totalModules": total_modules,
-        "totalLessons": total_lessons,
-        "thumbnail": module_doc.image,
-    }
+    if t.type == 'Module':
+        module_doc = frappe.get_value("LMS Module", t.id, ["module_name", "image"], as_dict=True)
+        if not module_doc:
+            return None
+        
+        return {
+            "moduleId": t.id,
+            "moduleName": module_doc.module_name,
+            "moduleIndex": 1,
+            "totalModules": 1,
+            "progress": int(t.progress_percentage or 0),
+            "thumbnail": module_doc.image,
+            "type": "Module"
+        }
+    else:
+        path_doc = frappe.get_value("LMS Learning Path", t.id, ["path_name", "image"], as_dict=True)
+        if not path_doc:
+            return None
+            
+        return {
+            "moduleId": t.id,  # Keeping the key as moduleId for frontend compatibility for now
+            "moduleName": path_doc.path_name,
+            "moduleIndex": 1,
+            "totalModules": 1,
+            "progress": int(t.progress_percentage or 0),
+            "thumbnail": path_doc.image,
+            "type": "Path"
+        }

@@ -730,6 +730,12 @@ def reissue_certificates(certificate_ids):
         cert = frappe.get_doc("LMS Certificate", cert_id)
         # Update the issue date to today
         cert.issued_on = frappe.utils.nowdate()
+        # Ensure the certificate is valid again if it was revoked
+        cert.is_valid = 1
+        cert.revocation_reason = None
+        cert.custom_revocation_reason = None
+        cert.revoked_by = None
+        cert.revoked_on = None
         # Reset the generated PDF so it regenerates on next download
         cert.certificate_pdf = None
         cert.flags.ignore_links = True

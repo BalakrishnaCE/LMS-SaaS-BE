@@ -1,98 +1,129 @@
 import frappe
-from frappe.utils import today, add_days, getdate, date_diff
+from frappe.utils import today, add_days, getdate, date_diff, now_datetime
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _timeframe_start(filter_mode):
+    """Return the start date for the selected filter window."""
+    from frappe.utils import getdate, now_datetime, add_days, add_months
+    today_dt = getdate(now_datetime())
+
+    if filter_mode == "last_7_days":
+        return add_days(today_dt, -7)
+    elif filter_mode == "last_30_days":
+        return add_days(today_dt, -30)
+    elif filter_mode == "last_3_months":
+        return add_months(today_dt, -3)
+    elif filter_mode == "this_year":
+        # Calendar year — Jan 1 of the current year
+        return getdate(f"{today_dt.year}-01-01")
+    # fallback: all time
+    return None
+
+
+def _empty_stats():
+    return [
+        {"label": "Passed",      "value": "0%"},
+        {"label": "Failed",      "value": "0%"},
+        {"label": "Overdue",     "value": "0%"},
+        {"label": "In Progress", "value": "0%"},
+        {"label": "Not Started", "value": "0%"},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Main API
+# ---------------------------------------------------------------------------
 
 @frappe.whitelist()
-def get_learner_progress_breakdown(filter_mode="status"):
+def get_learner_progress_breakdown(filter_mode="last_30_days"):
     """
-    Returns progress statistics broken down by status or completion for the learner.
+    Returns progress statistics broken down by status, scoped to a time window.
+    filter_mode: last_7_days | last_30_days | last_3_months | this_year
     """
     user = frappe.session.user
+    today_dt = getdate(today())
 
+    # ── Determine time window ──────────────────────────────────────────────────
+    window_start = _timeframe_start(filter_mode)
+
+    # ── All modules assigned to this learner ───────────────────────────────────
     from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
     assigned_rows = get_all_assigned_modules_for_learner(user)
-    
     assigned_module_names = [a["module"] for a in assigned_rows]
-    total = len(assigned_module_names)
 
-    if not total:
-        if filter_mode == "completion":
-            return {
-                "overallProgress": 0,
-                "stats": [
-                    {"label": "Highest Completion", "value": "0%"},
-                    {"label": "Lowest Completion", "value": "0%"},
-                    {"label": "Completed", "value": "0%"},
-                    {"label": "In Progress", "value": "0%"},
-                    {"label": "Not Started", "value": "0%"},
-                ]
-            }
-        else:
-            return {
-                "overallProgress": 0,
-                "stats": [
-                    {"label": "Passed", "value": "0%"},
-                    {"label": "Failed", "value": "0%"},
-                    {"label": "Overdue", "value": "0%"},
-                    {"label": "In Progress", "value": "0%"},
-                    {"label": "Not Started", "value": "0%"},
-                ]
-            }
+    if not assigned_module_names:
+        return {"overallProgress": 0, "stats": _empty_stats()}
 
-    trackers = frappe.get_all(
+    # ── Fetch module trackers (include modified so we can time-filter) ─────────
+    all_trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user, "module": ["in", assigned_module_names]},
-        fields=["name", "module", "status", "progress_percentage", "started_on"]
+        fields=["name", "module", "status", "progress_percentage", "started_on", "creation", "modified"]
     )
-    tracker_map = {t.module: t for t in trackers}
-    assignment_map = {a.module: a for a in assigned_rows}
 
-    today_dt = getdate(today())
-    counts = {
-        "Passed": 0, "Failed": 0, "Overdue": 0, "In Progress": 0, "Not Started": 0,
-        "Completed": 0, "Highest Completion": 0, "Lowest Completion": 0
-    }
+    # ── Fetch learning path trackers for the user ──────────────────────────────
+    try:
+        lp_trackers = frappe.get_all(
+            "LMS Learning Path Tracker",
+            filters={"user": user},
+            fields=["name", "learning_path", "status", "progress_percentage", "started_on", "creation", "modified"]
+        )
+    except Exception:
+        lp_trackers = []
+
+    # ── Assignment lookup maps ─────────────────────────────────────────────────
+    assignment_map = {a["module"]: a for a in assigned_rows}
+
+    # ── Helper: is a tracker active in the selected window? ───────────────────
+    def in_window(tracker):
+        if window_start is None:
+            return True
+        created  = getdate(tracker.creation)  if tracker.creation  else None
+        modified = getdate(tracker.modified)  if tracker.modified  else None
+        return (created  is not None and created  >= window_start) or \
+               (modified is not None and modified >= window_start)
+
+    # ── Score module-level trackers that fall in the window ───────────────────
+    tracker_map = {t.module: t for t in all_trackers}
+    counts = {"Passed": 0, "Failed": 0, "Overdue": 0, "In Progress": 0, "Not Started": 0}
+    progress_pcts = []   # for overall progress
 
     for module_name in assigned_module_names:
         t = tracker_map.get(module_name)
-        
-        a = None
-        for row in assigned_rows:
-            if row["module"] == module_name:
-                a = row
-                break
 
+        # No tracker → Not Started — include always (not started = no activity ever)
         if not t:
             counts["Not Started"] += 1
-            counts["Lowest Completion"] += 1 # Not started is 0% progress
+            progress_pcts.append(0)
             continue
 
-        status = t.status
+        # Skip if outside the window
+        if not in_window(t):
+            continue
+
+        a   = assignment_map.get(module_name, {})
+        status   = t.status
         progress = t.progress_percentage or 0
+        progress_pcts.append(100 if status == "Completed" else progress)
 
-        if progress >= 80:
-            counts["Highest Completion"] += 1
-        elif progress < 30:
-            counts["Lowest Completion"] += 1
-
-        if status == "Completed":
-            counts["Completed"] += 1
-            # Determine pass/fail from assessment score if available
+        if status == "Failed":
+            counts["Failed"] += 1
+        elif status == "Completed":
+            # Split Passed vs Failed via quiz score
             score = frappe.db.get_value(
                 "LMS Quiz Submission",
                 {"user": user, "enrollment": t.name},
                 "score"
             )
             passing_score = frappe.db.get_value("LMS Module", module_name, "certificate_passing_percentage") or 60
-            if score is not None:
-                counts["Passed" if score >= passing_score else "Failed"] += 1
+            if score is not None and score < passing_score:
+                counts["Failed"] += 1
             else:
                 counts["Passed"] += 1
-        elif status == "Failed":
-            # Tracker is explicitly marked as Failed (e.g. quiz failed)
-            counts["Failed"] += 1
-            counts["Completed"] += 1  # count as attempted/completed for completion-mode
         elif status == "In Progress":
-            # Check if overdue
             duration = a.get("duration") if a else None
             if duration and t.started_on:
                 due_date = getdate(add_days(getdate(t.started_on), int(duration)))
@@ -105,34 +136,44 @@ def get_learner_progress_breakdown(filter_mode="status"):
         else:
             counts["Not Started"] += 1
 
+    # ── Also include learning-path trackers active in window ───────────────────
+    for t in lp_trackers:
+        if not in_window(t):
+            continue
+        status   = t.status
+        progress = t.progress_percentage or 0
+        progress_pcts.append(100 if status == "Completed" else progress)
+
+        if status == "Failed":
+            counts["Failed"] += 1
+        elif status == "Completed":
+            counts["Passed"] += 1
+        elif status == "In Progress":
+            counts["In Progress"] += 1
+        else:
+            counts["Not Started"] += 1
+
+    # ── Compute overall progress percentage ────────────────────────────────────
+    total_items = len(progress_pcts)
+    overall_progress = round(sum(progress_pcts) / total_items) if total_items else 0
+
+    # Denominator for percentage bars = all counted items
+    total_counted = sum(counts.values())
+
     def pct(n):
-        return f"{round((n / total) * 100)}%" if total else "0%"
+        return f"{round((n / total_counted) * 100)}%" if total_counted else "0%"
 
-    total_progress_percentage = sum((100 if t.status == 'Completed' else (t.progress_percentage or 0)) for t in trackers)
-    overall_progress = round(total_progress_percentage / total) if total else 0
+    return {
+        "overallProgress": overall_progress,
+        "stats": [
+            {"label": "Passed",      "value": pct(counts["Passed"])},
+            {"label": "Failed",      "value": pct(counts["Failed"])},
+            {"label": "Overdue",     "value": pct(counts["Overdue"])},
+            {"label": "In Progress", "value": pct(counts["In Progress"])},
+            {"label": "Not Started", "value": pct(counts["Not Started"])},
+        ]
+    }
 
-    if filter_mode == "completion":
-        return {
-            "overallProgress": overall_progress,
-            "stats": [
-                {"label": "Highest Completion", "value": pct(counts["Highest Completion"])},
-                {"label": "Lowest Completion", "value": pct(counts["Lowest Completion"])},
-                {"label": "Completed", "value": pct(counts["Completed"])},
-                {"label": "In Progress", "value": pct(counts["In Progress"] + counts["Overdue"])},
-                {"label": "Not Started", "value": pct(counts["Not Started"])},
-            ]
-        }
-    else:
-        return {
-            "overallProgress": overall_progress,
-            "stats": [
-                {"label": "Passed", "value": pct(counts["Passed"])},
-                {"label": "Failed", "value": pct(counts["Failed"])},
-                {"label": "Overdue", "value": pct(counts["Overdue"])},
-                {"label": "In Progress", "value": pct(counts["In Progress"])},
-                {"label": "Not Started", "value": pct(counts["Not Started"])},
-            ]
-        }
 
 @frappe.whitelist()
 def get_learner_deadlines():
@@ -167,7 +208,7 @@ def get_learner_deadlines():
         due_date = getdate(add_days(start, int(duration)))
         days_left = date_diff(due_date, today_dt)
 
-        if days_left < -30 or days_left > 30:
+        if days_left < 0 or days_left > 30:
             continue
 
         module_name = frappe.get_value("LMS Module", t.module, "module_name") or t.module
@@ -181,6 +222,7 @@ def get_learner_deadlines():
             "daysLeft": f"{abs(days_left)} days {'overdue' if days_left < 0 else 'left'}",
             "isOverdue": days_left < 0,
             "isUrgent": 0 <= days_left <= 3,
+            "daysLeftNum": days_left,
         })
 
     # ── Learning Path Trackers ─────────────────────────────────────────────────
@@ -203,7 +245,7 @@ def get_learner_deadlines():
             due_date = getdate(add_days(start, int(duration)))
             days_left = date_diff(due_date, today_dt)
 
-            if days_left < -30 or days_left > 30:
+            if days_left < 0 or days_left > 30:
                 continue
 
             path_name = frappe.get_value("LMS Learning Path", t.learning_path, "path_name") or t.learning_path
@@ -217,12 +259,13 @@ def get_learner_deadlines():
                 "daysLeft": f"{abs(days_left)} days {'overdue' if days_left < 0 else 'left'}",
                 "isOverdue": days_left < 0,
                 "isUrgent": 0 <= days_left <= 3,
+                "daysLeftNum": days_left,
             })
     except Exception:
         pass
 
-    # Sort: overdue first, then soonest deadline
-    results.sort(key=lambda x: (not x["isOverdue"], x["daysLeft"]))
+    # Sort: nearest deadline first (daysLeftNum ascending)
+    results.sort(key=lambda x: x.get("daysLeftNum", 0))
     return results[:5]
 
 @frappe.whitelist()

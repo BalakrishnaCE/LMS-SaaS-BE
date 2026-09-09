@@ -51,11 +51,21 @@ def get_learner_modules(filter_type="all"):
         # Days left calculation
         days_left = None
         is_overdue = False
-        if a.duration:
-            start = getdate(tracker.started_on) if tracker and tracker.started_on else today_dt
+        if a.duration and tracker and tracker.started_on:
+            start = getdate(tracker.started_on)
             due_date = getdate(add_days(start, int(a.duration)))
             days_left = date_diff(due_date, today_dt)
             is_overdue = days_left < 0
+
+        # Calculate completedCount and totalCount for module (completed lessons vs total lessons/items)
+        total_items = 0
+        completed_items = 0
+        
+        # total_items could be derived from curriculum chapters/contents. 
+        # But we can approximate by number of child contents:
+        total_items = frappe.db.count("LMS Module Lesson Child", {"parent": a.module})
+        if tracker:
+            completed_items = frappe.db.sql("SELECT count(name) FROM `tabLMS Content Progress` WHERE parent = %s AND status = 'Completed'", tracker.name)[0][0]
 
         # Calculate estimated duration from curriculum
         est_hours = get_estimated_hours_from_curriculum(a.module)
@@ -77,12 +87,108 @@ def get_learner_modules(filter_type="all"):
             "daysLeft": days_left,
             "isOverdue": is_overdue,
             "completionRate": progress,
+            "completedCount": completed_items,
+            "totalCount": total_items,
             "status": (tracker.status if tracker else "Not Started"),
             "isRequired": bool(a.is_mandatory),
             "image": module_doc.image,
+            "creation": a.get("creation", "")
         })
 
+    # Now add Learning Paths
+    # We will fetch all published paths for now (as get_learner_paths does)
+    paths = frappe.get_all(
+        "LMS Learning Path",
+        filters={"status": "Published"},
+        fields=["name", "path_name", "description", "image", "is_mandatory", "creation"]
+    )
+    
+    if paths:
+        module_trackers = frappe.get_all(
+            "LMS Module Tracker",
+            filters={"user": user},
+            fields=["module", "status"]
+        )
+        module_status_map = {mt.module: mt.status for mt in module_trackers}
+        
+        for path in paths:
+            categories = frappe.get_all(
+                "LMS Module Category",
+                filters={"parent": path.name, "parenttype": "LMS Learning Path"},
+                fields=["category"]
+            )
+            category = categories[0].category if categories else "General"
+            
+            path_modules = frappe.get_all("LMS Learning Path Course", filters={"parent": path.name}, fields=["module"])
+            module_count = len(path_modules)
+            
+            completed_modules = 0
+            total_duration = 0
+            for m in path_modules:
+                if module_status_map.get(m.module) == "Completed":
+                    completed_modules += 1
+                mdur = frappe.get_value("LMS Module", m.module, "duration")
+                if mdur:
+                    total_duration += int(mdur)
+            
+            path_progress = (completed_modules / module_count * 100) if module_count > 0 else 0
+            
+            path_tracker = frappe.get_value(
+                "LMS Learning Path Tracker",
+                {"user": user, "learning_path": path.name},
+                ["status", "progress_percentage", "started_on"],
+                as_dict=True
+            )
+            
+            if path_tracker and path_tracker.progress_percentage is not None:
+                path_progress = path_tracker.progress_percentage
+                
+            status = path_tracker.status if path_tracker else ("Completed" if path_progress == 100 else ("In Progress" if path_progress > 0 else "Not Started"))
+
+            hours = total_duration // 60
+            mins = total_duration % 60
+            path_dur_str = f"{hours} hr" if hours > 0 else f"{mins} min"
+            if hours > 0 and mins > 0:
+                path_dur_str = f"{hours} hr {mins} min"
+                
+            results.append({
+                "id": path.name,
+                "title": path.path_name,
+                "category": category,
+                "type": "Path",
+                "modulesCount": module_count,
+                "duration": path_dur_str,
+                "daysLeft": None,
+                "isOverdue": False,
+                "completionRate": path_progress,
+                "completedCount": completed_modules,
+                "totalCount": module_count,
+                "status": status,
+                "isRequired": bool(path.is_mandatory),
+                "image": path.image,
+                "creation": path.creation
+            })
+            
+    # Filter for paths based on filter_type
+    if filter_type == "mandatory":
+        results = [r for r in results if r["isRequired"]]
+    elif filter_type == "optional":
+        results = [r for r in results if not r["isRequired"]]
+
+    # Sort results:
+    # 1. Started modules ("Continue Learning") first
+    # 2. Highest completionRate first
+    # 3. Creation date (newest first)
+    def sort_key(x):
+        is_started = 1 if (x.get("status") and x.get("status").lower() != "not started") else 0
+        progress = x.get("completionRate") or 0
+        creation = x.get("creation") or ""
+        return (is_started, progress, creation)
+        
+    results.sort(key=sort_key, reverse=True)
+
     return results
+
 
 @frappe.whitelist()
 def get_recommended_modules():

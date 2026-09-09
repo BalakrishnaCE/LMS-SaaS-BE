@@ -277,33 +277,59 @@ def get_question_detail(question_id):
         "type": doc.question_type,
         "options": options
     }
-
-
 @frappe.whitelist(allow_guest=False)
 def get_module_certificates(module_id):
-    if not module_id:
-        frappe.throw("Module ID is required")
-        
     module = frappe.get_doc("LMS Module", module_id)
+    validity_days = module.certificate_validity_period or 0
     
+    # Get all completed trackers
+    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_id, "status": "Completed"}, fields=["name", "user", "total_score"])
+    
+    # Get all certificates
     certs = frappe.get_all(
         "LMS Certificate",
         filters={"module": module_id},
-        fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf"]
+        fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on"]
     )
-    
-    validity_days = module.certificate_validity_period or 0
+    cert_map = {c.user: c for c in certs}
     
     certificate_data = []
+    
+    # First, process all existing certificates
     for cert in certs:
         try:
             user_doc = frappe.get_doc("User", cert.user)
-            status = "Issued" if cert.is_valid else "Revoked"
-            
             expiry_date = None
             if cert.issued_on and validity_days > 0:
                 expiry_date = frappe.utils.add_days(cert.issued_on, validity_days)
+
+            # Determine dynamic status
+            status = "Issued" if cert.is_valid else "Revoked"
             
+            if status == "Issued":
+                if not cert.issued_on:
+                    status = "Pending"
+                elif expiry_date and frappe.utils.getdate(frappe.utils.nowdate()) > frappe.utils.getdate(expiry_date):
+                    status = "Expired"
+
+            # Check if there is a matching tracker to get the score
+            tracker_records = [t for t in trackers if t.user == cert.user]
+            score = "--"
+            if tracker_records and tracker_records[0].total_score is not None:
+                score = f"{tracker_records[0].total_score}"
+            elif not tracker_records:
+                # Fallback: get tracker if not completed
+                fallback_tr = frappe.get_all("LMS Module Tracker", filters={"module": module_id, "user": cert.user}, fields=["total_score"])
+                if fallback_tr and fallback_tr[0].total_score is not None:
+                    score = f"{fallback_tr[0].total_score}"
+
+            revoked_by_name = None
+            if cert.revoked_by:
+                try:
+                    revoked_by_name = frappe.db.get_value("User", cert.revoked_by, "full_name") or cert.revoked_by
+                except Exception:
+                    revoked_by_name = cert.revoked_by
+
             certificate_data.append({
                 "id": cert.name,
                 "certificate_id": cert.certificate_id or cert.name,
@@ -312,11 +338,40 @@ def get_module_certificates(module_id):
                 "issueDate": str(cert.issued_on) if cert.issued_on else None,
                 "expiryDate": str(expiry_date) if expiry_date else None,
                 "status": status,
-                "certificate_pdf": cert.certificate_pdf or None
+                "score": score,
+                "certificate_pdf": cert.certificate_pdf or None,
+                "revocationReason": cert.revocation_reason,
+                "customRevocationReason": cert.custom_revocation_reason,
+                "revokedBy": revoked_by_name,
+                "revokedOn": str(cert.revoked_on) if cert.revoked_on else None
             })
         except Exception:
             continue
             
+    # Now add "Pending" for trackers without certificates
+    for tracker in trackers:
+        if tracker.user not in cert_map:
+            try:
+                user_doc = frappe.get_doc("User", tracker.user)
+                score = f"{tracker.total_score}%" if tracker.total_score is not None else "--"
+                certificate_data.append({
+                    "id": f"pending-{tracker.name}",
+                    "certificate_id": "-",
+                    "learnerName": user_doc.full_name,
+                    "email": user_doc.email,
+                    "issueDate": None,
+                    "expiryDate": None,
+                    "status": "Pending",
+                    "score": score,
+                    "certificate_pdf": None,
+                    "revocationReason": None,
+                    "customRevocationReason": None,
+                    "revokedBy": None,
+                    "revokedOn": None
+                })
+            except Exception:
+                continue
+
     template = None
     if module.enable_certificate and module.certificate_template:
         try:
@@ -429,3 +484,23 @@ def get_all_assigned_modules_for_learner(user):
             final_list.append(data)
             
     return final_list
+
+
+@frappe.whitelist()
+def revoke_certificates(certificate_ids, reason=None, custom_reason=None):
+    import json
+    if isinstance(certificate_ids, str):
+        certificate_ids = json.loads(certificate_ids)
+        
+    for cert_id in certificate_ids:
+        cert = frappe.get_doc("LMS Certificate", cert_id)
+        cert.is_valid = 0
+        cert.revocation_reason = reason
+        cert.custom_revocation_reason = custom_reason
+        cert.revoked_by = frappe.session.user
+        cert.revoked_on = frappe.utils.now_datetime()
+        cert.flags.ignore_links = True
+        cert.save(ignore_permissions=True)
+        
+    frappe.db.commit()
+    return True
