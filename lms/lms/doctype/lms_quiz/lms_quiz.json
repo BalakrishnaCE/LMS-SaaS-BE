@@ -16,7 +16,17 @@
   "is_passing_required",
   "passing_percentage",
   "instructions",
-  "max_attempts"
+  "max_attempts",
+  "allow_retakes",
+  "randomize_options",
+  "show_results",
+  "show_pass_fail",
+  "show_final_score",
+  "show_correct_answers",
+  "show_explanations",
+  "allow_unanswered",
+  "evaluation_method",
+  "points_per_question"
  ],
  "fields": [
   {
@@ -83,15 +93,78 @@
    "fieldname": "max_attempts",
    "fieldtype": "Int",
    "label": "Max Attempts"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_retakes",
+   "fieldtype": "Check",
+   "label": "Allow Retakes"
+  },
+  {
+   "default": "0",
+   "fieldname": "randomize_options",
+   "fieldtype": "Check",
+   "label": "Randomize Options"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_results",
+   "fieldtype": "Check",
+   "label": "Show Results"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_pass_fail",
+   "fieldtype": "Check",
+   "label": "Show Pass/Fail"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_final_score",
+   "fieldtype": "Check",
+   "label": "Show Final Score"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_correct_answers",
+   "fieldtype": "Check",
+   "label": "Show Correct Answers"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_explanations",
+   "fieldtype": "Check",
+   "label": "Show Explanations"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_unanswered",
+   "fieldtype": "Check",
+   "label": "Allow Unanswered"
+  },
+  {
+   "default": "AI-assisted evaluation",
+   "fieldname": "evaluation_method",
+   "fieldtype": "Select",
+   "label": "Evaluation Method",
+   "options": "AI-assisted evaluation\nManual review"
+  },
+  {
+   "default": "0",
+   "description": "Each question carries the same number of points",
+   "fieldname": "points_per_question",
+   "fieldtype": "Float",
+   "label": "Points per question"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-11 13:29:35.757119",
+ "modified": "2026-09-07 15:31:45.760321",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Quiz",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {

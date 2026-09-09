@@ -7,30 +7,38 @@
  "engine": "InnoDB",
  "field_order": [
   "option_text",
-  "is_correct"
+  "is_correct",
+  "score"
  ],
  "fields": [
   {
+   "description": "Enter the option text.",
    "fieldname": "option_text",
    "fieldtype": "Text",
    "in_list_view": 1,
    "label": "Option Text",
-   "reqd": 1,
-   "description": "Enter the option text."
+   "reqd": 1
   },
   {
    "default": "0",
+   "description": "Toggle to enable or disable is correct.",
    "fieldname": "is_correct",
    "fieldtype": "Check",
-   "label": "Is Correct",
-   "description": "Toggle to enable or disable is correct."
+   "label": "Is Correct"
+  },
+  {
+   "default": "0",
+   "description": "Score for this criterion (used in Scenario Based questions)",
+   "fieldname": "score",
+   "fieldtype": "Float",
+   "label": "Score"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-07 15:42:13.183089",
+ "modified": "2026-09-07 15:17:25.284969",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Quiz Option",

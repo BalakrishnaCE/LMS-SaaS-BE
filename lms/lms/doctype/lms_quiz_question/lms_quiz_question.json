@@ -15,36 +15,36 @@
  ],
  "fields": [
   {
+   "description": "Enter the question text.",
    "fieldname": "question_text",
    "fieldtype": "Text Editor",
    "in_list_view": 1,
    "label": "Question Text",
-   "reqd": 1,
-   "description": "Enter the question text."
+   "reqd": 1
   },
   {
+   "description": "Select the question type from the dropdown options.",
    "fieldname": "question_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Question Type",
-   "options": "Multiple Choice\nSingle Choice\nTrue/False",
-   "reqd": 1,
-   "description": "Select the question type from the dropdown options."
+   "options": "Multiple Choice\nSingle Choice\nTrue/False\nScenario Based\nFill in the Blank",
+   "reqd": 1
   },
   {
+   "description": "Numeric value for score.",
    "fieldname": "score",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Score",
-   "reqd": 1,
-   "description": "Numeric value for score."
+   "reqd": 1
   },
   {
+   "description": "Child table for LMS Quiz Option.",
    "fieldname": "options",
    "fieldtype": "Table",
    "label": "Options",
-   "options": "LMS Quiz Option",
-   "description": "Child table for LMS Quiz Option."
+   "options": "LMS Quiz Option"
   },
   {
    "default": "1",
@@ -53,16 +53,16 @@
    "label": "Is Mandatory"
   },
   {
+   "description": "Explanation or rationale for the answer.",
    "fieldname": "explanation",
    "fieldtype": "Text Editor",
-   "label": "Explanation",
-   "description": "Explanation or rationale for the answer."
+   "label": "Explanation"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-07 15:42:13.328443",
+ "modified": "2026-09-07 15:17:25.580861",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Quiz Question",

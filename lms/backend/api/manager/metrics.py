@@ -106,19 +106,22 @@ def get_manager_metrics():
             return active_count, pass_rate, len(at_risk)
 
         for dt in intervals:
-            a, p, r = compute_for_date(dt)
-            active_learners_history.append(a)
-            pass_rate_history.append(p)
-            at_risk_history.append(r)
+            if getdate(dt) > getdate(today()):
+                active_learners_history.append(0)
+                pass_rate_history.append(0)
+                at_risk_history.append(0)
+            else:
+                a, p, r = compute_for_date(dt)
+                active_learners_history.append(a)
+                pass_rate_history.append(p)
+                at_risk_history.append(r)
 
-        # Current values from the last interval (same as admin)
-        active_learners = active_learners_history[-1]
-        pass_rate = pass_rate_history[-1]
-        at_risk = at_risk_history[-1]
+        # Current values based on today
+        dt_current = getdate(today())
+        active_learners, pass_rate, at_risk = compute_for_date(dt_current)
 
-        # Trend: compare last interval vs same point 1 month / 1 year ago
+        # Trend: compare current date vs same point 1 month / 1 year ago
         trend_label = "last month" if timeframe == "month" else "last year"
-        dt_current = intervals[-1]
         dt_prev = add_months(dt_current, -1) if timeframe == "month" else add_months(dt_current, -12)
         a_prev, p_prev, r_prev = compute_for_date(dt_prev)
 

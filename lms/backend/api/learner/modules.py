@@ -272,8 +272,25 @@ def get_learner_module_viewer_data(module_id):
         "category": get_module_category(module.name),
         "lessonsCount": len(module.get("lessons", [])),
         "duration": duration_str,
+        "dueDate": None,
     }
-    
+
+    # Compute due_date from assignment if available
+    assignment = frappe.db.sql("""
+        SELECT ma.duration, mt.started_on
+        FROM `tabLMS Module Assignment` ma
+        LEFT JOIN `tabLMS Assignment User` au ON au.parent = ma.name AND au.user = %(user)s
+        LEFT JOIN `tabLMS Module Tracker` mt ON mt.module = ma.module AND mt.user = %(user)s
+        WHERE ma.module = %(module)s AND (au.user = %(user)s OR ma.name IS NOT NULL)
+        LIMIT 1
+    """, {"user": user, "module": module_id}, as_dict=True)
+
+    if assignment and assignment[0].duration:
+        from frappe.utils import add_days, getdate, today
+        start = getdate(assignment[0].started_on) if assignment[0].started_on else getdate(today())
+        due = getdate(add_days(start, int(assignment[0].duration)))
+        metadata["dueDate"] = str(due)
+
     # Curriculum
     curriculum = get_curriculum(module_id)
     
