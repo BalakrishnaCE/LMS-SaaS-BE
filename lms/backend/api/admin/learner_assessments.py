@@ -298,18 +298,21 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
             # Required score: from module's certificate passing percentage
             required_score = getattr(mod, "certificate_passing_percentage", None) or 0
 
-            # Retake used: max attempts used / max_attempts across final assessments
-            retake_used = "--"
-            retake_max = "--"
-            if final_assessments:
-                finals_with_limits = [a for a in final_assessments if a["maxAttempts"] > 0]
-                if finals_with_limits:
-                    most_used = max(finals_with_limits, key=lambda a: a["attemptsUsed"])
-                    retake_used = most_used["attemptsUsed"]
-                    retake_max = most_used["maxAttempts"]
-
+            # Retake used: sum of (attemptsUsed - 1) over sum of (maxAttempts - 1) across all assessments
+            retake_used = 0
+            retake_max = 0
+            has_limits = False
+            for a in lesson_assessments + final_assessments:
+                if a.get("maxAttempts", 0) > 0:
+                    has_limits = True
+                    retake_max += max(0, a["maxAttempts"] - 1)
+                    retake_used += max(0, a["attemptsUsed"] - 1)
+            
+            if not has_limits:
+                retake_used = "--"
+                retake_max = "--"
+            
             return lesson_assessments, final_assessments, required_score, retake_used, retake_max
-
 
         for t in trackers:
             mod = frappe.get_doc("LMS Module", t.module)

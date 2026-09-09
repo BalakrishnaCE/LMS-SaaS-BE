@@ -1,86 +1,234 @@
 [
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Knowledge Check",
-    "type_name": "Knowledge Check",
-    "description": "Pause video for a graded question"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Poll",
-    "type_name": "Poll",
-    "description": "Collect anonymous opinions from learners"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Reflection Prompt",
-    "type_name": "Reflection Prompt",
-    "description": "Encourage learners to think and write"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Key Takeaway",
-    "type_name": "Key Takeaway",
-    "description": "Highlight vital core points"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Discussion Prompt",
-    "type_name": "Discussion Prompt",
-    "description": "Initiate contextual student discussion"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Info Popup",
-    "type_name": "Info Popup",
-    "description": "Display informational text overlay on video"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Image Overlay",
-    "type_name": "Image Overlay",
-    "description": "Display a hotspot or image overlay on the video"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Bookmark",
-    "type_name": "Bookmark",
-    "description": "Add a visual bookmark to the timeline"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Information",
-    "type_name": "Information",
-    "description": "Provide context or additional information"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Resource Link",
-    "type_name": "Resource Link",
-    "description": "Link to external resources or files"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Hotspot",
-    "type_name": "Hotspot",
-    "description": "Place an interactive hotspot marker"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Table Overlay",
-    "type_name": "Table Overlay",
-    "description": "Display a table overlay on the content"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Label Overlay",
-    "type_name": "Label Overlay",
-    "description": "Display a text label overlay"
-  },
-  {
-    "doctype": "LMS Interactive Type",
-    "name": "Link Overlay",
-    "type_name": "Link Overlay",
-    "description": "Place a clickable link area"
-  }
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.968214",
+  "name": "Text Overlay",
+  "type_name": "Text Overlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.970717",
+  "name": "Fill In Blank",
+  "type_name": "Fill In Blank"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.973175",
+  "name": "resourceLink",
+  "type_name": "resourceLink"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.975752",
+  "name": "keyTakeaway",
+  "type_name": "keyTakeaway"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.978675",
+  "name": "tableOverlay",
+  "type_name": "tableOverlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.981638",
+  "name": "labelOverlay",
+  "type_name": "labelOverlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.984825",
+  "name": "linkOverlay",
+  "type_name": "linkOverlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.987681",
+  "name": "imageOverlay",
+  "type_name": "imageOverlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.990492",
+  "name": "textOverlay",
+  "type_name": "textOverlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.992973",
+  "name": "fillInBlank",
+  "type_name": "fillInBlank"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.995715",
+  "name": "pollPoint",
+  "type_name": "pollPoint"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:47.998752",
+  "name": "discussionPrompt",
+  "type_name": "discussionPrompt"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:48.001749",
+  "name": "reflectionPrompt",
+  "type_name": "reflectionPrompt"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-03 16:39:48.004276",
+  "name": "knowledgeCheck",
+  "type_name": "knowledgeCheck"
+ },
+ {
+  "description": "Pause video for a graded question",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.688928",
+  "name": "Knowledge Check",
+  "type_name": "Knowledge Check"
+ },
+ {
+  "description": "Collect anonymous opinions from learners",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.738475",
+  "name": "Poll",
+  "type_name": "Poll"
+ },
+ {
+  "description": "Encourage learners to think and write",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.747125",
+  "name": "Reflection Prompt",
+  "type_name": "Reflection Prompt"
+ },
+ {
+  "description": "Highlight vital core points",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.755441",
+  "name": "Key Takeaway",
+  "type_name": "Key Takeaway"
+ },
+ {
+  "description": "Initiate contextual student discussion",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.763961",
+  "name": "Discussion Prompt",
+  "type_name": "Discussion Prompt"
+ },
+ {
+  "description": "Display informational text overlay on video",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.772004",
+  "name": "Info Popup",
+  "type_name": "Info Popup"
+ },
+ {
+  "description": "Display a hotspot or image overlay on the video",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.780277",
+  "name": "Image Overlay",
+  "type_name": "Image Overlay"
+ },
+ {
+  "description": "Add a visual bookmark to the timeline",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.788526",
+  "name": "Bookmark",
+  "type_name": "Bookmark"
+ },
+ {
+  "description": "Provide context or additional information",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.796840",
+  "name": "Information",
+  "type_name": "Information"
+ },
+ {
+  "description": "Link to external resources or files",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.805003",
+  "name": "Resource Link",
+  "type_name": "Resource Link"
+ },
+ {
+  "description": "Place an interactive hotspot marker",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.813212",
+  "name": "Hotspot",
+  "type_name": "Hotspot"
+ },
+ {
+  "description": "Display a table overlay on the content",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.821534",
+  "name": "Table Overlay",
+  "type_name": "Table Overlay"
+ },
+ {
+  "description": "Display a text label overlay",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.829856",
+  "name": "Label Overlay",
+  "type_name": "Label Overlay"
+ },
+ {
+  "description": "Place a clickable link area",
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-09-08 18:06:35.838602",
+  "name": "Link Overlay",
+  "type_name": "Link Overlay"
+ },
+ {
+  "description": null,
+  "docstatus": 0,
+  "doctype": "LMS Interactive Type",
+  "modified": "2026-08-18 15:37:03.360258",
+  "name": "Flashcard",
+  "type_name": "Flashcard"
+ }
 ]

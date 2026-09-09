@@ -8,7 +8,7 @@ app_license = "mit"
 # Fixtures
 # --------
 # Auto-imported on `bench migrate` — seeds lookup tables with default records.
-fixtures = ["LMS Interactive Type"]
+fixtures = ["LMS Interactive Type", "LMS Badge"]
 
 # Apps
 # ------------------

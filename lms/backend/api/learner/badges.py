@@ -221,7 +221,12 @@ def get_learner_badges(user_id=None):
     results = []
     newly_awarded = []
 
+    total_users = frappe.db.count("User", {"enabled": 1, "user_type": "System User"}) or 1
+
     for b in all_badges:
+        earned_count = frappe.db.count("LMS Learner Badge", {"badge": b.name})
+        earners_percent = int(round((earned_count / total_users) * 100))
+        
         earned_on = earned_map.get(b.name)
         if earned_on:
             results.append({
@@ -232,7 +237,8 @@ def get_learner_badges(user_id=None):
                 "image": b.image,
                 "earned": True,
                 "earnedOn": str(earned_on),
-                "relatedLearning": related_learning
+                "relatedLearning": related_learning,
+                "earnersPercent": earners_percent
             })
         else:
             progress, label = evaluator.evaluate(b)
@@ -256,7 +262,8 @@ def get_learner_badges(user_id=None):
                     "image": b.image,
                     "earned": True,
                     "earnedOn": str(doc.awarded_on),
-                    "relatedLearning": related_learning
+                    "relatedLearning": related_learning,
+                    "earnersPercent": earners_percent
                 })
             else:
                 results.append({
@@ -268,7 +275,8 @@ def get_learner_badges(user_id=None):
                     "earned": False,
                     "progress": progress,
                     "progressLabel": label,
-                    "relatedLearning": related_learning
+                    "relatedLearning": related_learning,
+                    "earnersPercent": earners_percent
                 })
 
     if newly_awarded:
