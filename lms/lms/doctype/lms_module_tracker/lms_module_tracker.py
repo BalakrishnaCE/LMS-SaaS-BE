@@ -22,13 +22,15 @@ class LMSModuleTracker(Document):
 			for lc in lesson_doc.get("chapters", []):
 				if not lc.chapter: continue
 				chapter_doc = frappe.get_doc("LMS Chapter", lc.chapter)
-				total_items += len(chapter_doc.get("contents", []))
+				for c in chapter_doc.get("contents", []):
+					if c.content_type != "LMS Flashcard Content":
+						total_items += 1
 
 		if total_items == 0:
 			self.progress_percentage = 0
 		else:
 			# Count completed items in the tracker
-			completed_items = sum(1 for cp in self.get("content_progress", []) if cp.status == "Completed")
+			completed_items = sum(1 for cp in self.get("content_progress", []) if cp.status == "Completed" and cp.content_type != "LMS Flashcard Content")
 			self.progress_percentage = round((completed_items / total_items) * 100)
 
 		# Auto-update tracker status based on progress
