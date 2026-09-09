@@ -81,11 +81,17 @@ def get_metrics_summary():
             return active_learners_val, completion_rate_val, overdue_assignments_val, compliance_completion_val
 
         for dt in intervals:
-            a, c, o, cc = compute_metrics_for_date(dt)
-            active_learners_history.append(a)
-            completion_rate_history.append(c)
-            overdue_assignments_history.append(o)
-            compliance_completion_history.append(cc)
+            if getdate(dt) > getdate(now()):
+                active_learners_history.append(0)
+                completion_rate_history.append(0)
+                overdue_assignments_history.append(0)
+                compliance_completion_history.append(0)
+            else:
+                a, c, o, cc = compute_metrics_for_date(dt)
+                active_learners_history.append(a)
+                completion_rate_history.append(c)
+                overdue_assignments_history.append(o)
+                compliance_completion_history.append(cc)
             
         dt_current = getdate(now())
         active_learners, completion_rate, overdue_assignments, compliance_completion = compute_metrics_for_date(dt_current)

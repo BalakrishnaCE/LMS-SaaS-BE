@@ -510,6 +510,18 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
     quiz.instructions = quiz_data.get("instructions") or ""
     quiz.max_attempts = quiz_data.get("max_attempts", 0)
     
+    # New dynamic fields
+    quiz.points_per_question = quiz_data.get("points_per_question", 0)
+    quiz.allow_retakes = quiz_data.get("allow_retakes", 0)
+    quiz.randomize_options = quiz_data.get("randomize_options", 0)
+    quiz.show_results = quiz_data.get("show_results", 0)
+    quiz.show_pass_fail = quiz_data.get("show_pass_fail", 0)
+    quiz.show_final_score = quiz_data.get("show_final_score", 0)
+    quiz.show_correct_answers = quiz_data.get("show_correct_answers", 0)
+    quiz.show_explanations = quiz_data.get("show_explanations", 0)
+    quiz.allow_unanswered = quiz_data.get("allow_unanswered", 0)
+    quiz.evaluation_method = quiz_data.get("evaluation_method", "AI-assisted evaluation")
+    
     # We will clear existing questions in the quiz and re-append them 
     # to handle ordering and updates simply in one pass
     quiz.set("questions", [])
@@ -531,14 +543,28 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
         q_doc.explanation = q_data.get("explanation") or ""
         
         q_doc.set("options", [])
-        for opt in q_data.get("options", []):
-            opt_text = (opt.get("option_text") or "").strip()
-            if not opt_text:
-                continue
-            q_doc.append("options", {
-                "option_text": opt_text,
-                "is_correct": opt.get("is_correct", 0)
-            })
+        
+        # Handle Scenario Based criteria mapped to options
+        if q_doc.question_type == "Scenario Based" and q_data.get("criteria"):
+            for crit in q_data.get("criteria", []):
+                crit_name = (crit.get("name") or "").strip()
+                if not crit_name:
+                    continue
+                q_doc.append("options", {
+                    "option_text": crit_name,
+                    "score": crit.get("score", 0),
+                    "is_correct": 0
+                })
+        else:
+            for opt in q_data.get("options", []):
+                opt_text = (opt.get("option_text") or "").strip()
+                if not opt_text:
+                    continue
+                q_doc.append("options", {
+                    "option_text": opt_text,
+                    "is_correct": opt.get("is_correct", 0),
+                    "score": 0
+                })
             
         q_doc.save(ignore_permissions=True)
         
@@ -900,8 +926,10 @@ def get_module_learners(module_name):
                 needs_attention["inactiveLearners"] += 1
         else:
             stats["notStarted"] += 1
-            learner_info["isInactive"] = True
-            needs_attention["inactiveLearners"] += 1
+            # If no tracker, check if they were assigned more than 7 days ago
+            if data.get("creation") and getdate(data.get("creation")) < getdate(seven_days_ago):
+                learner_info["isInactive"] = True
+                needs_attention["inactiveLearners"] += 1
             
         results.append(learner_info)
         
