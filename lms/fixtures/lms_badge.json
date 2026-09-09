@@ -1,28 +1,28 @@
 [
  {
   "achievement_criteria": "Completed 90%+ of assigned modules before their deadlines for 2 consecutive months.",
-  "badge_image": "/files/badge-learning-champion.png",
+  "badge_image": "/assets/lms/images/badge-learning-champion.png",
   "badge_name": "Learning Champion",
   "description": "Awarded for completing 90%+ assigned modules before deadlines for 2 consecutive months.",
   "docstatus": 0,
   "doctype": "LMS Badge",
   "is_active": 1,
   "minimum_score": 0.0,
-  "modified": "2026-09-03 10:33:13.444763",
+  "modified": "2026-09-09 16:24:26.312019",
   "name": "Learning Champion",
   "required_badges": [],
   "target_count": 2
  },
  {
   "achievement_criteria": "Completed 5 assigned modules at least 2 days before their deadlines.",
-  "badge_image": "/files/badge-ahead-of-the-curve.png",
+  "badge_image": "/assets/lms/images/badge-ahead-of-the-curve.png",
   "badge_name": "Ahead of the Curve",
   "description": "Proactive learners who regularly finish their learning before the expected deadline.",
   "docstatus": 0,
   "doctype": "LMS Badge",
   "is_active": 1,
   "minimum_score": 0.0,
-  "modified": "2026-09-03 10:32:13.297739",
+  "modified": "2026-09-09 16:24:26.312598",
   "name": "Ahead of the Curve",
   "required_badges": [
    {
@@ -36,14 +36,14 @@
  },
  {
   "achievement_criteria": "Completed learning activities for 30 consecutive days.",
-  "badge_image": "/files/badge-consistency-pro.png",
+  "badge_image": "/assets/lms/images/badge-consistency-pro.png",
   "badge_name": "Consistency Pro",
   "description": "Maintains a strong and consistent learning habit over time.",
   "docstatus": 0,
   "doctype": "LMS Badge",
   "is_active": 1,
   "minimum_score": 0.0,
-  "modified": "2026-09-03 10:33:47.762808",
+  "modified": "2026-09-09 16:24:26.311312",
   "name": "Consistency Pro",
   "required_badges": [
    {
@@ -63,14 +63,14 @@
  },
  {
   "achievement_criteria": "95%+ on-time completion, 90%+ assessment average, and consistent learning activity over 3 months.",
-  "badge_image": "/files/badge-learning-elite.png",
+  "badge_image": "/assets/lms/images/badge-learning-elite.png",
   "badge_name": "Learning Elite",
   "description": "Recognizes learners who consistently excel across completion, consistency, assessment performance, and proactive learning.",
   "docstatus": 0,
   "doctype": "LMS Badge",
   "is_active": 1,
   "minimum_score": 0.0,
-  "modified": "2026-09-03 10:35:51.625874",
+  "modified": "2026-09-09 16:24:26.296634",
   "name": "Learning Elite",
   "required_badges": [
    {
@@ -108,14 +108,14 @@
  },
  {
   "achievement_criteria": "Maintained an average assessment score of 90%+ across 5 modules.",
-  "badge_image": "/files/badge-top-performer.png",
+  "badge_image": "/assets/lms/images/badge-top-performer.png",
   "badge_name": "Top Performer",
   "description": "Consistently demonstrates excellent knowledge through assessments.",
   "docstatus": 0,
   "doctype": "LMS Badge",
   "is_active": 1,
   "minimum_score": 90.0,
-  "modified": "2026-09-03 10:34:18.336594",
+  "modified": "2026-09-09 16:24:26.309726",
   "name": "Top Performer",
   "required_badges": [
    {
@@ -141,14 +141,14 @@
  },
  {
   "achievement_criteria": "Completed 5 optional modules outside their assigned learning.",
-  "badge_image": "/files/badge-top-knowledge-seeker.png",
+  "badge_image": "/assets/lms/images/badge-top-knowledge-seeker.png",
   "badge_name": "Top Knowledge Seeker",
   "description": "Goes beyond mandatory training and actively seeks additional knowledge.",
   "docstatus": 0,
   "doctype": "LMS Badge",
   "is_active": 1,
   "minimum_score": 0.0,
-  "modified": "2026-09-03 10:35:04.834788",
+  "modified": "2026-09-09 16:24:26.309040",
   "name": "Top Knowledge Seeker",
   "required_badges": [
    {
