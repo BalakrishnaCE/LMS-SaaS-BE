@@ -293,7 +293,7 @@ def get_needs_attention_metrics():
 
 @frappe.whitelist(allow_guest=True)
 def get_assessment_performance():
-    trackers = frappe.get_all("LMS Module Tracker", fields=["status", "total_score"])
+    trackers = frappe.get_all("LMS Module Tracker", fields=["status", "total_score", "creation", "user", "module"])
     
     completed_trackers = [t for t in trackers if t.status == "Completed"]
     failed_trackers = [t for t in trackers if t.status == "Failed"]
@@ -308,10 +308,40 @@ def get_assessment_performance():
     total_attempts = total_completed + total_failed
     pass_rate = int((total_completed / total_attempts) * 100) if total_attempts > 0 else 0
     
+    user_module_counts = {}
+    for t in trackers:
+        if t.status in ("Completed", "Failed"):
+            key = (t.user, t.module)
+            user_module_counts[key] = user_module_counts.get(key, 0) + 1
+            
+    retakes = sum(1 for count in user_module_counts.values() if count > 1)
+    retake_rate = int((retakes / len(user_module_counts)) * 100) if user_module_counts else 0
+
+    import calendar
+    from collections import defaultdict
+    current_year = getdate(today()).year
+    
+    monthly_attempts = defaultdict(int)
+    for t in trackers:
+        if t.status in ("Completed", "Failed"):
+            t_date = getdate(t.creation)
+            if t_date.year == current_year:
+                monthly_attempts[t_date.month] += 1
+                
+    monthly_data = []
+    for month in range(1, 13):
+        monthly_data.append({
+            "month": calendar.month_abbr[month],
+            "attempts": monthly_attempts[month]
+        })
+
     return {
         "averageScore": int(avg_score),
         "passRate": pass_rate,
-        "needsRetake": total_failed
+        "needsRetake": total_failed,
+        "totalAttempts": total_attempts,
+        "retakeRate": retake_rate,
+        "monthlyAttempts": monthly_data
     }
 
 @frappe.whitelist(allow_guest=True)
