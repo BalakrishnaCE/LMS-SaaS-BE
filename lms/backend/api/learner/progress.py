@@ -282,7 +282,8 @@ def update_content_progress(module, content_reference, content_type=None, status
             "doctype": "LMS Module Tracker",
             "user": user,
             "module": module,
-            "status": "In Progress"
+            "status": "In Progress",
+            "started_on": frappe.utils.now_datetime()
         })
         doc.insert(ignore_permissions=True)
         tracker_name = doc.name
@@ -343,7 +344,8 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
             "doctype": "LMS Module Tracker",
             "user": user,
             "module": module,
-            "status": "In Progress"
+            "status": "In Progress",
+            "started_on": frappe.utils.now_datetime()
         })
         doc.insert(ignore_permissions=True)
         tracker_name = doc.name
@@ -419,7 +421,8 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
             "doctype": "LMS Module Tracker",
             "user": user,
             "module": module,
-            "status": "In Progress"
+            "status": "In Progress",
+            "started_on": frappe.utils.now_datetime()
         })
         doc.insert(ignore_permissions=True)
         tracker_name = doc.name

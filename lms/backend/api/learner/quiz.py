@@ -49,7 +49,8 @@ def submit_quiz(module, content_reference, score=None, passed=0, time_taken=0, r
             "doctype": "LMS Module Tracker",
             "user": user,
             "module": module,
-            "status": "In Progress"
+            "status": "In Progress",
+            "started_on": frappe.utils.now_datetime()
         })
         tracker_doc.insert(ignore_permissions=True)
         tracker_name = tracker_doc.name

@@ -22,7 +22,7 @@
   },
   {
    "fieldname": "selected_option",
-   "fieldtype": "Data",
+   "fieldtype": "Text",
    "label": "Selected Option",
    "description": "Stores the text of the option the learner selected. e.g., \"Policy on Sexual Harassment at Workplace\" No child table required."
   },
