@@ -174,3 +174,27 @@ def save_import_assignment(groups_json):
 
     frappe.db.commit()
     return created
+
+@frappe.whitelist()
+def add_single_learner(learner_json, selected_content_json="[]"):
+    """
+    Adds a single learner and optionally assigns modules/learning paths.
+    """
+    learner = json.loads(learner_json)
+    selected_content = json.loads(selected_content_json)
+
+    email = _ensure_user(learner)
+    if not email:
+        frappe.throw("Email is required to create a learner")
+
+    if selected_content:
+        # Wrap into the format expected by save_import_assignment
+        group_mock = [{
+            "learners": [learner],
+            "selectedContent": selected_content
+        }]
+        save_import_assignment(json.dumps(group_mock))
+    else:
+        frappe.db.commit()
+
+    return email
