@@ -10,31 +10,30 @@ class BadgeEvaluator:
     def evaluate(self, badge):
         name = badge.badge_name
         
+        if name == "Learning Champion":
+            progress, label = self.eval_learning_champion(badge)
+        elif name == "Ahead of the Curve":
+            progress, label = self.eval_ahead_of_curve(badge)
+        elif name == "Consistency Pro":
+            progress, label = self.eval_consistency_pro(badge)
+        elif name == "Top Performer":
+            progress, label = self.eval_top_performer(badge)
+        elif name == "Top Knowledge Seeker":
+            progress, label = self.eval_knowledge_seeker(badge)
+        elif name == "Learning Elite":
+            progress, label = self.eval_learning_elite(badge)
+        else:
+            progress, label = 0.0, "0%"
+            
         # Check dynamic dependencies from the required_badges child table
         required_badges = self.deps_map.get(name, [])
+        dependency_msg = None
         for req_badge in required_badges:
             if req_badge not in self.earned_map:
-                return 0.0, f"Earn {req_badge} first"
-        
-        if name == "Learning Champion":
-            return self.eval_learning_champion(badge)
-            
-        elif name == "Ahead of the Curve":
-            return self.eval_ahead_of_curve(badge)
-            
-        elif name == "Consistency Pro":
-            return self.eval_consistency_pro(badge)
-            
-        elif name == "Top Performer":
-            return self.eval_top_performer(badge)
-            
-        elif name in ("Top Knowledge Seeker", "Knowledge Seeker"):
-            return self.eval_knowledge_seeker(badge)
-            
-        elif name == "Learning Elite":
-            return self.eval_learning_elite(badge)
-            
-        return 0.0, "0%"
+                dependency_msg = f"Earn {req_badge} first"
+                break
+                
+        return progress, label, dependency_msg
 
     def eval_learning_champion(self, badge):
         # 90%+ of assigned modules before deadlines for 2 consecutive months.
@@ -48,7 +47,7 @@ class BadgeEvaluator:
         """
         total_due = frappe.db.sql(query, self.user)[0][0] or 0
         if total_due == 0:
-            return 0.0, "0/0 on-time"
+            return 0.0, "0%"
         
         query_completed = """
             SELECT count(DISTINCT tr.module)
@@ -62,7 +61,7 @@ class BadgeEvaluator:
         completed = frappe.db.sql(query_completed, self.user)[0][0] or 0
         ratio = (completed / total_due) * 100
         progress = min((ratio / 90.0) * 100, 100) if ratio > 0 else 0
-        return progress, f"{int(ratio)}% on-time (2mo)"
+        return progress, f"{int(progress)}%"
 
     def eval_ahead_of_curve(self, badge):
         # Completed 5 assigned modules at least 2 days before deadlines.
@@ -77,7 +76,7 @@ class BadgeEvaluator:
         """
         count = frappe.db.sql(query, self.user)[0][0] or 0
         progress = min((count / target) * 100, 100)
-        return progress, f"{count}/{target} early"
+        return progress, f"{int(progress)}%"
 
     def eval_consistency_pro(self, badge):
         # Completed learning activities for 30 consecutive days.
@@ -90,7 +89,7 @@ class BadgeEvaluator:
         """
         count = frappe.db.sql(query, (self.user, target))[0][0] or 0
         progress = min((count / target) * 100, 100)
-        return progress, f"{count}/{target} days"
+        return progress, f"{int(progress)}%"
 
     def eval_top_performer(self, badge):
         # Average assessment score of 90%+ across 5 modules.
@@ -106,11 +105,11 @@ class BadgeEvaluator:
         """
         scores = frappe.db.sql(query, (self.user, target_count))
         if not scores:
-            return 0.0, "0/0 avg"
+            return 0.0, "0%"
         
         avg_score = sum(s[0] for s in scores) / len(scores)
         progress = min((avg_score / min_score) * 100, 100)
-        return progress, f"{int(avg_score)}% avg score"
+        return progress, f"{int(progress)}%"
 
     def eval_knowledge_seeker(self, badge):
         # 5 optional modules completed
@@ -128,7 +127,7 @@ class BadgeEvaluator:
         """
         count = frappe.db.sql(query, self.user)[0][0] or 0
         progress = min((count / target) * 100, 100)
-        return progress, f"{count}/{target} optional"
+        return progress, f"{int(progress)}%"
 
     def eval_learning_elite(self, badge):
         # 95%+ on-time completion, 90%+ assessment average, and consistent learning activity over 3 months.
@@ -167,7 +166,7 @@ class BadgeEvaluator:
         p3 = min((active_days / 90.0) * 100, 100)
         
         total_progress = (p1 + p2 + p3) / 3
-        return total_progress, "Elite Status"
+        return total_progress, f"{int(total_progress)}%"
 
 @frappe.whitelist()
 def get_learner_badges(user_id=None):
@@ -228,6 +227,7 @@ def get_learner_badges(user_id=None):
         earners_percent = int(round((earned_count / total_users) * 100))
         
         earned_on = earned_map.get(b.name)
+        dep_count = len(deps_map.get(b.badge_name, deps_map.get(b.name, [])))
         if earned_on:
             results.append({
                 "id": b.name,
@@ -238,12 +238,13 @@ def get_learner_badges(user_id=None):
                 "earned": True,
                 "earnedOn": str(earned_on),
                 "relatedLearning": related_learning,
-                "earnersPercent": earners_percent
+                "earnersPercent": earners_percent,
+                "depCount": dep_count
             })
         else:
-            progress, label = evaluator.evaluate(b)
+            progress, label, dependency_msg = evaluator.evaluate(b)
             progress = int(round(progress))
-            if progress >= 100:
+            if progress >= 100 and not dependency_msg:
                 doc = frappe.get_doc({
                     "doctype": "LMS Learner Badge",
                     "user": user,
@@ -263,7 +264,8 @@ def get_learner_badges(user_id=None):
                     "earned": True,
                     "earnedOn": str(doc.awarded_on),
                     "relatedLearning": related_learning,
-                    "earnersPercent": earners_percent
+                    "earnersPercent": earners_percent,
+                    "depCount": dep_count
                 })
             else:
                 results.append({
@@ -274,15 +276,19 @@ def get_learner_badges(user_id=None):
                     "image": b.image,
                     "earned": False,
                     "progress": progress,
-                    "progressLabel": label,
+                    "progressLabel": f"{progress}%",
+                    "dependencyWarning": dependency_msg,
                     "relatedLearning": related_learning,
-                    "earnersPercent": earners_percent
+                    "earnersPercent": earners_percent,
+                    "depCount": dep_count
                 })
 
     if newly_awarded:
         frappe.db.commit()
 
-    earned_list = sorted([r for r in results if r["earned"]], key=lambda x: x["earnedOn"], reverse=True)
-    in_progress_list = sorted([r for r in results if not r["earned"]], key=lambda x: x["progress"], reverse=True)
+    # Sort earned: most-dependent badge (earned last) first, simplest (earned first) last
+    earned_list = sorted([r for r in results if r["earned"]], key=lambda x: x.get("depCount", 0), reverse=True)
+    # Sort in-progress: most-dependent first (mirrors earning path)
+    in_progress_list = sorted([r for r in results if not r["earned"]], key=lambda x: x.get("depCount", 0), reverse=True)
     
-    return earned_list + in_progress_list
+    return in_progress_list + earned_list

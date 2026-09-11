@@ -141,7 +141,12 @@ def _evaluate_user_risks(users):
             "department": ", ".join(user_teams[u.name]) if user_teams.get(u.name) else "No Team",
             "designation": user_designation.get(u.name) or "",
             "has_trackers": len(u_trackers) > 0,
-            "has_learner_role": u.name in user_has_learner_role
+            "has_learner_role": u.name in user_has_learner_role,
+            # Active = at least one tracker record with status "In Progress" in module or LP tracker
+            "has_in_progress": (
+                any(t.status == "In Progress" for t in u_trackers) or
+                any(t.status == "In Progress" for t in u_lp_trackers)
+            )
         }
         
     return user_evals
@@ -167,9 +172,9 @@ def get_learner_kpis():
     for u in users:
         eval_data = user_evals.get(u.name, {})
         has_lms_learner = eval_data.get("has_learner_role", False)
-        last_activity = eval_data.get("last_activity")
         
-        if has_lms_learner and last_activity and getdate(last_activity) >= thirty_days_ago:
+        # Active = has LMS learner role AND at least one In Progress tracker
+        if has_lms_learner and eval_data.get("has_in_progress", False):
             active += 1
             
         if eval_data.get("risk") in ["Overdue", "Needs Attention"]:
@@ -198,24 +203,26 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
     learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     if learner_roles:
         filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
-    if search:
-        filters["full_name"] = ("like", f"%{search}%")
-        
+
     order_by = "creation desc" if risk and risk.lower() == "recent" else "name asc"
     users = frappe.get_all("User", filters=filters, fields=["name", "email", "full_name", "enabled", "user_image"], order_by=order_by, ignore_permissions=True)
 
+    # Filter by search term against full_name OR email (case-insensitive, in Python)
+    if search:
+        search_lower = search.lower().strip()
+        users = [u for u in users if search_lower in (u.full_name or "").lower() or search_lower in (u.email or "").lower()]
+
     user_evals = _evaluate_user_risks(users)
-    
-    thirty_days_ago = getdate(add_days(today(), -30))
+
     results = []
     for u in users:
         eval_data = user_evals.get(u.name, {})
         
         has_lms_learner = eval_data.get("has_learner_role", False)
-        last_activity = eval_data.get("last_activity")
-        
+
         learner_status = "Inactive"
-        if has_lms_learner and last_activity and getdate(last_activity) >= thirty_days_ago:
+        # Active = has LMS learner role AND at least one tracker with "In Progress" status
+        if has_lms_learner and eval_data.get("has_in_progress", False):
             learner_status = "Active"
         
         avatar = u.user_image
@@ -493,8 +500,8 @@ def get_learner_details(user_id):
     
 
     has_lms_learner = eval_data.get("has_learner_role", False)
-    has_trackers = eval_data.get("has_trackers", False)
-    learner_status = "Active" if (has_lms_learner and has_trackers) else "Inactive"
+    # Active = has LMS learner role AND at least one tracker with "In Progress" status
+    learner_status = "Active" if (has_lms_learner and eval_data.get("has_in_progress", False)) else "Inactive"
 
     # If no trackers, mock the overview stats to match the mock assigned modules
     if not trackers:

@@ -151,10 +151,22 @@ def get_learner_paths():
     """
     user = frappe.session.user
 
-    # Get all published paths
+    # Get only learning paths this user has been assigned/enrolled in
+    user_lp_trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user},
+        fields=["learning_path", "status", "progress_percentage"]
+    )
+    assigned_lp_names = [t.learning_path for t in user_lp_trackers]
+    lp_tracker_map = {t.learning_path: t for t in user_lp_trackers}
+
+    if not assigned_lp_names:
+        return {"paths": []}
+
+    # Get only the assigned paths that are published
     paths = frappe.get_all(
         "LMS Learning Path",
-        filters={"status": "Published"},
+        filters={"name": ["in", assigned_lp_names], "status": "Published"},
         fields=["name", "path_name", "description", "image", "is_mandatory"]
     )
 
