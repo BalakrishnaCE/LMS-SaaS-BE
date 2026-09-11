@@ -40,7 +40,7 @@ def get_manager_metrics():
     tl_user = frappe.session.user
     member_emails = _get_team_member_emails(tl_user)
 
-    assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "is_mandatory"])
+    assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "is_mandatory"], limit_page_length=0)
     assignment_map = {a.module: a for a in assignments}
 
     def get_data(timeframe):
@@ -67,9 +67,10 @@ def get_manager_metrics():
             Mirrors admin dashboard logic — cumulative as-of-date snapshot,
             scoped to this TL's team members only.
             """
-            filters = {"creation": ["<=", dt]}
-            if member_emails:
-                filters["user"] = ["in", member_emails]
+            if not member_emails:
+                return 0, 0, 0
+
+            filters = {"creation": ["<=", dt], "user": ["in", member_emails]}
 
             trackers = frappe.get_all(
                 "LMS Module Tracker",
@@ -180,26 +181,7 @@ def get_team_performance_overview(timeframe="7days"):
     if not member_emails:
         return []
 
-    filters = {"user": ["in", member_emails]}
-    today_dt = getdate(today())
-    
-    if timeframe == "7days":
-        start_date = add_days(today_dt, -7)
-        filters["modified"] = [">=", start_date]
-    elif timeframe == "30days":
-        start_date = add_days(today_dt, -30)
-        filters["modified"] = [">=", start_date]
-    elif timeframe == "month":
-        start_date = getdate(f"{today_dt.year}-{today_dt.month:02d}-01")
-        filters["modified"] = [">=", start_date]
-    elif timeframe == "year":
-        start_date = getdate(f"{today_dt.year}-01-01")
-        filters["modified"] = [">=", start_date]
-
-    trackers = frappe.get_all("LMS Module Tracker", filters=filters, fields=["status", "module", "started_on"])
-    
-    assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
-    assignment_map = {a.module: a for a in assignments}
+    from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
 
     status_counts = {
         "Completed": 0,
@@ -208,26 +190,40 @@ def get_team_performance_overview(timeframe="7days"):
         "Not Started": 0
     }
 
-    for t in trackers:
-        if t.status == "Completed":
-            status_counts["Completed"] += 1
-        else:
-            is_overdue = False
-            if t.started_on:
-                a = assignment_map.get(t.module)
-                if a and a.duration:
-                    due = add_days(getdate(t.started_on), a.duration)
-                    if getdate(due) < today_dt:
-                        is_overdue = True
+    today_dt = getdate(today())
+    
+    trackers = frappe.get_all(
+        "LMS Module Tracker", 
+        filters={"user": ["in", member_emails]}, 
+        fields=["user", "module", "status", "started_on"]
+    )
+    tracker_map = {(t.user, t.module): t for t in trackers}
 
-            if is_overdue:
-                status_counts["Overdue"] += 1
-            elif t.status == "In Progress":
-                status_counts["In Progress"] += 1
+    for user in member_emails:
+        assigned_modules = get_all_assigned_modules_for_learner(user)
+        for assignment in assigned_modules:
+            module_name = assignment.get("module")
+            t = tracker_map.get((user, module_name))
+            
+            if t:
+                if t.status == "Completed":
+                    status_counts["Completed"] += 1
+                else:
+                    is_overdue = False
+                    if t.started_on and assignment.get("duration"):
+                        due = add_days(getdate(t.started_on), assignment.get("duration"))
+                        if getdate(due) < today_dt:
+                            is_overdue = True
+                    
+                    if is_overdue:
+                        status_counts["Overdue"] += 1
+                    elif t.status == "In Progress":
+                        status_counts["In Progress"] += 1
+                    else:
+                        status_counts["Not Started"] += 1
             else:
                 status_counts["Not Started"] += 1
 
-    # Format the same way as LearningContentGauge (just raw values, gauge computes percentages)
     results = []
     for k, v in status_counts.items():
         if v > 0:
