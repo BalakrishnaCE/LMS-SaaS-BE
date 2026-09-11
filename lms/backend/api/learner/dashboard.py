@@ -104,12 +104,13 @@ def get_learner_summary(timeframe="month"):
         lp_trackers = frappe.get_all(
             "LMS Learning Path Tracker",
             filters={"user": user},
-            fields=["learning_path"]
+            fields=["learning_path", "status"]
         )
     except Exception:
         pass
         
     total_learning_paths = len(list(set([lp.learning_path for lp in lp_trackers])))
+    in_progress_paths = len([lp for lp in lp_trackers if lp.status == "In Progress"])
     total_assigned = len(assigned_module_names) + total_learning_paths
 
     # Due this week (modules only)
@@ -173,7 +174,10 @@ def get_learner_summary(timeframe="month"):
         progress_history.append(snap)
         
     if timeframe == "year":
-        progress_this_month = max(0, progress_history[-1] - (progress_history[-2] if len(progress_history) > 1 else 0))
+        # Delta from start of year to now (first non-zero vs last)
+        first = progress_history[0] if progress_history else 0
+        last = progress_history[-1] if progress_history else 0
+        progress_this_month = last - first
     else:
         progress_this_month = max(0, progress_history[-1] - progress_history[0])
 
@@ -218,6 +222,7 @@ def get_learner_summary(timeframe="month"):
         "assignedLearningPaths": total_learning_paths,
         "totalAssigned": total_assigned,
         "inProgressModules": len(in_progress),
+        "inProgressPaths": in_progress_paths,
         "completedModules": len(completed),
         "badgesEarned": len(badges),
         "badgesThisMonth": len(badges_this_month),
@@ -301,11 +306,11 @@ def get_continue_learning(item_type="module"):
             
         union_ns_query = " UNION ALL ".join(not_started_queries) + " ORDER BY creation ASC LIMIT 1"
         not_started = frappe.db.sql(union_ns_query, tuple(ns_params), as_dict=True)
-
-        if not not_started:
+        
+        if not_started:
+            t = not_started[0]
+        else:
             return None
-
-        t = frappe._dict({"type": not_started[0].type, "id": not_started[0].id, "progress_percentage": 0})
 
     if t.type == 'Module':
         module_doc = frappe.get_value("LMS Module", t.id, ["module_name", "image"], as_dict=True)
@@ -317,7 +322,7 @@ def get_continue_learning(item_type="module"):
             "moduleName": module_doc.module_name,
             "moduleIndex": 1,
             "totalModules": 1,
-            "progress": int(t.progress_percentage or 0),
+            "progress": int(t.get("progress_percentage") or 0),
             "thumbnail": module_doc.image,
             "type": "Module"
         }
@@ -331,7 +336,8 @@ def get_continue_learning(item_type="module"):
             "moduleName": path_doc.path_name,
             "moduleIndex": 1,
             "totalModules": 1,
-            "progress": int(t.progress_percentage or 0),
+            "progress": int(t.get("progress_percentage") or 0),
             "thumbnail": path_doc.image,
             "type": "Path"
         }
+

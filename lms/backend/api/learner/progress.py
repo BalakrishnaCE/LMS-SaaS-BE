@@ -94,10 +94,12 @@ def get_learner_progress_breakdown(filter_mode="last_30_days"):
     for module_name in assigned_module_names:
         t = tracker_map.get(module_name)
 
-        # No tracker → Not Started — include always (not started = no activity ever)
+        # No tracker → Not Started
         if not t:
-            counts["Not Started"] += 1
-            progress_pcts.append(0)
+            # Only include "Not Started" if no time window is set (all-time view)
+            if window_start is None:
+                counts["Not Started"] += 1
+                progress_pcts.append(0)
             continue
 
         # Skip if outside the window

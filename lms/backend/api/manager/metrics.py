@@ -77,11 +77,10 @@ def get_manager_metrics():
                 fields=["user", "status", "module", "started_on", "modified", "completed_on"],
             )
 
-            # Active: modified within 30 days before dt
-            thirty_days_before = add_days(dt, -30)
+            # Active: at least one tracker with status "In Progress"
             active_users = set(
                 t.user for t in trackers
-                if t.modified and getdate(thirty_days_before) <= getdate(t.modified) <= getdate(dt)
+                if t.status == "In Progress"
             )
             active_count = len(active_users)
 

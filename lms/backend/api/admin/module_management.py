@@ -926,16 +926,16 @@ def get_module_learners(module_name):
                 stats["inProgress"] += 1
             else:
                 stats["notStarted"] += 1
-                
-            if getdate(tracker.modified) < getdate(seven_days_ago) and tracker.status != "Completed":
+
+            # Inactive = tracker exists but status is still "Not Started"
+            if tracker.status == "Not Started":
                 learner_info["isInactive"] = True
                 needs_attention["inactiveLearners"] += 1
         else:
             stats["notStarted"] += 1
-            # If no tracker, check if they were assigned more than 7 days ago
-            if data.get("creation") and getdate(data.get("creation")) < getdate(seven_days_ago):
-                learner_info["isInactive"] = True
-                needs_attention["inactiveLearners"] += 1
+            # No tracker at all = inactive
+            learner_info["isInactive"] = True
+            needs_attention["inactiveLearners"] += 1
             
         results.append(learner_info)
         

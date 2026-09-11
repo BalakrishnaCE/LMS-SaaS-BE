@@ -24,8 +24,8 @@ def get_learner_certificates():
             
         # Fetch score from total_score of LMS Module Tracker
         score = cert.score or 0
-        if cert.module and cert.user:
-            tracker = frappe.get_all("LMS Module Tracker", filters={"module": cert.module, "user": cert.user}, fields=["total_score"], limit=1)
+        if cert.module and user:
+            tracker = frappe.get_all("LMS Module Tracker", filters={"module": cert.module, "user": user}, fields=["total_score"], limit=1)
             if tracker and tracker[0].total_score is not None:
                 score = tracker[0].total_score
         
