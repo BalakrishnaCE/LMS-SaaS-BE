@@ -60,6 +60,7 @@ def get_learner_path_detail(path_id):
     modules = []
     completed_modules = 0
     total_duration = 0
+    total_progress = 0
     
     # We also want to know how many assessments/quizzes are inside these modules to display "Path Includes"
     total_quizzes = 0
@@ -89,6 +90,8 @@ def get_learner_path_detail(path_id):
             if mod["learner_status"] == "Completed":
                 completed_modules += 1
                 
+            total_progress += mod["learner_score"]
+                
             # Accumulate overall duration
             mod_duration = mod.get("duration") or 0
             total_duration += mod_duration
@@ -111,7 +114,7 @@ def get_learner_path_detail(path_id):
     # Overall progress percentage
     progress_percentage = 0
     if len(modules) > 0:
-        progress_percentage = (completed_modules / len(modules)) * 100
+        progress_percentage = round((total_progress / len(modules)), 2)
         
     if tracker_doc and tracker_doc.progress_percentage is not None:
         progress_percentage = tracker_doc.progress_percentage
@@ -159,9 +162,9 @@ def get_learner_paths():
     module_trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user},
-        fields=["module", "status"]
+        fields=["module", "status", "progress_percentage"]
     )
-    module_status_map = {mt.module: mt.status for mt in module_trackers}
+    module_status_map = {mt.module: mt for mt in module_trackers}
 
     for path in paths:
         # Get category from child table
@@ -177,12 +180,17 @@ def get_learner_paths():
         path.module_count = len(modules)
         
         completed_modules = 0
+        total_progress = 0
         for m in modules:
-            if module_status_map.get(m.module) == "Completed":
-                completed_modules += 1
+            mt = module_status_map.get(m.module)
+            if mt:
+                if mt.status == "Completed":
+                    completed_modules += 1
+                if mt.progress_percentage:
+                    total_progress += mt.progress_percentage
         
         if path.module_count > 0:
-            path.progress_percentage = (completed_modules / path.module_count) * 100
+            path.progress_percentage = round((total_progress / path.module_count), 2)
         else:
             path.progress_percentage = 0
             

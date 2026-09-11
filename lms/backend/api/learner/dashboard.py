@@ -235,48 +235,72 @@ def get_learner_summary(timeframe="month"):
 # ─── Continue Learning ─────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_continue_learning():
+def get_continue_learning(item_type="module"):
     """
     Returns the best module or path to resume for the learner.
     Priority:
-      1. Most progressed In Progress module or path
-      2. First assigned module or path that is Not Started yet
+      1. Most progressed In Progress item
+      2. First assigned item that is Not Started yet
+    item_type can be 'module', 'path', or 'both'.
     """
     user = frappe.session.user
 
     # Priority 1: In Progress item with highest progress percentage
-    tracker = frappe.db.sql("""
-        SELECT 'Module' as type, t.module as id, t.progress_percentage, t.modified
-        FROM `tabLMS Module Tracker` t
-        WHERE t.user = %s AND t.status = 'In Progress'
-        UNION ALL
-        SELECT 'Path' as type, t.learning_path as id, t.progress_percentage, t.modified
-        FROM `tabLMS Learning Path Tracker` t
-        WHERE t.user = %s AND t.status = 'In Progress'
-        ORDER BY progress_percentage DESC, modified DESC
-        LIMIT 1
-    """, (user, user), as_dict=True)
+    queries = []
+    params = []
+    
+    if item_type in ["module", "both"]:
+        queries.append("""
+            SELECT 'Module' as type, t.module as id, t.progress_percentage, t.modified
+            FROM `tabLMS Module Tracker` t
+            WHERE t.user = %s AND t.status = 'In Progress'
+        """)
+        params.append(user)
+        
+    if item_type in ["path", "both"]:
+        queries.append("""
+            SELECT 'Path' as type, t.learning_path as id, t.progress_percentage, t.modified
+            FROM `tabLMS Learning Path Tracker` t
+            WHERE t.user = %s AND t.status = 'In Progress'
+        """)
+        params.append(user)
+        
+    if not queries:
+        return None
+        
+    union_query = " UNION ALL ".join(queries) + " ORDER BY progress_percentage DESC, modified DESC LIMIT 1"
+    tracker = frappe.db.sql(union_query, tuple(params), as_dict=True)
 
     if tracker:
         t = tracker[0]
     else:
-        # Priority 2: first assigned module or path the user hasn't started at all
-        not_started = frappe.db.sql("""
-            SELECT 'Module' as type, ma.module as id, ma.creation
-            FROM `tabLMS Module Assignment` ma
-            INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-            LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
-            WHERE au.user = %s
-              AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
-            UNION ALL
-            SELECT 'Path' as type, lp.name as id, lp.creation
-            FROM `tabLMS Learning Path` lp
-            LEFT JOIN `tabLMS Learning Path Tracker` t ON t.learning_path = lp.name AND t.user = %s
-            WHERE lp.status = 'Published'
-              AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
-            ORDER BY creation ASC
-            LIMIT 1
-        """, (user, user, user), as_dict=True)
+        # Priority 2: first assigned item the user hasn't started at all
+        not_started_queries = []
+        ns_params = []
+        
+        if item_type in ["module", "both"]:
+            not_started_queries.append("""
+                SELECT 'Module' as type, ma.module as id, ma.creation
+                FROM `tabLMS Module Assignment` ma
+                INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+                LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
+                WHERE au.user = %s
+                  AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
+            """)
+            ns_params.extend([user, user])
+            
+        if item_type in ["path", "both"]:
+            not_started_queries.append("""
+                SELECT 'Path' as type, lp.name as id, lp.creation
+                FROM `tabLMS Learning Path` lp
+                LEFT JOIN `tabLMS Learning Path Tracker` t ON t.learning_path = lp.name AND t.user = %s
+                WHERE lp.status = 'Published'
+                  AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
+            """)
+            ns_params.append(user)
+            
+        union_ns_query = " UNION ALL ".join(not_started_queries) + " ORDER BY creation ASC LIMIT 1"
+        not_started = frappe.db.sql(union_ns_query, tuple(ns_params), as_dict=True)
 
         if not not_started:
             return None
@@ -303,7 +327,7 @@ def get_continue_learning():
             return None
             
         return {
-            "moduleId": t.id,  # Keeping the key as moduleId for frontend compatibility for now
+            "moduleId": t.id,
             "moduleName": path_doc.path_name,
             "moduleIndex": 1,
             "totalModules": 1,
