@@ -55,3 +55,20 @@ class LMSModuleTracker(Document):
 		
 		if scored_items > 0:
 			self.total_score = round(total_score_sum / scored_items, 2)
+
+	def on_update(self):
+		self.update_learning_path_trackers()
+
+	def update_learning_path_trackers(self):
+		paths_with_module = frappe.get_all("LMS Learning Path Course", filters={"module": self.module}, fields=["parent"])
+		path_names = [p.parent for p in paths_with_module]
+		
+		if not path_names:
+			return
+			
+		lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": self.user, "learning_path": ("in", path_names)}, fields=["name"])
+		
+		for lpt in lp_trackers:
+			tracker = frappe.get_doc("LMS Learning Path Tracker", lpt.name)
+			tracker.save(ignore_permissions=True)
+
