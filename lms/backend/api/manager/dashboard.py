@@ -53,10 +53,11 @@ def get_needs_attention():
     if not member_emails:
         return []
 
-    assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration", "is_mandatory"])
+    assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration", "is_mandatory"], limit_page_length=0)
     assignment_map = {a.module: a for a in assignments}
     today_dt = getdate(today())
 
+    # 1. Learners at risk
     trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": ["in", member_emails], "status": ["!=", "Completed"]},
@@ -80,12 +81,60 @@ def get_needs_attention():
         module_name = frappe.get_value("LMS Module", mod, "module_name") or mod
         mandatory_text = "mandatory" if data["mandatory"] else "optional"
         results.append({
-            "title": f"{data['count']} learner{'s' if data['count'] > 1 else ''} at risk",
+            "type": "risk",
+            "title": f"{data['count']} learner{'s' if data['count'] > 1 else ''} are at risk",
             "description": f"{data['count']} learner{'s' if data['count'] > 1 else ''} have not completed their assigned {mandatory_text} '{module_name}' module.",
             "count": data['count']
         })
         
     results.sort(key=lambda x: x["count"], reverse=True)
+
+    # 2. Pending QA Evaluations
+    qa_submissions = frappe.get_all(
+        "LMS Quiz Submission",
+        filters={"user": ["in", member_emails]},
+        fields=["name", "user", "quiz", "enrollment", "submitted_on", "score"]
+    )
+    
+    pending_qa = []
+    for sub in qa_submissions:
+        if sub.score is None or sub.score == 0.0:
+            eval_method = frappe.get_value("LMS Quiz", sub.quiz, "evaluation_method")
+            if eval_method == "Manual review":
+                learner_name = frappe.get_value("User", sub.user, "full_name") or sub.user
+                quiz_title = frappe.get_value("LMS Quiz", sub.quiz, "title") or sub.quiz
+                
+                due_date = add_days(getdate(sub.submitted_on), 3) if sub.submitted_on else add_days(today_dt, 3)
+                
+                pending_qa.append({
+                    "learner": learner_name,
+                    "quiz_title": quiz_title,
+                    "due_date": due_date.strftime("%b %d, %Y"),
+                    "submission_id": sub.name,
+                    "sort_date": getdate(due_date)
+                })
+    
+    if pending_qa:
+        pending_qa.sort(key=lambda x: x["sort_date"])
+        
+        first_due = pending_qa[0]
+        days_left = (first_due["sort_date"] - today_dt).days
+        if days_left < 0:
+            description = f"Assessment overdue by {abs(days_left)} days"
+        elif days_left == 0:
+            description = "Assessment due today"
+        else:
+            description = f"Assessment due in {days_left} days"
+            
+        # Insert at the top of the list because it's high priority
+        results.insert(0, {
+            "type": "qa",
+            "title": f"{len(pending_qa)} Pending QA Evaluation{'s' if len(pending_qa) > 1 else ''}",
+            "description": description,
+            "count": len(pending_qa),
+            "submissions": pending_qa
+        })
+
     return results[:5]
 
 @frappe.whitelist()
