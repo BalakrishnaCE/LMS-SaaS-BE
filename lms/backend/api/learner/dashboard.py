@@ -35,42 +35,20 @@ def get_learner_summary(timeframe="month"):
         filters={"user": user},
         fields=["module", "status", "progress_percentage", "started_on"]
     )
+    # Exclude sentinel 'Excluded' trackers written by the admin unassign action
+    all_trackers = [t for t in all_trackers if t.status != "Excluded"]
     tracked_modules = [t.module for t in all_trackers]
     
     assigned_module_names = list(set(explicitly_assigned + tracked_modules))
+    # Also exclude modules that have been explicitly unassigned for this user
+    excluded_modules = frappe.db.sql("""
+        SELECT module FROM `tabLMS Module Tracker`
+        WHERE user = %s AND status = 'Excluded'
+    """, user, as_list=True)
+    excluded_set = {row[0] for row in excluded_modules}
+    assigned_module_names = [m for m in assigned_module_names if m not in excluded_set]
     total_assigned = len(assigned_module_names)
 
-    # Count learning paths even for users with no module assignments
-    lp_trackers_early = []
-    try:
-        lp_trackers_early = frappe.get_all(
-            "LMS Learning Path Tracker",
-            filters={"user": user},
-            fields=["learning_path"]
-        )
-    except frappe.exceptions.DoesNotExistError:
-        pass
-    except Exception as e:
-        # If doctype is completely missing from db schema, it throws pymysql.err.ProgrammingError which frappe catches
-        pass
-    if not assigned_module_names:
-        first_name = frappe.get_value("User", user, "first_name") or "Learner"
-        lp_count = len(lp_trackers_early)
-        return {
-            "overallProgress": 0,
-            "assignedModules": 0,
-            "assignedLearningPaths": lp_count,
-            "totalAssigned": lp_count,
-            "inProgressModules": 0,
-            "completedModules": 0,
-            "badgesEarned": 0,
-            "badgesThisMonth": 0,
-            "firstName": first_name,
-            "progressThisMonth": 0,
-            "progressHistory": [0, 0, 0, 0, 0] if timeframe == "month" else [0] * 12,
-            "progressLabels": ["Week 1", "Week 2", "Week 3", "Week 4", "Now"] if timeframe == "month" else ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-            "dueThisWeek": 0,
-        }
 
     tracker_map = {t.module: t for t in all_trackers}
     completed = [m for m in assigned_module_names if tracker_map.get(m, {}).get("status") == "Completed"]
@@ -258,7 +236,8 @@ def get_continue_learning(item_type="module"):
         queries.append("""
             SELECT 'Module' as type, t.module as id, t.progress_percentage, t.modified
             FROM `tabLMS Module Tracker` t
-            WHERE t.user = %s AND t.status = 'In Progress'
+            INNER JOIN `tabLMS Module` m ON m.name = t.module
+            WHERE t.user = %s AND t.status = 'In Progress' AND m.status = 'Published'
         """)
         params.append(user)
         
@@ -266,7 +245,8 @@ def get_continue_learning(item_type="module"):
         queries.append("""
             SELECT 'Path' as type, t.learning_path as id, t.progress_percentage, t.modified
             FROM `tabLMS Learning Path Tracker` t
-            WHERE t.user = %s AND t.status = 'In Progress'
+            INNER JOIN `tabLMS Learning Path` lp ON lp.name = t.learning_path
+            WHERE t.user = %s AND t.status = 'In Progress' AND lp.status = 'Published'
         """)
         params.append(user)
         
@@ -287,9 +267,11 @@ def get_continue_learning(item_type="module"):
             not_started_queries.append("""
                 SELECT 'Module' as type, ma.module as id, ma.creation
                 FROM `tabLMS Module Assignment` ma
+                INNER JOIN `tabLMS Module` m ON m.name = ma.module
                 INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
                 LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
                 WHERE au.user = %s
+                  AND m.status = 'Published'
                   AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
             """)
             ns_params.extend([user, user])

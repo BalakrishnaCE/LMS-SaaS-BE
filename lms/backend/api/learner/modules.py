@@ -46,6 +46,10 @@ def get_learner_modules(filter_type="all"):
             as_dict=True
         )
 
+        # Skip modules that have been explicitly unassigned (Excluded sentinel)
+        if tracker and tracker.status == "Excluded":
+            continue
+
         progress = (tracker.progress_percentage or 0) if tracker else 0
 
         # Days left calculation

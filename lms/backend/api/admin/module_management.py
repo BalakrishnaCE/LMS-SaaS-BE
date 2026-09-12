@@ -788,8 +788,6 @@ def get_module_learners(module_name):
 
     if not users:
         return {
-            "stats": {"totalAssigned": 0, "notStarted": 0, "inProgress": 0, "completed": 0, "overdue": 0},
-            "needsAttention": {"overdueLearning": 0, "inactiveLearners": 0, "lowAssessmentScores": 0},
             "learners": []
         }
         
@@ -809,7 +807,7 @@ def get_module_learners(module_name):
     # Create final map joining with commas
     user_team_map = {u: ", ".join(teams) for u, teams in user_team_map.items()}
     
-    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_name, "user": ["in", list(users.keys())]}, fields=["user", "status", "progress_percentage", "total_score", "started_on", "modified", "completed_on"])
+    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_name, "user": ["in", list(users.keys())]}, fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "modified", "completed_on"])
     tracker_map = {t.user: t for t in trackers}
 
     # ── Resolve passing percentage and quiz submissions ───────────────────
@@ -833,36 +831,33 @@ def get_module_learners(module_name):
 
     # Map user -> best quiz submission score (None if no submission)
     submission_score_map = {}  # user -> score (0-100) or None
-    if quiz_name:
-        # Fetch tracker name -> user mapping in one clean query
-        tracker_name_docs = frappe.get_all(
-            "LMS Module Tracker",
-            filters={"module": module_name, "user": ["in", list(users.keys())]},
-            fields=["name", "user"]
+    tracker_name_list = [t.name for t in trackers] if trackers else []
+    tracker_name_to_user = {t.name: t.user for t in trackers} if trackers else {}
+
+    if tracker_name_list:
+        # Fetch submissions for any quiz tied to this module's trackers
+        filters_dict = {"enrollment": ["in", tracker_name_list]}
+        if quiz_name:
+            filters_dict["quiz"] = quiz_name
+            
+        submissions = frappe.get_all(
+            "LMS Quiz Submission",
+            filters=filters_dict,
+            fields=["enrollment", "score"]
         )
-        tracker_name_to_user = {t.name: t.user for t in tracker_name_docs}
-        tracker_name_list = list(tracker_name_to_user.keys())
-
-        if tracker_name_list:
-            submissions = frappe.get_all(
-                "LMS Quiz Submission",
-                filters={"quiz": quiz_name, "enrollment": ["in", tracker_name_list]},
-                fields=["enrollment", "score"]
-            )
-            # Keep the best (highest) score per tracker/enrollment
-            for sub in submissions:
-                user_key = tracker_name_to_user.get(sub.enrollment)
-                if user_key:
-                    current_best = submission_score_map.get(user_key)
-                    sub_score = float(sub.score) if sub.score is not None else 0.0
-                    if current_best is None or sub_score > current_best:
-                        submission_score_map[user_key] = sub_score
-
-    results = []
+        # Keep the best (highest) score per tracker/enrollment
+        for sub in submissions:
+            user_key = tracker_name_to_user.get(sub.enrollment)
+            if user_key:
+                current_best = submission_score_map.get(user_key)
+                sub_score = float(sub.score) if sub.score is not None else 0.0
+                if current_best is None or sub_score > current_best:
+                    submission_score_map[user_key] = sub_score
 
     stats = {"totalAssigned": len(users), "notStarted": 0, "inProgress": 0, "completed": 0, "overdue": 0}
     needs_attention = {"overdueLearning": 0, "inactiveLearners": 0, "lowAssessmentScores": 0}
     
+    results = []
     seven_days_ago = add_days(today(), -7)
     
     for user, data in users.items():
@@ -881,10 +876,10 @@ def get_module_learners(module_name):
             "dueDate": None,
             "lastActivity": None,
             "isOverdue": False,
-            "isInactive": False,
             "needsAttention": False,
-            "hasAssessment": bool(quiz_name),
-            "assignedDate": data.get("creation")
+            "hasAssessment": bool(quiz_name) or (user in submission_score_map),
+            "assignedDate": data.get("creation"),
+            "trackerName": tracker.name if tracker else None
         }
         
         start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else getdate(data["creation"])
@@ -895,6 +890,7 @@ def get_module_learners(module_name):
                 learner_info["isOverdue"] = True
                 stats["overdue"] += 1
                 needs_attention["overdueLearning"] += 1
+                learner_info["needsAttention"] = True
 
         if tracker:
             learner_info["status"] = tracker.status
@@ -908,14 +904,18 @@ def get_module_learners(module_name):
             submitted_score = submission_score_map.get(user)  # None if no submission record
             if submitted_score is not None:
                 learner_info["score"] = float(submitted_score)
-                if float(submitted_score) < PASSING_PERCENTAGE:
+                if learner_info["score"] < PASSING_PERCENTAGE:
                     needs_attention["lowAssessmentScores"] += 1
+                    learner_info["needsAttention"] = True
             elif tracker.status in ("Completed", "Failed") and tracker.total_score:
                 # Legacy: score stored only in tracker, not in a submission record
                 learner_info["score"] = float(tracker.total_score)
-                if float(tracker.total_score) < PASSING_PERCENTAGE:
+                if learner_info["score"] < PASSING_PERCENTAGE:
                     needs_attention["lowAssessmentScores"] += 1
+                    learner_info["needsAttention"] = True
             else:
+                # If they completed the module but have absolutely no score,
+                # we don't treat it as "Failed: 0%", we just keep it as None (--)
                 learner_info["score"] = None  # Not attempted
 
             learner_info["passingPercentage"] = PASSING_PERCENTAGE
@@ -926,16 +926,18 @@ def get_module_learners(module_name):
                 stats["inProgress"] += 1
             else:
                 stats["notStarted"] += 1
-
-            # Inactive = tracker exists but status is still "Not Started"
-            if tracker.status == "Not Started":
+                
+            if getdate(tracker.modified) < getdate(seven_days_ago) and tracker.status != "Completed":
                 learner_info["isInactive"] = True
                 needs_attention["inactiveLearners"] += 1
+                learner_info["needsAttention"] = True
         else:
             stats["notStarted"] += 1
-            # No tracker at all = inactive
-            learner_info["isInactive"] = True
-            needs_attention["inactiveLearners"] += 1
+            # If no tracker, check if they were assigned more than 7 days ago
+            if data.get("creation") and getdate(data.get("creation")) < getdate(seven_days_ago):
+                learner_info["isInactive"] = True
+                needs_attention["inactiveLearners"] += 1
+                learner_info["needsAttention"] = True
             
         results.append(learner_info)
         
