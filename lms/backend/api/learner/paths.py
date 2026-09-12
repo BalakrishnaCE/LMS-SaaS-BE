@@ -84,6 +84,10 @@ def get_learner_path_detail(path_id):
             
             # Identify progress for this module from the tracker map
             mod_prog = module_progress_map.get(mod.name, {})
+            
+            if mod_prog.get("status") == "Excluded":
+                continue
+                
             mod["learner_status"] = mod_prog.get("status", "Not Started")
             mod["learner_score"] = mod_prog.get("score", 0)
             
@@ -189,20 +193,27 @@ def get_learner_paths():
 
         # Get modules for this path
         modules = frappe.get_all("LMS Learning Path Course", filters={"parent": path.name}, fields=["module"])
-        path.module_count = len(modules)
         
         completed_modules = 0
         total_progress = 0
+        valid_module_count = 0
+        
         for m in modules:
             mt = module_status_map.get(m.module)
+            if mt and mt.status == "Excluded":
+                continue
+                
+            valid_module_count += 1
             if mt:
                 if mt.status == "Completed":
                     completed_modules += 1
                 if mt.progress_percentage:
                     total_progress += mt.progress_percentage
         
-        if path.module_count > 0:
-            path.progress_percentage = round((total_progress / path.module_count), 2)
+        path.module_count = valid_module_count
+        
+        if valid_module_count > 0:
+            path.progress_percentage = round((total_progress / valid_module_count), 2)
         else:
             path.progress_percentage = 0
             

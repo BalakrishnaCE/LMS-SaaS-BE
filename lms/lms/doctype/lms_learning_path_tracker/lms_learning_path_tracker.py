@@ -35,11 +35,18 @@ class LMSLearningPathTracker(Document):
 		scored_modules = 0
 		total_score_sum = 0
 		total_progress_sum = 0
+		valid_modules_count = 0
 		
 		self.set("module_progress", [])
 		
 		for mod in module_names:
 			mt = tracker_map.get(mod)
+			
+			if mt and mt.status == "Excluded":
+				continue
+				
+			valid_modules_count += 1
+			
 			status = mt.status if mt else "Not Started"
 			if status == "Not started":
 				status = "Not Started"
@@ -61,7 +68,10 @@ class LMSLearningPathTracker(Document):
 				scored_modules += 1
 				total_score_sum += mt.total_score
 				
-		self.progress_percentage = round((total_progress_sum / total_modules), 2)
+		if valid_modules_count > 0:
+			self.progress_percentage = round((total_progress_sum / valid_modules_count), 2)
+		else:
+			self.progress_percentage = 0
 		
 		if scored_modules > 0:
 			self.total_score = round(total_score_sum / scored_modules, 2)
