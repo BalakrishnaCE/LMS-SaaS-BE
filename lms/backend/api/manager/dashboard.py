@@ -117,19 +117,25 @@ def get_needs_attention():
     if pending_qa:
         pending_qa.sort(key=lambda x: x["sort_date"])
         
-        first_due = pending_qa[0]
-        days_left = (first_due["sort_date"] - today_dt).days
-        if days_left < 0:
-            description = f"Assessment overdue by {abs(days_left)} days"
-        elif days_left == 0:
-            description = "Assessment due today"
+        if len(pending_qa) == 1:
+            first = pending_qa[0]
+            description = f"A manual QA assessment for '{first['quiz_title']}' was submitted by {first['learner']} and requires your evaluation."
+            title = "Pending QA Evaluation"
         else:
-            description = f"Assessment due in {days_left} days"
+            first_due = pending_qa[0]
+            days_left = (first_due["sort_date"] - today_dt).days
+            if days_left < 0:
+                description = f"Assessment overdue by {abs(days_left)} days"
+            elif days_left == 0:
+                description = "Assessment due today"
+            else:
+                description = f"Assessment due in {days_left} days"
+            title = f"{len(pending_qa)} Pending QA Evaluation{'s' if len(pending_qa) > 1 else ''}"
             
         # Insert at the top of the list because it's high priority
         results.insert(0, {
             "type": "qa",
-            "title": f"{len(pending_qa)} Pending QA Evaluation{'s' if len(pending_qa) > 1 else ''}",
+            "title": title,
             "description": description,
             "count": len(pending_qa),
             "submissions": pending_qa
