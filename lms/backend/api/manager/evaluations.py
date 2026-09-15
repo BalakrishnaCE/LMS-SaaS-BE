@@ -16,7 +16,7 @@ def get_qa_submission_details(submission_id):
         
     sub = frappe.get_doc("LMS Quiz Submission", submission_id)
     learner_name = frappe.db.get_value("User", sub.user, "full_name") or sub.user
-    quiz_title = frappe.db.get_value("LMS Quiz", sub.quiz, "title") or sub.quiz
+    quiz_title, passing_percentage = frappe.db.get_value("LMS Quiz", sub.quiz, ["title", "passing_percentage"]) or (sub.quiz, 70)
     
     questions = []
     
@@ -44,12 +44,15 @@ def get_qa_submission_details(submission_id):
         "submission_id": sub.name,
         "quiz_title": quiz_title,
         "learner_name": learner_name,
+        "learner_id": sub.user,
         "due_date": frappe.utils.formatdate(sub.submitted_on, "MMM d, YYYY") if sub.submitted_on else "",
+        "passing_percentage": passing_percentage,
+        "overall_feedback": sub.evaluation_feedback or "",
         "questions": questions
     }
 
 @frappe.whitelist()
-def save_qa_evaluation(submission_id, evaluations):
+def save_qa_evaluation(submission_id, evaluations, overall_feedback=""):
     """
     Saves the manual evaluation scores and feedback for each response.
     `evaluations` should be a list of dicts:
@@ -62,6 +65,7 @@ def save_qa_evaluation(submission_id, evaluations):
         evaluations = json.loads(evaluations)
         
     sub = frappe.get_doc("LMS Quiz Submission", submission_id)
+    sub.evaluation_feedback = overall_feedback
     
     total_manual_score = 0
     total_questions = len(sub.responses)
