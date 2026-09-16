@@ -12,16 +12,17 @@ def get_tenant_settings():
                 
         # Merge the distinct discussion toggle into features for unified frontend access
         features["Discussions"] = bool(settings.enable_discussions)
-        
         return {
             "color": settings.primary_color or "#2563eb",
             "logo": settings.brand_logo or None,
+            "brand_name": settings.brand_name or "LMS Portal",
             "features": features
         }
     except Exception:
         return {
             "color": "#2563eb",
             "logo": None,
+            "brand_name": "LMS Portal",
             "features": {}
         }
 
