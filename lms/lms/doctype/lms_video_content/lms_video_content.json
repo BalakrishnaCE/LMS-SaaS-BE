@@ -13,6 +13,7 @@
   "is_scored",
   "score",
   "track_progress",
+  "allow_seeking",
   "interactive_elements",
   "duration"
  ],
@@ -71,6 +72,13 @@
    "fieldtype": "Check",
    "label": "Track Progress",
    "description": "Toggle to enable or disable track progress."
+  },
+  {
+   "default": "1",
+   "fieldname": "allow_seeking",
+   "fieldtype": "Check",
+   "label": "Allow Seeking",
+   "description": "Whether learners can skip ahead freely. When disabled, forward-seeking is restricted to the furthest-watched point."
   },
   {
    "fieldname": "interactive_elements",
