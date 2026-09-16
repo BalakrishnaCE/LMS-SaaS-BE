@@ -20,7 +20,7 @@ def _get_filter_for_user():
     return [] # Default fallback
 
 @frappe.whitelist(allow_guest=True)
-def get_metrics_summary():
+def get_metrics_summary(learning_type="all"):
     user_filter = _get_filter_for_user()
     if user_filter == []:
         return {"month": {}, "year": {}}
@@ -45,8 +45,13 @@ def get_metrics_summary():
         overdue_assignments_history = []
         compliance_completion_history = []
         
-        assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "creation", "is_mandatory"])
-        assignment_map = {a.module: a for a in assignments}
+        assignment_map = {}
+        if learning_type in ["all", "modules"]:
+            assignments = frappe.get_all("LMS Module Assignment", fields=["name", "module", "duration", "creation", "is_mandatory"])
+            for a in assignments: assignment_map[a.module] = a
+        if learning_type in ["all", "paths"]:
+            assignments_p = frappe.get_all("LMS Learning Path Assignment", fields=["name", "learning_path", "duration", "creation", "is_mandatory"])
+            for a in assignments_p: assignment_map[a.learning_path] = a
         
         all_module_categories = frappe.get_all("LMS Module Category", fields=["parent", "category"])
         module_categories_map = {}
@@ -74,7 +79,17 @@ def get_metrics_summary():
             if user_filter is not None:
                 tracker_filters["user"] = ["in", user_filter]
                 
-            trackers_dt = frappe.get_all("LMS Module Tracker", filters=tracker_filters, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
+            trackers_dt = []
+            if learning_type in ["all", "modules"]:
+                mods = frappe.get_all("LMS Module Tracker", filters=tracker_filters, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
+                for m in mods:
+                    m["item"] = m.module
+                trackers_dt.extend(mods)
+            if learning_type in ["all", "paths"]:
+                paths = frappe.get_all("LMS Learning Path Tracker", filters=tracker_filters, fields=["status", "modified", "learning_path", "started_on", "creation", "completed_on", "user"])
+                for p in paths:
+                    p["item"] = p.learning_path
+                trackers_dt.extend(paths)
             
             active_users_at_dt = set()
             for t in trackers_dt:
@@ -100,7 +115,7 @@ def get_metrics_summary():
                     if t.user in learners_by_dt:
                         attention_users.add(t.user)
                 
-                a = assignment_map.get(t.module)
+                a = assignment_map.get(t.get("item"))
                 if a and a.duration and t.started_on:
                     start_date = getdate(t.started_on)
                     due_date = add_days(start_date, a.duration)
@@ -118,7 +133,7 @@ def get_metrics_summary():
             overdue_assignments_val = overdue_dt
             
             compliance_modules = {mod for mod, cats in module_categories_map.items() if "Compliance" in cats}
-            comp_trackers = [t for t in trackers_dt if t.module in compliance_modules]
+            comp_trackers = [t for t in trackers_dt if t.get("item") in compliance_modules]
             comp_total = len(comp_trackers)
             comp_completed = len([t for t in comp_trackers if t.status == "Completed" and (not t.completed_on or getdate(t.completed_on) <= getdate(dt))])
             compliance_completion_val = int((comp_completed / comp_total) * 100) if comp_total > 0 else 0
@@ -305,6 +320,11 @@ def get_learning_content_summary():
     }
 
 @frappe.whitelist(allow_guest=True)
+def debug_correct_options(question_id):
+    options = frappe.get_all("LMS Quiz Option", filters={"parent": question_id}, fields=["parent", "option_text", "is_correct"], ignore_permissions=True)
+    return {"options": options}
+
+@frappe.whitelist(allow_guest=True)
 def get_assessment_performance():
     user_filter = _get_filter_for_user()
     if user_filter == []:
@@ -415,7 +435,7 @@ def get_department_performance():
     return results
 
 @frappe.whitelist(allow_guest=True)
-def get_recently_assigned_learning():
+def get_recently_assigned_learning(learning_type="all"):
     user_filter = _get_filter_for_user()
     if user_filter == []:
         return []
@@ -430,83 +450,101 @@ def get_recently_assigned_learning():
     if not eligible_learners:
         return []
 
-    # Get recent activity/assignments from trackers
-    recent_trackers = frappe.get_all(
-        "LMS Module Tracker",
-        filters={"user": ["in", eligible_learners]},
-        fields=["module", "creation"],
-        order_by="creation desc",
-        limit=100
-    )
-    
-    recent_modules = []
-    seen = set()
-    for t in recent_trackers:
-        if t.module not in seen:
-            seen.add(t.module)
-            recent_modules.append(t.module)
-            if len(recent_modules) >= 5:
-                break
-                
-    if not recent_modules:
-        return []
-        
     results = []
     
-    modules = frappe.get_all(
-        "LMS Module",
-        filters={"name": ["in", recent_modules]},
-        fields=["name", "module_name"]
-    )
-    module_map = {m.name: m.module_name for m in modules}
-    
-    all_module_categories = frappe.get_all("LMS Module Category", fields=["parent", "category"])
-    module_categories_map = {}
-    for mc in all_module_categories:
-        if mc.parent not in module_categories_map:
-            module_categories_map[mc.parent] = set()
-        module_categories_map[mc.parent].add(mc.category)
-        
-    trackers = frappe.get_all(
-        "LMS Module Tracker",
-        filters={
-            "module": ["in", recent_modules],
-            "user": ["in", eligible_learners]
-        },
-        fields=["module", "status", "user"]
-    )
-    
-    for mod in recent_modules:
-        mod_trackers = [t for t in trackers if t.module == mod]
-        
-        assigned = len(mod_trackers)
-        # Skip modules that have 0 assigned learners in this scope
-        if assigned == 0:
-            continue
+    if learning_type in ["all", "modules"]:
+        recent_trackers = frappe.get_all(
+            "LMS Module Tracker",
+            filters={"user": ["in", eligible_learners]},
+            fields=["module", "creation"],
+            order_by="creation desc",
+            limit=100
+        )
+        recent_modules = []
+        seen = set()
+        for t in recent_trackers:
+            if t.module not in seen:
+                seen.add(t.module)
+                recent_modules.append(t.module)
+                if len(recent_modules) >= 5:
+                    break
+                    
+        if recent_modules:
+            modules = frappe.get_all("LMS Module", filters={"name": ["in", recent_modules]}, fields=["name", "module_name"])
+            module_map = {m.name: m.module_name for m in modules}
             
-        in_progress = len([t for t in mod_trackers if t.status == "In Progress"])
-        completed = len([t for t in mod_trackers if t.status == "Completed"])
-        
-        c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
-        
-        cats = list(module_categories_map.get(mod, []))
-        cat_str = cats[0] if cats else "General"
-        
-        results.append({
-            "id": mod,
-            "name": module_map.get(mod, mod),
-            "type": "Module",
-            "category": cat_str,
-            "assignedLearners": assigned,
-            "inProgress": in_progress,
-            "completed": completed,
-            "completionRate": c_rate
-        })
-        
+            all_module_categories = frappe.get_all("LMS Module Category", fields=["parent", "category"])
+            module_categories_map = {}
+            for mc in all_module_categories:
+                if mc.parent not in module_categories_map:
+                    module_categories_map[mc.parent] = set()
+                module_categories_map[mc.parent].add(mc.category)
+                
+            trackers = frappe.get_all(
+                "LMS Module Tracker",
+                filters={"module": ["in", recent_modules], "user": ["in", eligible_learners]},
+                fields=["module", "status", "user"]
+            )
+            
+            for mod in recent_modules:
+                mod_trackers = [t for t in trackers if t.module == mod]
+                assigned = len(mod_trackers)
+                if assigned == 0: continue
+                in_progress = len([t for t in mod_trackers if t.status == "In Progress"])
+                completed = len([t for t in mod_trackers if t.status == "Completed"])
+                c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
+                cats = list(module_categories_map.get(mod, []))
+                cat_str = cats[0] if cats else "General"
+                results.append({
+                    "id": mod, "name": module_map.get(mod, mod), "type": "Module",
+                    "category": cat_str, "assignedLearners": assigned, "inProgress": in_progress,
+                    "completed": completed, "completionRate": c_rate
+                })
+
+    if learning_type in ["all", "paths"]:
+        recent_trackers = frappe.get_all(
+            "LMS Learning Path Tracker",
+            filters={"user": ["in", eligible_learners]},
+            fields=["learning_path", "creation"],
+            order_by="creation desc",
+            limit=100
+        )
+        recent_paths = []
+        seen = set()
+        for t in recent_trackers:
+            if t.learning_path not in seen:
+                seen.add(t.learning_path)
+                recent_paths.append(t.learning_path)
+                if len(recent_paths) >= 5:
+                    break
+                    
+        if recent_paths:
+            paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", recent_paths]}, fields=["name", "title as module_name"])
+            path_map = {p.name: p.module_name for p in paths}
+            
+            trackers = frappe.get_all(
+                "LMS Learning Path Tracker",
+                filters={"learning_path": ["in", recent_paths], "user": ["in", eligible_learners]},
+                fields=["learning_path", "status", "user"]
+            )
+            
+            for p in recent_paths:
+                p_trackers = [t for t in trackers if t.learning_path == p]
+                assigned = len(p_trackers)
+                if assigned == 0: continue
+                in_progress = len([t for t in p_trackers if t.status == "In Progress"])
+                completed = len([t for t in p_trackers if t.status == "Completed"])
+                c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
+                results.append({
+                    "id": p, "name": path_map.get(p, p), "type": "Learning Path",
+                    "category": "Path", "assignedLearners": assigned, "inProgress": in_progress,
+                    "completed": completed, "completionRate": c_rate
+                })
+
     return results
 
 @frappe.whitelist(allow_guest=True)
-def get_module_details_analytics(module_id):
+def get_module_details_analytics(module_id, learning_type="module"):
     user_filter = _get_filter_for_user()
     if user_filter == []:
         return {}
@@ -523,29 +561,44 @@ def get_module_details_analytics(module_id):
 
     # Get module details
     try:
-        mod_doc = frappe.get_doc("LMS Module", module_id)
+        if learning_type == "path":
+            mod_doc = frappe.get_doc("LMS Learning Path", module_id)
+            mod_name = mod_doc.title
+        else:
+            mod_doc = frappe.get_doc("LMS Module", module_id)
+            mod_name = mod_doc.module_name
     except frappe.DoesNotExistError:
         return {}
         
-    category_docs = frappe.get_all("LMS Module Category", filters={"parent": module_id}, fields=["category"])
+    category_docs = frappe.get_all("LMS Module Category", filters={"parent": module_id}, fields=["category"]) if learning_type != "path" else []
     cat_str = category_docs[0].category if category_docs else "General"
 
     # Get trackers for eligible learners
-    trackers = frappe.get_all(
-        "LMS Module Tracker",
-        filters={
-            "module": module_id,
-            "user": ["in", eligible_learners]
-        },
-        fields=["name", "user", "status", "progress_percentage", "creation"]
-    )
+    if learning_type == "path":
+        trackers = frappe.get_all(
+            "LMS Learning Path Tracker",
+            filters={
+                "learning_path": module_id,
+                "user": ["in", eligible_learners]
+            },
+            fields=["name", "user", "status", "progress_percentage", "creation"]
+        )
+    else:
+        trackers = frappe.get_all(
+            "LMS Module Tracker",
+            filters={
+                "module": module_id,
+                "user": ["in", eligible_learners]
+            },
+            fields=["name", "user", "status", "progress_percentage", "creation"]
+        )
     
     total_learners = len(trackers)
     if total_learners == 0:
         return {
-            "moduleName": mod_doc.module_name,
+            "moduleName": mod_name,
             "category": cat_str,
-            "type": "Module",
+            "type": "Learning Path" if learning_type == "path" else "Module",
             "overview": {"totalLearners": 0, "pass": 0, "inProgress": 0, "notStarted": 0, "overdue": 0},
             "departmentBreakdown": [],
             "topLearners": []
@@ -753,32 +806,36 @@ def get_assessment_details(submission_id):
 
     responses = frappe.get_all("LMS Quiz Response", filters={"parent": submission_id}, fields=["question", "selected_option", "is_correct", "evaluation_data", "manual_score"], ignore_permissions=True)
     
-    question_ids = [r.question for r in responses if r.question]
+    question_ids = [str(r.question) for r in responses if r.question]
     q_map = {}
     if question_ids:
-        questions = frappe.get_all("LMS Quiz Question", filters={"name": ["in", question_ids]}, fields=["name", "question_text", "score"], ignore_permissions=True)
-        q_map = {q.name: q for q in questions}
+        questions = frappe.get_all("LMS Quiz Question", filters={"name": ["in", question_ids]}, fields=["name", "question_text", "score", "question_type"], ignore_permissions=True)
+        q_map = {str(q.name): q for q in questions}
 
     correct_options = {}
     if question_ids:
         options = frappe.get_all("LMS Quiz Option", filters={"parent": ["in", question_ids]}, fields=["parent", "option_text", "is_correct"], ignore_permissions=True)
         for opt in options:
             if opt.is_correct:
-                correct_options[opt.parent] = opt.option_text
+                if str(opt.parent) in correct_options:
+                    correct_options[str(opt.parent)] += " / " + opt.option_text
+                else:
+                    correct_options[str(opt.parent)] = opt.option_text
             
     responses_data = []
     correct_count = 0
     incorrect_count = 0
 
     for r in responses:
-        q_info = q_map.get(r.question)
+        q_info = q_map.get(str(r.question))
         if not q_info:
             continue
             
-        if r.is_correct:
-            correct_count += 1
-        else:
-            incorrect_count += 1
+        if q_info.question_type != "Scenario Based":
+            if r.is_correct:
+                correct_count += 1
+            else:
+                incorrect_count += 1
             
         import json
         feedback_str = ""
@@ -792,9 +849,10 @@ def get_assessment_details(submission_id):
 
         responses_data.append({
             "questionText": frappe.utils.strip_html(q_info.question_text) if q_info.question_text else "",
+            "questionType": q_info.question_type,
             "learnerAnswer": r.selected_option or "No Answer",
             "isCorrect": bool(r.is_correct),
-            "correctAnswer": correct_options.get(r.question, ""),
+            "correctAnswer": correct_options.get(str(r.question), ""),
             "score": r.manual_score if r.manual_score is not None else (q_info.score if r.is_correct else 0),
             "maxScore": q_info.score or 0,
             "feedback": feedback_str
@@ -840,3 +898,277 @@ def debug_submission(sub_id):
     sub = frappe.get_all("LMS Quiz Submission", filters={"name": sub_id}, fields=["*"], ignore_permissions=True)
     resp = frappe.get_all("LMS Quiz Response", filters={"parent": sub_id}, fields=["*"], ignore_permissions=True)
     return {"submission": sub, "responses": resp}
+
+@frappe.whitelist(allow_guest=True)
+def get_learner_metrics():
+    user_filter = _get_filter_for_user()
+    if user_filter == []:
+        return {
+            "totalAttempts": 0,
+            "averageScore": 0,
+            "passRate": 0,
+            "failedAttempts": 0
+        }
+        
+    filters = {}
+    if user_filter:
+        filters["user"] = ["in", user_filter]
+        
+    submissions = frappe.get_all("LMS Quiz Submission", filters=filters, fields=["passed", "score", "quiz"])
+    total_attempts = len(submissions)
+    passed_count = len([s for s in submissions if s.passed])
+    failed_attempts = total_attempts - passed_count
+    pass_rate = int((passed_count / total_attempts) * 100) if total_attempts > 0 else 0
+    
+    quiz_names = list(set([s.quiz for s in submissions if s.quiz]))
+    quiz_totals = {}
+    if quiz_names:
+        quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "total_score"])
+        quiz_totals = {q.name: q.total_score for q in quizzes}
+        
+    total_percentage = 0
+    scored_attempts = 0
+    for s in submissions:
+        if s.quiz and quiz_totals.get(s.quiz):
+            total = quiz_totals.get(s.quiz)
+            if total > 0:
+                perc = ((s.score or 0) / total) * 100
+                total_percentage += perc
+                scored_attempts += 1
+                
+    average_score = int(total_percentage / scored_attempts) if scored_attempts > 0 else 0
+    
+    return {
+        "totalAttempts": total_attempts,
+        "averageScore": average_score,
+        "passRate": pass_rate,
+        "failedAttempts": failed_attempts
+    }
+
+@frappe.whitelist(allow_guest=True)
+def get_learning_performance_list():
+    user_filter = _get_filter_for_user()
+    if user_filter == []:
+        return []
+        
+    user_filters = {}
+    if user_filter:
+        user_filters["name"] = ["in", user_filter]
+        
+    users = frappe.get_all("User", filters=user_filters, fields=["name", "full_name", "email", "enabled"])
+    if not users:
+        return []
+        
+    user_emails = [u.email or u.name for u in users]
+    
+    # We don't query assignment status by user since assignment doesn't have a user field
+    assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
+    assignment_map = {a.module: a for a in assignments}
+    
+    trackers = frappe.get_all("LMS Module Tracker", filters={"user": ["in", user_emails]}, fields=["user", "status", "progress_percentage", "module", "started_on"])
+    try:
+        employees = frappe.get_all("Employee", filters={"user_id": ["in", user_emails]}, fields=["user_id", "designation"])
+        emp_map = {e.user_id: e.designation for e in employees}
+    except:
+        emp_map = {}
+        
+    team_members = frappe.get_all("LMS Team Member", filters={"user": ["in", user_emails]}, fields=["user", "parent"])
+    user_team_map = {tm.user: tm.parent for tm in team_members}
+    team_names = list(set(user_team_map.values()))
+    teams = frappe.get_all("LMS Team", filters={"name": ["in", team_names]}, fields=["name", "team_name"])
+    team_map = {t.name: t.team_name for t in teams}
+    
+    user_trackers = defaultdict(list)
+    for t in trackers:
+        user_trackers[t.user].append(t)
+        
+    results = []
+    today_dt = getdate(today())
+    
+    for u in users:
+        email = u.email or u.name
+        
+        team_id = user_team_map.get(email)
+        dept_name = team_map.get(team_id) if team_id else "No Department"
+        designation = emp_map.get(email) or "Learner"
+        u_tracks = user_trackers.get(email, [])
+        
+        assigned_count = len(u_tracks)
+        completed_count = len([t for t in u_tracks if t.status == "Completed"])
+        
+        total_prog = sum([t.progress_percentage or 0 for t in u_tracks])
+        avg_progress = int(total_prog / len(u_tracks)) if u_tracks else 0
+        
+        progress_status = "On Track"
+        has_overdue = False
+        needs_attention = False
+        
+        for t in u_tracks:
+            if t.status != "Completed" and t.started_on:
+                a = assignment_map.get(t.module)
+                if a and a.duration:
+                    due = getdate(add_days(getdate(t.started_on), a.duration))
+                    days_left = (due - today_dt).days
+                    if days_left < 0:
+                        has_overdue = True
+                    elif days_left <= 3:
+                        needs_attention = True
+                    
+        if has_overdue:
+            progress_status = "Overdue"
+        elif needs_attention:
+            progress_status = "Needs Attention"
+            
+        results.append({
+            "id": email,
+            "learnerName": u.full_name or email,
+            "email": email,
+            "avatar": "",
+            "department": dept_name,
+            "designation": designation,
+            "accountStatus": "Active" if u.enabled else "Inactive",
+            "assignedLearning": f"{assigned_count} assigned · {completed_count} completed",
+            "progress": avg_progress,
+            "progressStatus": progress_status
+        })
+        
+    return results
+
+@frappe.whitelist(allow_guest=True)
+def get_learner_details(learner_email):
+    user_filter = _get_filter_for_user()
+    if user_filter is not None and learner_email not in user_filter:
+        return {}
+        
+    users = frappe.get_all("User", filters={"name": learner_email}, fields=["name", "full_name", "email", "enabled"])
+    if not users:
+        return {}
+    u = users[0]
+    
+    try:
+        employees = frappe.get_all("Employee", filters={"user_id": learner_email}, fields=["user_id", "designation"])
+        designation = employees[0].designation if employees else "Learner"
+    except:
+        designation = "Learner"
+        
+    team_members = frappe.get_all("LMS Team Member", filters={"user": learner_email}, fields=["parent"])
+    department = "No Department"
+    if team_members:
+        teams = frappe.get_all("LMS Team", filters={"name": team_members[0].parent}, fields=["team_name"])
+        if teams:
+            department = teams[0].team_name
+            
+    profile = {
+        "name": u.full_name or u.email,
+        "email": u.email,
+        "avatar": "",
+        "department": department,
+        "designation": designation,
+        "status": "Active" if u.enabled else "Inactive"
+    }
+    
+    today_dt = getdate(today())
+    
+    mod_assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
+    mod_assign_map = {a.module: a for a in mod_assignments}
+    
+    mod_trackers = frappe.get_all("LMS Module Tracker", filters={"user": learner_email}, fields=["module", "status", "progress_percentage", "started_on"])
+    mod_names = [t.module for t in mod_trackers]
+    mod_titles = {}
+    if mod_names:
+        modules = frappe.get_all("LMS Module", filters={"name": ["in", mod_names]}, fields=["name", "module_name"])
+        mod_titles = {m.name: m.module_name for m in modules}
+    
+    path_assignments = frappe.get_all("LMS Learning Path Assignment", fields=["learning_path", "duration"]) if frappe.db.exists("DocType", "LMS Learning Path Assignment") else []
+    path_assign_map = {a.learning_path: a for a in path_assignments}
+    
+    path_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": learner_email}, fields=["learning_path", "status", "progress_percentage", "started_on"]) if frappe.db.exists("DocType", "LMS Learning Path Tracker") else []
+    path_names = [t.learning_path for t in path_trackers]
+    path_titles = {}
+    if path_names:
+        paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", path_names]}, fields=["name", "path_name"])
+        path_titles = {p.name: p.path_name for p in paths}
+        
+    learnings = []
+    
+    for t in mod_trackers:
+        l_status = t.status
+        if t.status != "Completed" and t.started_on:
+            l_status = "In Progress" if t.progress_percentage > 0 else "Not Started"
+            a = mod_assign_map.get(t.module)
+            if a and a.duration:
+                due = getdate(add_days(getdate(t.started_on), a.duration))
+                if (due - today_dt).days < 0:
+                    l_status = "Overdue"
+        elif t.status == "Completed":
+            l_status = "Completed"
+            
+        learnings.append({
+            "title": mod_titles.get(t.module, t.module),
+            "type": "Module",
+            "progress": int(t.progress_percentage or 0),
+            "status": l_status
+        })
+        
+    for t in path_trackers:
+        l_status = t.status
+        if t.status != "Completed" and t.started_on:
+            l_status = "In Progress" if t.progress_percentage > 0 else "Not Started"
+            a = path_assign_map.get(t.learning_path)
+            if a and a.duration:
+                due = getdate(add_days(getdate(t.started_on), a.duration))
+                if (due - today_dt).days < 0:
+                    l_status = "Overdue"
+        elif t.status == "Completed":
+            l_status = "Completed"
+            
+        learnings.append({
+            "title": path_titles.get(t.learning_path, t.learning_path),
+            "type": "Learning Path",
+            "progress": int(t.progress_percentage or 0),
+            "status": l_status
+        })
+        
+    submissions = frappe.get_all("LMS Quiz Submission", filters={"user": learner_email}, fields=["quiz", "score", "passed"])
+    quiz_names = [s.quiz for s in submissions]
+    quiz_titles = {}
+    quiz_totals = {}
+    if quiz_names:
+        quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "title", "total_score"])
+        for q in quizzes:
+            quiz_titles[q.name] = q.title
+            quiz_totals[q.name] = q.total_score
+            
+    assessments = []
+    total_percentage = 0
+    scored_attempts = 0
+    
+    for s in submissions:
+        total = quiz_totals.get(s.quiz) or 0
+        perc = int(((s.score or 0) / total) * 100) if total > 0 else 0
+        if total > 0:
+            total_percentage += perc
+            scored_attempts += 1
+            
+        assessments.append({
+            "title": quiz_titles.get(s.quiz, s.quiz),
+            "type": "Assessment",
+            "score": perc,
+            "status": "Pass" if s.passed else "Failed"
+        })
+        
+    attempts = len(submissions)
+    average_score = int(total_percentage / scored_attempts) if scored_attempts > 0 else 0
+    passed = len([s for s in submissions if s.passed])
+    
+    return {
+        "profile": profile,
+        "learnings": learnings,
+        "assessments": assessments,
+        "metrics": {
+            "attempts": attempts,
+            "averageScore": average_score,
+            "passed": passed,
+            "needsReview": 0
+        }
+    }
