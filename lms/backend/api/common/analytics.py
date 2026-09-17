@@ -325,14 +325,74 @@ def debug_correct_options(question_id):
     return {"options": options}
 
 @frappe.whitelist(allow_guest=True)
-def get_assessment_performance():
+def get_assessment_performance(assessment_type="all"):
     user_filter = _get_filter_for_user()
     if user_filter == []:
         return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": []}
         
+    if assessment_type == "qa":
+        monthly_data = [{"month": calendar.month_abbr[month], "attempts": 0} for month in range(1, 13)]
+        return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": monthly_data}
+        
     filters = {}
     if user_filter is not None:
         filters["user"] = ["in", user_filter]
+
+    if assessment_type in ["quiz", "qa"]:
+        submissions = frappe.get_all("LMS Quiz Submission", filters=filters, fields=["passed", "score", "creation", "user", "quiz"], ignore_permissions=True)
+        
+        quiz_names = list(set([s.quiz for s in submissions]))
+        if quiz_names:
+            quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "evaluation_method", "title"])
+            
+            def is_qa_quiz(q):
+                return q.evaluation_method == "Manual review" or q.title == "QA Assessment"
+                
+            quiz_is_qa_map = {q.name: is_qa_quiz(q) for q in quizzes}
+            
+            if assessment_type == "qa":
+                submissions = [s for s in submissions if quiz_is_qa_map.get(s.quiz)]
+            else:
+                submissions = [s for s in submissions if not quiz_is_qa_map.get(s.quiz)]
+                
+        total_attempts = len(submissions)
+        if total_attempts == 0:
+            monthly_data = [{"month": calendar.month_abbr[month], "attempts": 0} for month in range(1, 13)]
+            return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": monthly_data}
+            
+        passed_submissions = [s for s in submissions if s.passed]
+        total_passed = len(passed_submissions)
+        total_failed = total_attempts - total_passed
+        
+        avg_score = sum([s.score or 0 for s in submissions]) / total_attempts
+        pass_rate = int((total_passed / total_attempts) * 100)
+        
+        user_quiz_counts = {}
+        for s in submissions:
+            key = (s.user, s.quiz)
+            user_quiz_counts[key] = user_quiz_counts.get(key, 0) + 1
+            
+        retakes = sum(1 for count in user_quiz_counts.values() if count > 1)
+        retake_rate = int((retakes / len(user_quiz_counts)) * 100) if user_quiz_counts else 0
+
+        current_year = getdate(today()).year
+        monthly_attempts = defaultdict(int)
+        for s in submissions:
+            s_date = getdate(s.creation)
+            if s_date.year == current_year:
+                monthly_attempts[s_date.month] += 1
+                
+        monthly_data = [{"month": calendar.month_abbr[month], "attempts": monthly_attempts[month]} for month in range(1, 13)]
+
+        return {
+            "averageScore": int(avg_score),
+            "passRate": pass_rate,
+            "needsRetake": total_failed,
+            "totalAttempts": total_attempts,
+            "retakeRate": retake_rate,
+            "monthlyAttempts": monthly_data
+        }
+
         
     trackers = frappe.get_all("LMS Module Tracker", filters=filters, fields=["status", "total_score", "creation", "user", "module"])
     
@@ -519,7 +579,7 @@ def get_recently_assigned_learning(learning_type="all"):
                     break
                     
         if recent_paths:
-            paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", recent_paths]}, fields=["name", "title as module_name"])
+            paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", recent_paths]}, fields=["name", "path_name as module_name"])
             path_map = {p.name: p.module_name for p in paths}
             
             trackers = frappe.get_all(
@@ -563,7 +623,7 @@ def get_module_details_analytics(module_id, learning_type="module"):
     try:
         if learning_type == "path":
             mod_doc = frappe.get_doc("LMS Learning Path", module_id)
-            mod_name = mod_doc.title
+            mod_name = mod_doc.path_name
         else:
             mod_doc = frappe.get_doc("LMS Module", module_id)
             mod_name = mod_doc.module_name
@@ -681,9 +741,9 @@ def get_module_details_analytics(module_id, learning_type="module"):
     top_learners = sorted(top_learners, key=lambda x: x["completionRate"], reverse=True)[:50]
 
     return {
-        "moduleName": mod_doc.module_name,
+        "moduleName": mod_name,
         "category": cat_str,
-        "type": "Module",
+        "type": "Learning Path" if learning_type == "path" else "Module",
         "overview": {
             "totalLearners": total_learners,
             "pass": int((passed / total_learners) * 100),
@@ -713,6 +773,14 @@ def get_assessment_performance_list(assessment_type="all"):
     quiz_names = list(set([s.quiz for s in submissions]))
     quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "title", "total_score", "passing_percentage", "max_attempts", "quiz_type"], ignore_permissions=True)
     quiz_map = {q.name: q for q in quizzes}
+    
+    if assessment_type == "qa":
+        submissions = [s for s in submissions if quiz_map.get(s.quiz) and quiz_map[s.quiz].quiz_type == "QA Assessment"]
+    elif assessment_type == "quiz":
+        submissions = [s for s in submissions if quiz_map.get(s.quiz) and quiz_map[s.quiz].quiz_type == "Quiz"]
+        
+    if not submissions:
+        return []
     
     tracker_names = list(set([s.enrollment for s in submissions if s.enrollment]))
     trackers = frappe.get_all("LMS Module Tracker", filters={"name": ["in", tracker_names]}, fields=["name", "module"], ignore_permissions=True)
@@ -1198,3 +1266,256 @@ def get_learner_details(learner_email):
             "needsReview": 0
         }
     }
+
+
+@frappe.whitelist(allow_guest=True)
+def get_achievements_metrics():
+    user_filter = _get_filter_for_user()
+    if user_filter == []:
+        return {
+            "totalBadges": 0,
+            "learnersRecognized": 0,
+            "mostEarnedBadge": {"name": "-", "count": 0},
+            "earnedThisMonth": {"count": 0, "change": 0}
+        }
+    
+    # 1. Total active badges
+    total_badges = frappe.db.count("LMS Badge", {"is_active": 1})
+    
+    # Base filter for Learner Badges
+    lb_filters = {}
+    if user_filter is not None:
+        lb_filters["user"] = ["in", user_filter]
+        
+    # 2. Learners Recognized (distinct users)
+    all_users = frappe.get_all("LMS Learner Badge", filters=lb_filters, fields=["user"])
+    learners_recognized = len(set([x.user for x in all_users]))
+    
+    # 3. Most Earned Badge
+    conditions = ""
+    if user_filter is not None:
+        format_strings = ','.join(['%s'] * len(user_filter))
+        conditions = f"WHERE user IN ({format_strings})"
+    
+    query_vals = tuple(user_filter) if user_filter is not None else ()
+    
+    most_earned_query = f"""
+        SELECT badge, COUNT(*) as count 
+        FROM `tabLMS Learner Badge`
+        {conditions}
+        GROUP BY badge 
+        ORDER BY count DESC 
+        LIMIT 1
+    """
+    most_earned_res = frappe.db.sql(most_earned_query, query_vals, as_dict=True)
+    
+    most_earned_badge = {"name": "-", "count": 0}
+    if most_earned_res:
+        badge_doc = frappe.db.get_value("LMS Badge", most_earned_res[0].badge, "badge_name")
+        most_earned_badge = {
+            "name": badge_doc or most_earned_res[0].badge,
+            "count": most_earned_res[0].count
+        }
+        
+    # 4. Earned This Month vs Last Month
+    from frappe.utils import today, get_first_day, add_months, get_last_day
+    
+    current_month_start = get_first_day(today())
+    current_month_end = get_last_day(today())
+    
+    last_month_start = get_first_day(add_months(today(), -1))
+    last_month_end = get_last_day(add_months(today(), -1))
+    
+    filters_cm = lb_filters.copy()
+    filters_cm["awarded_on"] = ["between", [current_month_start, current_month_end]]
+    
+    filters_lm = lb_filters.copy()
+    filters_lm["awarded_on"] = ["between", [last_month_start, last_month_end]]
+    
+    cm_count = frappe.db.count("LMS Learner Badge", filters_cm)
+    lm_count = frappe.db.count("LMS Learner Badge", filters_lm)
+    
+    change = 0
+    if lm_count > 0:
+        change = int(((cm_count - lm_count) / lm_count) * 100)
+    elif cm_count > 0:
+        change = 100
+        
+    return {
+        "totalBadges": total_badges,
+        "learnersRecognized": learners_recognized,
+        "mostEarnedBadge": most_earned_badge,
+        "earnedThisMonth": {"count": cm_count, "change": change}
+    }
+
+
+@frappe.whitelist(allow_guest=True)
+def get_achievements_performance():
+    user_filter = _get_filter_for_user()
+    if user_filter == []:
+        return []
+        
+    # Get all active badges
+    badges = frappe.get_all("LMS Badge", filters={"is_active": 1}, fields=["name", "badge_name", "badge_image", "description", "achievement_criteria"])
+    
+    # Get learner badges
+    lb_filters = {}
+    if user_filter is not None:
+        lb_filters["user"] = ["in", user_filter]
+        
+    learner_badges = frappe.get_all("LMS Learner Badge", filters=lb_filters, fields=["badge", "user"])
+    
+    # We need top dept. We need user -> dept mapping.
+    all_users = list(set([lb.user for lb in learner_badges]))
+    
+    user_team_map = defaultdict(list)
+    if all_users:
+        tms = frappe.get_all("LMS Team Member", filters={"user": ["in", all_users]}, fields=["user", "parent"])
+        for tm in tms:
+            user_team_map[tm.user].append(tm.parent)
+            
+    teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
+    team_name_map = {t.name: t.team_name for t in teams}
+    
+    # Aggregate data per badge
+    badge_stats = defaultdict(lambda: {"count": 0, "depts": defaultdict(int)})
+    
+    for lb in learner_badges:
+        badge_stats[lb.badge]["count"] += 1
+        
+        # Dept
+        u_teams = user_team_map.get(lb.user, [])
+        primary_team_id = u_teams[0] if u_teams else None
+        primary_team_name = team_name_map.get(primary_team_id, "No Department")
+        
+        badge_stats[lb.badge]["depts"][primary_team_name] += 1
+        
+    results = []
+    for b in badges:
+        stats = badge_stats.get(b.name, {"count": 0, "depts": {}})
+        
+        # Calculate Top Dept
+        top_dept = "No Department"
+        top_dept_count = 0
+        if stats["depts"]:
+            sorted_depts = sorted(stats["depts"].items(), key=lambda x: x[1], reverse=True)
+            top_dept = sorted_depts[0][0]
+            top_dept_count = sorted_depts[0][1]
+            
+        results.append({
+            "id": b.name,
+            "badgeName": b.badge_name,
+            "badgeImage": b.badge_image or "",
+            "purpose": b.description or b.achievement_criteria or "",
+            "learnersEarned": stats["count"],
+            "topDept": f"{top_dept} ({top_dept_count})" if top_dept_count > 0 else "-"
+        })
+        
+    # Sort by learnersEarned DESC
+    results.sort(key=lambda x: x["learnersEarned"], reverse=True)
+    return results
+
+
+@frappe.whitelist(allow_guest=True)
+def get_badge_details(badge_id):
+    user_filter = _get_filter_for_user()
+    
+    # 1. Badge Info
+    if not frappe.db.exists("LMS Badge", badge_id):
+        return {}
+        
+    b = frappe.get_doc("LMS Badge", badge_id)
+        
+    badge_info = {
+        "id": b.name,
+        "badgeName": b.badge_name,
+        "badgeImage": b.badge_image or "",
+        "description": b.description or "",
+        "achievementCriteria": b.achievement_criteria or "",
+    }
+    
+    # 2. Impact Summary (Earned count)
+    lb_filters = {"badge": badge_id}
+    if user_filter is not None:
+        if not user_filter:
+            lb_filters["user"] = ["in", ["__empty__"]] # Force empty if Manager has no team
+        else:
+            lb_filters["user"] = ["in", user_filter]
+        
+    # All learner badges for this badge
+    learner_badges = frappe.get_all("LMS Learner Badge", filters=lb_filters, fields=["user", "awarded_on"], order_by="awarded_on DESC")
+    total_earned = len(learner_badges)
+    badge_info["impactSummary"] = total_earned
+    
+    # 3. Department Achievement
+    teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
+    team_name_map = {t.name: t.team_name for t in teams}
+    
+    # Find all team members within scope
+    tm_filters = {}
+    if user_filter is not None:
+        if not user_filter:
+            tm_filters["user"] = ["in", ["__empty__"]]
+        else:
+            tm_filters["user"] = ["in", user_filter]
+        
+    all_team_members = frappe.get_all("LMS Team Member", filters=tm_filters, fields=["user", "parent"])
+    
+    dept_targets = defaultdict(int)
+    user_to_dept = {}
+    
+    for tm in all_team_members:
+        dept_name = team_name_map.get(tm.parent, "No Department")
+        dept_targets[dept_name] += 1
+        if tm.user not in user_to_dept:
+            user_to_dept[tm.user] = dept_name
+            
+    # If no team members were found, but there are earners (e.g. Admin view with users not in teams)
+    # We should still show them in "No Department"
+    dept_earned = defaultdict(int)
+    earners_set = set([lb.user for lb in learner_badges])
+    for u in earners_set:
+        d_name = user_to_dept.get(u, "No Department")
+        dept_earned[d_name] += 1
+        
+    department_achievement = []
+    # Add departments that have targets or earned
+    all_depts_to_show = set(list(dept_targets.keys()) + list(dept_earned.keys()))
+    
+    for d_name in all_depts_to_show:
+        target = dept_targets.get(d_name, 0)
+        earned = dept_earned.get(d_name, 0)
+        if target > 0 or earned > 0:
+            department_achievement.append({
+                "department": d_name,
+                "earned": earned,
+                "target": max(target, earned) # Target shouldn't be less than earned in case of orphaned users
+            })
+            
+    department_achievement.sort(key=lambda x: x["earned"], reverse=True)
+    badge_info["departmentAchievement"] = department_achievement
+    badge_info["departmentTotalEarned"] = sum([d["earned"] for d in department_achievement])
+    
+    # 4. Latest Achievements
+    from frappe.utils import formatdate
+    recent_lbs = learner_badges[:5]
+    latest_achievements = []
+    
+    if recent_lbs:
+        users = [r.user for r in recent_lbs]
+        user_docs = frappe.get_all("User", filters={"name": ["in", users]}, fields=["name", "full_name", "user_image"])
+        user_map = {u.name: u for u in user_docs}
+        
+        for lb in recent_lbs:
+            u_info = user_map.get(lb.user)
+            if u_info:
+                latest_achievements.append({
+                    "name": u_info.full_name or lb.user,
+                    "avatar": u_info.user_image or "",
+                    "department": user_to_dept.get(lb.user, "No Department"),
+                    "date": formatdate(lb.awarded_on, "MMM dd, yyyy") if lb.awarded_on else ""
+                })
+                
+    badge_info["latestAchievements"] = latest_achievements
+    
+    return badge_info
