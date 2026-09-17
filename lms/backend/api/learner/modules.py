@@ -210,7 +210,7 @@ def get_recommended_modules():
     modules = frappe.get_all(
         "LMS Module",
         filters=filters,
-        fields=["name", "module_name", "category", "duration"],
+        fields=["name", "module_name", "category", "duration", "image"],
         limit=6,
         order_by="creation desc"
     )
@@ -249,7 +249,8 @@ def get_recommended_modules():
             "completionRate": 0,
             "status": "Not Started",
             "isRequired": False,
-            "isSaved": saved_map.get(m.name, False)
+            "image": m.get("image"),
+            "isSaved": saved_map.get(m.name, False),
         })
     return results
 
@@ -275,7 +276,7 @@ def get_explore_modules():
     modules = frappe.get_all(
         "LMS Module",
         filters=filters,
-        fields=["name", "module_name", "category", "duration"],
+        fields=["name", "module_name", "category", "duration", "image"],
         limit=6,
         order_by="creation desc"
     )
@@ -314,7 +315,8 @@ def get_explore_modules():
             "completionRate": 0,
             "status": "Not Started",
             "isRequired": False,
-            "isSaved": saved_map.get(m.name, False)
+            "image": m.get("image"),
+            "isSaved": saved_map.get(m.name, False),
         })
     return results
 

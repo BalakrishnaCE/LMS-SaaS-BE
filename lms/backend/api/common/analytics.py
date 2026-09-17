@@ -705,17 +705,13 @@ def get_assessment_performance_list(assessment_type="all"):
     if user_filter is not None:
         filters["user"] = ["in", user_filter]
 
-    # QA Assessments not supported in backend yet
-    if assessment_type == "qa":
-        return []
-
     submissions = frappe.get_all("LMS Quiz Submission", filters=filters, fields=["name", "user", "quiz", "score", "passed", "creation", "enrollment"], ignore_permissions=True)
     
     if not submissions:
         return []
         
     quiz_names = list(set([s.quiz for s in submissions]))
-    quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "title", "total_score", "passing_percentage", "max_attempts"], ignore_permissions=True)
+    quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "title", "total_score", "passing_percentage", "max_attempts", "quiz_type"], ignore_permissions=True)
     quiz_map = {q.name: q for q in quizzes}
     
     tracker_names = list(set([s.enrollment for s in submissions if s.enrollment]))
@@ -747,6 +743,12 @@ def get_assessment_performance_list(assessment_type="all"):
         if not q_doc:
             continue
             
+        # Filter by assessment type
+        if assessment_type == "qa" and q_doc.quiz_type != "QA Assessment":
+            continue
+        if assessment_type == "quiz" and q_doc.quiz_type != "Quiz":
+            continue
+            
         u_info = user_map.get(user)
         mod_name = module_map.get(tracker_map.get(s.enrollment)) if s.enrollment else "Unknown Module"
         
@@ -760,7 +762,7 @@ def get_assessment_performance_list(assessment_type="all"):
             "learnerEmail": u_info.email if u_info else user,
             "assessmentName": q_doc.title or quiz_id,
             "moduleName": mod_name,
-            "type": "QUIZ",
+            "type": q_doc.quiz_type or "Quiz",
             "score": f"{int(s.score or 0)}/{int(q_doc.total_score or 100)}",
             "passScore": int(q_doc.passing_percentage or 0),
             "attempts": attempts_str,
@@ -813,14 +815,20 @@ def get_assessment_details(submission_id):
         q_map = {str(q.name): q for q in questions}
 
     correct_options = {}
+    q_options_map = {}
     if question_ids:
-        options = frappe.get_all("LMS Quiz Option", filters={"parent": ["in", question_ids]}, fields=["parent", "option_text", "is_correct"], ignore_permissions=True)
+        options = frappe.get_all("LMS Quiz Option", filters={"parent": ["in", question_ids]}, fields=["parent", "option_text", "is_correct", "score"], ignore_permissions=True)
         for opt in options:
+            parent_id = str(opt.parent)
             if opt.is_correct:
-                if str(opt.parent) in correct_options:
-                    correct_options[str(opt.parent)] += " / " + opt.option_text
+                if parent_id in correct_options:
+                    correct_options[parent_id] += " / " + opt.option_text
                 else:
-                    correct_options[str(opt.parent)] = opt.option_text
+                    correct_options[parent_id] = opt.option_text
+                    
+            if parent_id not in q_options_map:
+                q_options_map[parent_id] = []
+            q_options_map[parent_id].append(opt)
             
     responses_data = []
     correct_count = 0
@@ -831,7 +839,20 @@ def get_assessment_details(submission_id):
         if not q_info:
             continue
             
-        if q_info.question_type != "Scenario Based":
+        q_opts = q_options_map.get(str(r.question), [])
+        requires_manual = (
+            q_info.question_type == "Scenario Based" or
+            (q_info.question_type == "Fill in the Blank" and len(q_opts) == 0)
+        )
+        
+        if requires_manual:
+            q_max_score = sum(int(opt.score) if opt.score else 5 for opt in q_opts) if q_opts else 5
+            q_actual_score = float(r.manual_score or 0)
+        else:
+            q_max_score = 1
+            q_actual_score = 1 if r.is_correct else 0
+            
+        if not requires_manual:
             if r.is_correct:
                 correct_count += 1
             else:
@@ -853,8 +874,8 @@ def get_assessment_details(submission_id):
             "learnerAnswer": r.selected_option or "No Answer",
             "isCorrect": bool(r.is_correct),
             "correctAnswer": correct_options.get(str(r.question), ""),
-            "score": r.manual_score if r.manual_score is not None else (q_info.score if r.is_correct else 0),
-            "maxScore": q_info.score or 0,
+            "score": q_actual_score,
+            "maxScore": q_max_score,
             "feedback": feedback_str
         })
 
@@ -864,9 +885,14 @@ def get_assessment_details(submission_id):
     if quiz and quiz.time_limit_mins:
         time_taken_str += f" / {quiz.time_limit_mins} mins"
 
-    overall_score = 0
-    if quiz and quiz.total_score:
-        overall_score = int(((sub.score or 0) / quiz.total_score) * 100)
+    computed_max_score = sum(r["maxScore"] for r in responses_data)
+    actual_score = sum(r["score"] for r in responses_data)
+    
+    total_questions = len(responses_data)
+    attended_questions = sum(1 for r in responses_data if r.get("learnerAnswer") and r.get("learnerAnswer") != "No Answer")
+
+    # Trust the submission's saved percentage score directly
+    overall_score = int(sub.score or 0)
 
     taken_on = frappe.utils.formatdate(sub.submitted_on, "MMM dd, yyyy") if sub.submitted_on else ""
 
@@ -882,7 +908,7 @@ def get_assessment_details(submission_id):
         "takenOn": f"Taken On: {taken_on}" if taken_on else "",
         "overallScore": f"{overall_score}%",
         "passed": bool(sub.passed),
-        "completedPoints": f"{int(sub.score or 0)} / {int(quiz.total_score if quiz else 0)}",
+        "completedPoints": f"{attended_questions} / {total_questions}",
         "timeTaken": time_taken_str,
         "overallFeedback": sub.evaluation_feedback or "",
         "summary": f"{correct_count} correct · {incorrect_count} incorrect",

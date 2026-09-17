@@ -326,6 +326,13 @@ def update_content_progress(module, content_reference, content_type=None, status
         if status == "Completed":
             existing_cp.is_completed = 1
             
+    tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_doc.name)
+    # If the tracker was previously marked "Excluded" (admin unassign sentinel),
+    # reset it so Frappe's Select validation doesn't reject the save.
+    if tracker_doc.status == "Excluded":
+        tracker_doc.status = "In Progress"
+        if not tracker_doc.started_on:
+            tracker_doc.started_on = frappe.utils.now_datetime()
     tracker_doc.save(ignore_permissions=True)
     frappe.db.commit()
     
@@ -401,6 +408,12 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         
 
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
+    # If the tracker was previously marked "Excluded" (admin unassign sentinel),
+    # reset it so Frappe's Select validation doesn't reject the save.
+    if tracker_doc.status == "Excluded":
+        tracker_doc.status = "In Progress"
+        if not tracker_doc.started_on:
+            tracker_doc.started_on = frappe.utils.now_datetime()
     tracker_doc.save(ignore_permissions=True)
     frappe.db.commit()
     
@@ -457,6 +470,12 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
     })
 
 
+    # If the tracker was previously marked "Excluded" (admin unassign sentinel),
+    # reset it so Frappe's Select validation doesn't reject the save.
+    if tracker_doc.status == "Excluded":
+        tracker_doc.status = "In Progress"
+        if not tracker_doc.started_on:
+            tracker_doc.started_on = frappe.utils.now_datetime()
     tracker_doc.save(ignore_permissions=True)
 
     frappe.db.commit()

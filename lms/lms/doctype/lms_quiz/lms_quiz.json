@@ -7,6 +7,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "quiz_type",
   "title",
   "description",
   "total_score",
@@ -29,6 +30,15 @@
   "points_per_question"
  ],
  "fields": [
+  {
+   "fieldname": "quiz_type",
+   "fieldtype": "Select",
+   "label": "Quiz Type",
+   "options": "Quiz\nQA Assessment",
+   "default": "Quiz",
+   "read_only": 1,
+   "description": "Automatically set based on the content type (Quiz or QA Assessment)."
+  },
   {
    "description": "Enter the title.",
    "fieldname": "title",
