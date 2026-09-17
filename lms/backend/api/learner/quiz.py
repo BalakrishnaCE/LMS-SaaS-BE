@@ -89,10 +89,46 @@ def submit_quiz(module, content_reference, score=None, passed=0, time_taken=0, r
         # Skip responses where question ID is missing
         if resp.get("question") is None:
             continue
+
+        question_id = str(resp.get("question"))
+        selected_option = resp.get("selected_option") or ""
+
+        # ── Server-side is_correct verification ───────────────────────────────
+        # Do NOT blindly trust the frontend's is_correct value.
+        # Instead, look up the question and verify against the stored options.
+        is_correct = 0
+        try:
+            q_doc = frappe.get_doc("LMS Quiz Question", question_id)
+            auto_graded_types = ("Single Choice", "True/False", "Multiple Choice", "Fill in the Blank")
+
+            if q_doc.question_type in auto_graded_types and q_doc.options:
+                if q_doc.question_type == "Multiple Choice":
+                    # selected_option is comma-joined selected texts
+                    selected_texts = set(t.strip() for t in selected_option.split(",") if t.strip())
+                    correct_texts = set(
+                        opt.option_text.strip()
+                        for opt in q_doc.options
+                        if opt.is_correct
+                    )
+                    if selected_texts and selected_texts == correct_texts:
+                        is_correct = 1
+                else:
+                    # Single choice / True/False / Fill in the Blank with options
+                    for opt in q_doc.options:
+                        if opt.option_text.strip() == selected_option.strip() and opt.is_correct:
+                            is_correct = 1
+                            break
+            else:
+                # Scenario Based / open-ended FitB — manual grading, no auto is_correct
+                is_correct = 0
+        except Exception:
+            # Fall back to frontend value if question lookup fails
+            is_correct = int(resp.get("is_correct", 0) or 0)
+
         submission.append("responses", {
-            "question": str(resp.get("question")),
-            "selected_option": resp.get("selected_option") or "",
-            "is_correct": resp.get("is_correct", 0)
+            "question": question_id,
+            "selected_option": selected_option,
+            "is_correct": is_correct
         })
 
     submission.insert(ignore_permissions=True)

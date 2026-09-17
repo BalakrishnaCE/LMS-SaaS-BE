@@ -63,9 +63,26 @@ def get_curriculum(module_name):
                             for ch_q in quiz_doc.questions:
                                 q_doc = frappe.get_doc("LMS Quiz Question", ch_q.quiz_question)
                                 q_data = q_doc.as_dict()
+                                
+                                # Separate options and criteria (for Scenario Based)
+                                is_scenario = q_doc.question_type == "Scenario Based"
                                 q_data['options'] = []
+                                q_data['criteria'] = []
+                                
                                 for opt in q_doc.options:
-                                    q_data['options'].append(opt.as_dict())
+                                    opt_dict = opt.as_dict()
+                                    # Skip blank options (defensive cleanup)
+                                    if not (opt_dict.get('option_text') or '').strip():
+                                        continue
+                                    if is_scenario:
+                                        # Map options → criteria for Scenario Based questions
+                                        q_data['criteria'].append({
+                                            'name': opt_dict.get('option_text', ''),
+                                            'score': float(opt_dict.get('score') or 5)
+                                        })
+                                    else:
+                                        q_data['options'].append(opt_dict)
+                                        
                                 quiz_data['questions'].append(q_data)
                                 
                             content_data['quiz_data'] = quiz_data
@@ -557,6 +574,9 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
     quiz.show_explanations = quiz_data.get("show_explanations", 0)
     quiz.allow_unanswered = quiz_data.get("allow_unanswered", 0)
     quiz.evaluation_method = quiz_data.get("evaluation_method", "AI-assisted evaluation")
+    
+    # Auto-set quiz_type based on the content type that contains this quiz
+    quiz.quiz_type = "QA Assessment" if content_link.content_type == "LMS Assessment Content" else "Quiz"
     
     # We will clear existing questions in the quiz and re-append them 
     # to handle ordering and updates simply in one pass
