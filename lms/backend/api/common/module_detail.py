@@ -134,7 +134,7 @@ def get_module_overview(module_id):
     trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"module": module_id},
-        fields=["status", "user", "total_score", "started_on", "creation"]
+        fields=["status", "user", "total_score", "started_on", "creation", "progress_percentage"]
     )
     tracker_map = {t.user: t for t in trackers}
 
@@ -184,23 +184,34 @@ def get_module_overview(module_id):
         team_name_map = {t.name: t.team_name for t in teams}
 
         for m in members:
-            dept_map[m.user] = team_name_map.get(m.parent, "Unknown")
+            dept_name = team_name_map.get(m.parent, "Unknown")
+            if m.user not in dept_map:
+                dept_map[m.user] = set()
+            dept_map[m.user].add(dept_name)
 
     dept_stats = {}
     for user in all_user_keys:
-        dept = dept_map.get(user, "Unknown")
+        depts = dept_map.get(user, {"Unknown"})
+        if not depts:
+            depts = {"Unknown"}
+            
         t = tracker_map.get(user)
-        if dept not in dept_stats:
-            dept_stats[dept] = {"total": 0, "passed": 0, "pending": 0}
-        dept_stats[dept]["total"] += 1
-        if t and t.status == "Completed":
-            dept_stats[dept]["passed"] += 1
-        else:
-            dept_stats[dept]["pending"] += 1
+        
+        for dept in depts:
+            if dept not in dept_stats:
+                dept_stats[dept] = {"total": 0, "passed": 0, "pending": 0, "progress_sum": 0}
+            dept_stats[dept]["total"] += 1
+            if t and t.status == "Completed":
+                dept_stats[dept]["passed"] += 1
+                dept_stats[dept]["progress_sum"] += 100
+            else:
+                dept_stats[dept]["pending"] += 1
+                if t and t.progress_percentage:
+                    dept_stats[dept]["progress_sum"] += t.progress_percentage
 
     departments = []
     for dept, s in dept_stats.items():
-        progress = round((s["passed"] / s["total"] * 100) if s["total"] else 0)
+        progress = round((s["progress_sum"] / s["total"]) if s["total"] else 0)
         departments.append({
             "name": dept,
             "total": s["total"],
@@ -353,7 +364,7 @@ def get_module_certificates(module_id):
         if tracker.user not in cert_map:
             try:
                 user_doc = frappe.get_doc("User", tracker.user)
-                score = f"{tracker.total_score}%" if tracker.total_score is not None else "--"
+                score = f"{tracker.total_score}" if tracker.total_score is not None else "--"
                 certificate_data.append({
                     "id": f"pending-{tracker.name}",
                     "certificate_id": "-",

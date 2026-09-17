@@ -9,6 +9,7 @@
   "user",
   "module",
   "status",
+  "is_saved",
   "progress_percentage",
   "total_score",
   "started_on",
@@ -45,6 +46,12 @@
    "label": "Status",
    "options": "In Progress\nCompleted\nFailed\nNot started",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_saved",
+   "fieldtype": "Check",
+   "label": "Is Saved"
   },
   {
    "description": "0.0 to 100.0",

@@ -130,7 +130,7 @@ def get_quiz_submissions(module, content_reference):
     submissions = frappe.get_all(
         "LMS Quiz Submission",
         filters={"user": user, "quiz": quiz_id},
-        fields=["name", "score", "passed", "time_taken", "submitted_on"],
+        fields=["name", "score", "passed", "time_taken", "submitted_on", "extra_attempts_granted"],
         order_by="submitted_on desc"
     )
 

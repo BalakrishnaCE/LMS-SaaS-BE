@@ -138,6 +138,7 @@ def get_learner_path_detail(path_id):
         "total_modules": len(modules),
         "completed_modules": completed_modules,
         "progress_percentage": progress_percentage,
+        "isSaved": bool(tracker_doc.is_saved) if tracker_doc else False,
         "duration_str": duration_str.strip(),
         "total_duration": total_duration,
         "includes": {
@@ -189,14 +190,15 @@ def get_learner_paths():
             filters={"parent": path.name, "parenttype": "LMS Learning Path"},
             fields=["category"]
         )
-        path.category = categories[0].category if categories else "General"
+        path.category = ", ".join([c.category for c in categories if c.category]) if categories else "General"
 
-        # Get modules for this path
+        # Get modules for this path (include duration for time estimation)
         modules = frappe.get_all("LMS Learning Path Course", filters={"parent": path.name}, fields=["module"])
         
         completed_modules = 0
         total_progress = 0
         valid_module_count = 0
+        total_duration_minutes = 0
         
         for m in modules:
             mt = module_status_map.get(m.module)
@@ -204,6 +206,9 @@ def get_learner_paths():
                 continue
                 
             valid_module_count += 1
+            mod_duration = frappe.get_value("LMS Module", m.module, "duration") or 0
+            total_duration_minutes += int(mod_duration)
+
             if mt:
                 if mt.status == "Completed":
                     completed_modules += 1
@@ -211,6 +216,7 @@ def get_learner_paths():
                     total_progress += mt.progress_percentage
         
         path.module_count = valid_module_count
+        path.total_duration_minutes = total_duration_minutes
         
         if valid_module_count > 0:
             path.progress_percentage = round((total_progress / valid_module_count), 2)

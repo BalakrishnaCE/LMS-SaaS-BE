@@ -227,7 +227,7 @@ def get_learner_badges(user_id=None):
         earners_percent = int(round((earned_count / total_users) * 100))
         
         earned_on = earned_map.get(b.name)
-        dep_count = len(deps_map.get(b.badge_name, deps_map.get(b.name, [])))
+        dep_count = len(deps_map.get(b.badge_name, []))
         if earned_on:
             results.append({
                 "id": b.name,
@@ -286,9 +286,9 @@ def get_learner_badges(user_id=None):
     if newly_awarded:
         frappe.db.commit()
 
-    # Sort earned: most-dependent badge (earned last) first, simplest (earned first) last
+    # Sort in-progress: simplest badge first (fewest deps = next to earn in the chain)
+    in_progress_list = sorted([r for r in results if not r["earned"]], key=lambda x: x.get("depCount", 0))
+    # Sort earned: most complex (hardest) badge first, then simpler ones
     earned_list = sorted([r for r in results if r["earned"]], key=lambda x: x.get("depCount", 0), reverse=True)
-    # Sort in-progress: most-dependent first (mirrors earning path)
-    in_progress_list = sorted([r for r in results if not r["earned"]], key=lambda x: x.get("depCount", 0), reverse=True)
     
     return in_progress_list + earned_list

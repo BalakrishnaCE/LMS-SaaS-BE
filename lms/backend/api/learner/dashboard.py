@@ -6,13 +6,15 @@ from lms.backend.api.common.module_detail import (
 )
 
 def get_module_category(module_name):
-    """Fetch the first category from the LMS Module Category child table."""
-    row = frappe.db.get_value(
+    """Fetch categories from the LMS Module Category child table as a comma-separated string."""
+    rows = frappe.get_all(
         "LMS Module Category",
-        {"parent": module_name, "parenttype": "LMS Module"},
-        "category"
+        filters={"parent": module_name, "parenttype": "LMS Module"},
+        fields=["category"]
     )
-    return row or "General"
+    if not rows:
+        return "General"
+    return ", ".join([r.category for r in rows if r.category])
 
 # ─── Greeting ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +73,7 @@ def get_learner_summary(timeframe="month"):
     badges_this_month = [b for b in badges if b.awarded_on and getdate(b.awarded_on) >= getdate(badges_this_month_start)]
 
     # Certificates
-    certificates_earned = frappe.db.count("LMS Certificate", {"user": user})
+    certificates_earned = frappe.db.count("LMS Certificate", {"user": user, "is_valid": 1})
 
     first_name = frappe.get_value("User", user, "first_name") or "Learner"
 
@@ -172,27 +174,23 @@ def get_learner_summary(timeframe="month"):
     recent_trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user, "status": "Completed"},
-        fields=["module", "modified", "name"],
+        fields=["module", "modified", "name", "total_score"],
         order_by="modified desc",
         limit=3
     )
     for t in recent_trackers:
         module_title = frappe.get_value("LMS Module", t.module, "module_name")
-        latest_quiz = frappe.get_all(
-            "LMS Quiz Submission",
-            filters={"enrollment": t.name},
-            fields=["score"],
-            order_by="submitted_on desc",
-            limit=1
-        )
-        # If no quiz, assume 100% since it's completed (or leave as N/A, but 100 is better for UI)
-        score = round(latest_quiz[0].score) if latest_quiz else 100
+        score = round(t.total_score) if t.total_score is not None else 100
+        # Check if certificate exists
+        cert_name = frappe.db.get_value("LMS Certificate", {"user": user, "module": t.module, "is_valid": 1}, "name")
+        pdf_url = f"/api/method/lms.backend.api.common.certificate.download_certificate_pdf?certificate_name={cert_name}" if cert_name else None
         
         recently_completed.append({
             "id": t.module,
             "title": module_title,
             "completedDate": frappe.utils.getdate(t.modified).strftime("%b %d"),
-            "score": score
+            "score": score,
+            "pdfUrl": pdf_url
         })
     return {
         "overallProgress": overall_progress,
@@ -213,6 +211,115 @@ def get_learner_summary(timeframe="month"):
         "averageScore": average_score,
         "recentlyCompleted": recently_completed,
     }
+
+# ─── Saved Learning ────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def toggle_saved_item(item_id, item_type="Module"):
+    user = frappe.session.user
+    if item_type == "Module":
+        doctype = "LMS Module Tracker"
+        filter_field = "module"
+    else:
+        doctype = "LMS Learning Path Tracker"
+        filter_field = "learning_path"
+        
+    tracker = frappe.get_all(doctype, filters={"user": user, filter_field: item_id}, fields=["name", "is_saved"], limit=1)
+    
+    if tracker:
+        tracker_name = tracker[0].name
+        current_saved = tracker[0].is_saved
+        new_val = 0 if current_saved else 1
+        frappe.db.set_value(doctype, tracker_name, "is_saved", new_val)
+        frappe.db.commit()
+        return {"status": "saved" if new_val else "unsaved"}
+    else:
+        # Tracker does not exist, create a new one with status Not Started
+        doc = frappe.new_doc(doctype)
+        doc.user = user
+        doc.set(filter_field, item_id)
+        doc.status = "Not started"
+        doc.is_saved = 1
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return {"status": "saved"}
+
+@frappe.whitelist()
+def get_saved_items():
+    user = frappe.session.user
+    
+    # 1. Fetch saved modules
+    module_trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user, "is_saved": 1},
+        fields=["module", "status", "progress_percentage", "started_on", "name", "creation"],
+        order_by="creation desc"
+    )
+    
+    results = []
+    today_dt = frappe.utils.getdate(frappe.utils.today())
+    
+    for t in module_trackers:
+        module_doc = frappe.get_value(
+            "LMS Module",
+            t.module,
+            ["module_name", "category", "status", "image"],
+            as_dict=True
+        )
+        if not module_doc or module_doc.status != 'Published':
+            continue
+            
+        from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
+        est_hours = get_estimated_hours_from_curriculum(t.module)
+        if est_hours > 0:
+            duration_str = f"{int(est_hours * 60)} min" if est_hours < 1 else f"{est_hours:g} hr"
+        else:
+            duration_str = "0 min"
+            
+        # Is this module assigned?
+        assignment = frappe.db.sql("""
+            SELECT ma.duration, ma.is_mandatory
+            FROM `tabLMS Module Assignment` ma
+            LEFT JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+            WHERE ma.module = %s AND au.user = %s
+            LIMIT 1
+        """, (t.module, user), as_dict=True)
+        
+        days_left = None
+        is_overdue = False
+        is_required = False
+        if assignment:
+            a = assignment[0]
+            is_required = bool(a.is_mandatory)
+            if a.duration and t.started_on:
+                start = frappe.utils.getdate(t.started_on)
+                due_date = frappe.utils.getdate(frappe.utils.add_days(start, int(a.duration)))
+                days_left = frappe.utils.date_diff(due_date, today_dt)
+                is_overdue = days_left < 0
+                
+        total_items = frappe.db.count("LMS Module Lesson Child", {"parent": t.module})
+        completed_items = frappe.db.sql("SELECT count(name) FROM `tabLMS Lesson Progress` WHERE parent = %s AND status = 'Completed'", t.name)[0][0]
+        
+        from lms.backend.api.learner.dashboard import get_module_category
+        results.append({
+            "id": t.module,
+            "title": module_doc.module_name,
+            "category": get_module_category(t.module),
+            "type": "Module",
+            "lessonsCount": frappe.db.count("LMS Module Lesson Child", {"parent": t.module}),
+            "duration": duration_str,
+            "daysLeft": days_left,
+            "isOverdue": is_overdue,
+            "completionRate": t.progress_percentage or 0,
+            "completedCount": completed_items,
+            "totalCount": total_items,
+            "status": t.status,
+            "isRequired": is_required,
+            "image": module_doc.image,
+            "isSaved": True
+        })
+        
+    return results
 
 
 # ─── Continue Learning ─────────────────────────────────────────────────────────
@@ -253,7 +360,7 @@ def get_continue_learning(item_type="module"):
     if not queries:
         return None
         
-    union_query = " UNION ALL ".join(queries) + " ORDER BY progress_percentage DESC, modified DESC LIMIT 1"
+    union_query = " UNION ALL ".join(queries) + " ORDER BY modified DESC LIMIT 1"
     tracker = frappe.db.sql(union_query, tuple(params), as_dict=True)
 
     if tracker:
@@ -304,6 +411,7 @@ def get_continue_learning(item_type="module"):
             "moduleName": module_doc.module_name,
             "moduleIndex": 1,
             "totalModules": 1,
+            "totalLessons": frappe.db.count("LMS Module Lesson Child", {"parent": t.id}),
             "progress": int(t.get("progress_percentage") or 0),
             "thumbnail": module_doc.image,
             "type": "Module"
@@ -317,7 +425,8 @@ def get_continue_learning(item_type="module"):
             "moduleId": t.id,
             "moduleName": path_doc.path_name,
             "moduleIndex": 1,
-            "totalModules": 1,
+            "totalModules": frappe.db.count("LMS Learning Path Course", {"parent": t.id}),
+            "totalLessons": 0,
             "progress": int(t.get("progress_percentage") or 0),
             "thumbnail": path_doc.image,
             "type": "Path"
