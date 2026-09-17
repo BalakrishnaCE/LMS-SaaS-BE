@@ -33,31 +33,70 @@ class LMSModuleTracker(Document):
 			completed_items = sum(1 for cp in self.get("content_progress", []) if cp.status == "Completed" and cp.content_type != "LMS Flashcard Content")
 			self.progress_percentage = round((completed_items / total_items) * 100)
 
-		# Auto-update tracker status based on progress
-		if self.progress_percentage >= 100:
-			self.progress_percentage = 100
-			if self.status != "Completed":
-				self.status = "Completed"
-				self.completed_on = frappe.utils.now_datetime()
-		elif self.progress_percentage > 0 and self.status == "Not Started":
-			self.status = "In Progress"
-
-		if self.status in ["In Progress", "Completed"] and not self.started_on:
-			self.started_on = frappe.utils.now_datetime()
-			
 		# Calculate total score from scored items
 		scored_items = 0
 		total_score_sum = 0
 		for cp in self.get("content_progress", []):
-			if cp.score is not None and cp.score >= 0:
+			if cp.content_type in ("LMS Quiz Content", "LMS Assessment Content"):
 				scored_items += 1
-				total_score_sum += cp.score
+				total_score_sum += float(cp.score or 0)
 		
 		if scored_items > 0:
 			self.total_score = round(total_score_sum / scored_items, 2)
+		else:
+			self.total_score = 0
+
+		# Auto-update tracker status based on progress
+		if self.progress_percentage >= 100:
+			self.progress_percentage = 100
+			
+			is_failed = False
+			if module_doc.is_score_required:
+				passing_score = module_doc.certificate_passing_percentage or 0
+				if self.total_score < passing_score:
+					is_failed = True
+					
+			target_status = "Failed" if is_failed else "Completed"
+			
+			if self.status != target_status:
+				self.status = target_status
+				if target_status == "Completed":
+					self.completed_on = frappe.utils.now_datetime()
+		elif (self.progress_percentage > 0 or len(self.get("content_progress", [])) > 0) and self.status == "Not started":
+			self.status = "In Progress"
+
+		if self.status in ["In Progress", "Completed", "Failed"] and not self.started_on:
+			self.started_on = frappe.utils.now_datetime()
 
 	def on_update(self):
 		self.update_learning_path_trackers()
+		if self.status == "Completed":
+			self.issue_certificate_if_eligible()
+
+	def issue_certificate_if_eligible(self):
+		module = frappe.get_doc("LMS Module", self.module)
+		if not module.enable_certificate:
+			return
+			
+		passing_score = module.certificate_passing_percentage or 60
+		if (self.total_score or 0) < passing_score:
+			return
+			
+		# Check if certificate already exists
+		exists = frappe.db.exists("LMS Certificate", {"user": self.user, "module": self.module})
+		if exists:
+			return
+			
+		cert = frappe.new_doc("LMS Certificate")
+		cert.certificate_id = f"CERT-{frappe.generate_hash(length=8).upper()}"
+		cert.user = self.user
+		cert.module = self.module
+		cert.enrollment = self.name
+		cert.template = module.certificate_template or "Classic Template"
+		cert.issued_on = frappe.utils.nowdate()
+		cert.score = self.total_score
+		cert.is_valid = 1
+		cert.insert(ignore_permissions=True)
 
 	def update_learning_path_trackers(self):
 		paths_with_module = frappe.get_all("LMS Learning Path Course", filters={"module": self.module}, fields=["parent"])

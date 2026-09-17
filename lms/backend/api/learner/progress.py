@@ -195,11 +195,16 @@ def get_learner_deadlines():
     module_trackers = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user, "status": ["!=", "Completed"]},
-        fields=["name", "module", "status", "started_on"]
+        fields=["name", "module", "status", "started_on", "progress_percentage"]
     )
 
     for t in module_trackers:
         if not t.started_on or t.module in seen_ids:
+            continue
+
+        # Only include published modules
+        module_status = frappe.get_value("LMS Module", t.module, "status")
+        if module_status != "Published":
             continue
 
         duration = frappe.get_value("LMS Module", t.module, "duration")
@@ -225,6 +230,7 @@ def get_learner_deadlines():
             "isOverdue": days_left < 0,
             "isUrgent": 0 <= days_left <= 3,
             "daysLeftNum": days_left,
+            "progress": t.progress_percentage or 0,
         })
 
     # ── Learning Path Trackers ─────────────────────────────────────────────────
@@ -237,6 +243,11 @@ def get_learner_deadlines():
 
         for t in lp_trackers:
             if not t.started_on or t.learning_path in seen_ids:
+                continue
+
+            # Only include published learning paths
+            lp_status = frappe.get_value("LMS Learning Path", t.learning_path, "status")
+            if lp_status != "Published":
                 continue
 
             duration = frappe.get_value("LMS Learning Path", t.learning_path, "duration")
@@ -262,6 +273,7 @@ def get_learner_deadlines():
                 "isOverdue": days_left < 0,
                 "isUrgent": 0 <= days_left <= 3,
                 "daysLeftNum": days_left,
+                "progress": t.progress_percentage or 0,
             })
     except Exception:
         pass
@@ -280,49 +292,40 @@ def update_content_progress(module, content_reference, content_type=None, status
         limit=1
     )
     if not tracker:
-        doc = frappe.get_doc({
+        tracker_doc = frappe.get_doc({
             "doctype": "LMS Module Tracker",
             "user": user,
             "module": module,
             "status": "In Progress",
             "started_on": frappe.utils.now_datetime()
         })
-        doc.insert(ignore_permissions=True)
-        tracker_name = doc.name
+        tracker_doc.insert(ignore_permissions=True)
     else:
-        tracker_name = tracker[0].name
+        tracker_doc = frappe.get_doc("LMS Module Tracker", tracker[0].name)
         
-    cp = frappe.get_all(
-        "LMS Content Progress",
-        filters={"parent": tracker_name, "content_reference": content_reference},
-        limit=1
-    )
+    existing_cp = next((c for c in tracker_doc.get("content_progress", []) if c.content_reference == content_reference), None)
     
-    if not cp:
-        doc = frappe.get_doc({
-            "doctype": "LMS Content Progress",
-            "parent": tracker_name,
-            "parenttype": "LMS Module Tracker",
-            "parentfield": "content_progress",
+    if not existing_cp:
+        tracker_doc.append("content_progress", {
             "content_type": content_type,
             "content_reference": content_reference,
             "status": status,
             "score": score,
             "is_completed": 1 if status == "Completed" else 0
-        }).insert(ignore_permissions=True)
+        })
     else:
-        doc = frappe.get_doc("LMS Content Progress", cp[0].name)
         if content_type:
-            doc.content_type = content_type
-        doc.status = status
-        if score is not None:
-            doc.score = score
+            existing_cp.content_type = content_type
+        existing_cp.status = status
+        
+        if score is not None and score != 'undefined':
+            # Keep the highest score across attempts
+            if existing_cp.score is None or float(score) > float(existing_cp.score):
+                existing_cp.score = float(score)
+                
         if status == "Completed":
-            doc.is_completed = 1
-        doc.save(ignore_permissions=True)
-        
-        
-    tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
+            existing_cp.is_completed = 1
+            
     tracker_doc.save(ignore_permissions=True)
     frappe.db.commit()
     

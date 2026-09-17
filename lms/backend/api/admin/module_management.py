@@ -131,16 +131,13 @@ def add_lesson(module_name, lesson_name, description=""):
     if not module_name or not lesson_name:
         frappe.throw("Module Name and Lesson Name are required")
         
-    # Check if lesson exists, else create it
-    if not frappe.db.exists("LMS Lesson", {"lesson_name": lesson_name}):
-        lesson = frappe.get_doc({
-            "doctype": "LMS Lesson",
-            "lesson_name": lesson_name,
-            "description": description
-        })
-        lesson.insert(ignore_permissions=True)
-    else:
-        lesson = frappe.get_doc("LMS Lesson", {"lesson_name": lesson_name})
+    # Always create a new lesson so it gets a unique ID
+    lesson = frappe.get_doc({
+        "doctype": "LMS Lesson",
+        "lesson_name": lesson_name,
+        "description": description
+    })
+    lesson.insert(ignore_permissions=True)
         
     # Attach to module
     module = frappe.get_doc("LMS Module", module_name)
@@ -406,11 +403,26 @@ def remove_chapter(lesson_name, chapter_name):
 @frappe.whitelist(allow_guest=False)
 def get_admin_dashboard_modules():
     modules = frappe.get_all("LMS Module", 
-        fields=["name", "module_name", "category", "status", "creation", "modified", "image", "is_mandatory", "duration"],
+        fields=["name", "module_name", "status", "creation", "modified", "image", "is_mandatory", "duration"],
         order_by="creation desc"
     )
     
+    module_names = [m.name for m in modules]
+    categories = []
+    if module_names:
+        categories = frappe.get_all("LMS Module Category", 
+            filters={"parent": ["in", module_names]}, 
+            fields=["parent", "category"]
+        )
+        
+    cat_map = {}
+    for cat in categories:
+        if cat.parent not in cat_map:
+            cat_map[cat.parent] = []
+        cat_map[cat.parent].append({"category": cat.category})
+    
     for mod in modules:
+        mod.category = cat_map.get(mod.name, [])
         # Get total assigned learners who started
         total = frappe.db.count("LMS Module Tracker", {"module": mod.name})
         completed = frappe.db.count("LMS Module Tracker", {"module": mod.name, "status": "Completed"})
@@ -436,7 +448,31 @@ def delete_module(module_name):
         frappe.throw("Module Name is required")
         
     if frappe.db.exists("LMS Module", module_name):
-        frappe.delete_doc("LMS Module", module_name, ignore_permissions=True)
+        # Check if it's part of a learning path
+        paths = frappe.get_all("LMS Learning Path Course", filters={"module": module_name}, fields=["parent"])
+        if paths:
+            path_names = [p.parent for p in paths]
+            frappe.throw(f"Cannot delete module because it is used in Learning Path(s): {', '.join(path_names)}. Please remove it from the path(s) first.")
+
+        # Delete dependent records
+        dependent_doctypes = [
+            "LMS Module Tracker",
+            "LMS Certificate",
+            "LMS Path Module Progress",
+            "LMS Module Assignment",
+            "LMS Learner Badge",
+            "LMS Learner Note",
+            "LMS Discussion"
+        ]
+        
+        for doctype in dependent_doctypes:
+            # For each doctype, check if it has a module field and delete the linked docs
+            if frappe.db.has_column(doctype, "module"):
+                linked_docs = frappe.get_all(doctype, filters={"module": module_name}, pluck="name")
+                for doc in linked_docs:
+                    frappe.delete_doc(doctype, doc, ignore_permissions=True, force=True)
+
+        frappe.delete_doc("LMS Module", module_name, ignore_permissions=True, force=True)
         return {"status": "success"}
     return {"status": "not_found"}
 

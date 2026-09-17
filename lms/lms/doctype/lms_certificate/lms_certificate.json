@@ -112,6 +112,13 @@
    "fieldname": "revoked_on",
    "fieldtype": "Datetime",
    "label": "Revoked On"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_claimed",
+   "fieldtype": "Check",
+   "label": "Is Claimed",
+   "description": "Whether the learner has clicked to claim/view the certificate from their dashboard."
   }
  ],
  "grid_page_length": 50,

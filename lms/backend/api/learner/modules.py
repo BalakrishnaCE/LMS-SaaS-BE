@@ -4,6 +4,31 @@ from lms.backend.api.common.module_detail import get_estimated_hours_from_curric
 from lms.backend.api.learner.dashboard import get_module_category
 
 @frappe.whitelist()
+def check_module_has_attempts_left(user, module_name):
+    from lms.backend.api.admin.module_management import get_curriculum
+    curriculum = get_curriculum(module_name)
+    quiz_names = []
+    for lesson in curriculum:
+        for chapter in lesson.get("chapters", []):
+            for content in chapter.get("contents", []):
+                if content.get("contentType") in ["quiz", "assessment"]:
+                    q_data = content.get("contentData", {})
+                    if q_data and "quiz_data" in q_data:
+                        q_info = q_data.get("quiz_data")
+                        if q_info and q_info.get("name") and q_info.get("is_passing_required"):
+                            quiz_names.append(q_info["name"])
+    
+    for q_name in quiz_names:
+        max_att = frappe.db.get_value("LMS Quiz", q_name, "max_attempts") or 0
+        if max_att > 0:
+            subs = frappe.get_all("LMS Quiz Submission", filters={"user": user, "quiz": q_name}, fields=["extra_attempts_granted"])
+            att_used = len(subs)
+            extra_attempts = sum([s.extra_attempts_granted or 0 for s in subs])
+            if att_used >= (max_att + extra_attempts):
+                return False
+    return True
+
+@frappe.whitelist()
 def get_learner_modules(filter_type="all"):
     """
     Returns modules assigned to the current learner, with their progress.
@@ -42,7 +67,7 @@ def get_learner_modules(filter_type="all"):
         tracker = frappe.get_value(
             "LMS Module Tracker",
             {"user": user, "module": a.module},
-            ["status", "progress_percentage", "started_on"],
+            ["status", "progress_percentage", "started_on", "is_saved", "total_score"],
             as_dict=True
         )
 
@@ -83,6 +108,11 @@ def get_learner_modules(filter_type="all"):
         else:
             duration_str = "0 min"
 
+        status = tracker.status if tracker else "Not Started"
+        if status == "Failed":
+            if not check_module_has_attempts_left(user, a.module):
+                status = "Failed (No Attempts)"
+
         results.append({
             "id": a.module,
             "title": module_doc.module_name,
@@ -95,10 +125,12 @@ def get_learner_modules(filter_type="all"):
             "completionRate": progress,
             "completedCount": completed_items,
             "totalCount": total_items,
-            "status": (tracker.status if tracker else "Not Started"),
+            "status": status,
             "isRequired": bool(a.is_mandatory),
             "image": module_doc.image,
-            "creation": a.get("creation", "")
+            "creation": a.get("creation", ""),
+            "isSaved": bool(tracker.is_saved) if tracker else False,
+            "score": float(tracker.total_score) if tracker and tracker.total_score is not None else 0.0
         })
 
     # Filter results based on filter_type
@@ -184,6 +216,17 @@ def get_recommended_modules():
     )
 
     results = []
+    if modules:
+        module_names = [m.name for m in modules]
+        trackers = frappe.get_all(
+            "LMS Module Tracker",
+            filters={"user": user, "module": ["in", module_names]},
+            fields=["module", "is_saved"]
+        )
+        saved_map = {t.module: bool(t.is_saved) for t in trackers}
+    else:
+        saved_map = {}
+
     for m in modules:
         est_hours = get_estimated_hours_from_curriculum(m.name)
         if est_hours > 0:
@@ -206,6 +249,7 @@ def get_recommended_modules():
             "completionRate": 0,
             "status": "Not Started",
             "isRequired": False,
+            "isSaved": saved_map.get(m.name, False)
         })
     return results
 
@@ -237,6 +281,17 @@ def get_explore_modules():
     )
 
     results = []
+    if modules:
+        module_names = [m.name for m in modules]
+        trackers = frappe.get_all(
+            "LMS Module Tracker",
+            filters={"user": user, "module": ["in", module_names]},
+            fields=["module", "is_saved"]
+        )
+        saved_map = {t.module: bool(t.is_saved) for t in trackers}
+    else:
+        saved_map = {}
+
     for m in modules:
         est_hours = get_estimated_hours_from_curriculum(m.name)
         if est_hours > 0:
@@ -259,6 +314,7 @@ def get_explore_modules():
             "completionRate": 0,
             "status": "Not Started",
             "isRequired": False,
+            "isSaved": saved_map.get(m.name, False)
         })
     return results
 
@@ -311,6 +367,7 @@ def get_learner_module_viewer_data(module_id):
         "lessonsCount": len(module.get("lessons", [])),
         "duration": duration_str,
         "dueDate": None,
+        "isSaved": False,
     }
 
     # Compute due_date from assignment if available
@@ -336,13 +393,14 @@ def get_learner_module_viewer_data(module_id):
     tracker = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user, "module": module_id},
-        fields=["name", "status", "progress_percentage"],
+        fields=["name", "status", "progress_percentage", "is_saved"],
         limit=1
     )
     
     progress_map = {}
     if tracker:
         t = tracker[0]
+        metadata["isSaved"] = bool(t.is_saved)
         content_progress = frappe.get_all(
             "LMS Content Progress",
             filters={"parent": t.name},

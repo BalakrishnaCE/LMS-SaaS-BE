@@ -33,19 +33,22 @@ def download_certificate_pdf(certificate_name):
         module_name = cert.module
 
     html_template = ""
-    if cert.template:
-        try:
-            html_template = frappe.db.get_value(
-                "LMS Certificate Template", cert.template, "html_template") or ""
-        except Exception:
-            pass
-
-    if not html_template and cert.module:
+    
+    # 1. Prioritize the Module's currently selected template so admins can dynamically change designs
+    if cert.module:
         try:
             mod = frappe.get_doc("LMS Module", cert.module)
             if mod.certificate_template:
                 html_template = frappe.db.get_value(
                     "LMS Certificate Template", mod.certificate_template, "html_template") or ""
+        except Exception:
+            pass
+
+    # 2. Fallback to the template saved on the certificate if the module doesn't have one
+    if not html_template and cert.template:
+        try:
+            html_template = frappe.db.get_value(
+                "LMS Certificate Template", cert.template, "html_template") or ""
         except Exception:
             pass
 
@@ -79,12 +82,6 @@ def download_certificate_pdf(certificate_name):
     html_body = re.sub(r"<style[^>]*>.*?</style>", "", html_body,
                        flags=re.DOTALL | re.IGNORECASE)
 
-    # ── Fetch template colours by peeking at the raw CSS ─────────────────────
-    # (already stripped above; we use hardcoded palette that matches both templates)
-    # Classic palette: FAF5F0 bg, BB6707 border, F5A74C dashed, 714109 title,
-    #                  595F69 labels, 17191C name, 9CA1AB foot-label
-    # We reconstruct the visual design using table layout.
-
     # ── Embed fonts ───────────────────────────────────────────────────────────
     def _font_b64(path):
         try:
@@ -115,20 +112,17 @@ def download_certificate_pdf(certificate_name):
     )
 
     # ── Replacement CSS (table layout — fully supported by wkhtmltopdf) ───────
-    # A4 landscape: 297mm × 210mm = 1122pt × 793px at 96dpi
-    # wkhtmltopdf's old WebKit supports: display:table, position:absolute,
-    # border, padding, background, font-* but NOT flex/grid/clamp/vw/vh.
     layout_css = """
 /* ===== PAGE ===== */
-@page { size: 297mm 210mm; margin: 0; }
-html, body { margin:0; padding:0; width:297mm; height:210mm; overflow:hidden;
+@page { size: A4 landscape; margin: 0; }
+html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden;
              font-family:'Plus Jakarta Sans',Arial,sans-serif; background:#FAF5F0; }
 
 /* ===== TOP-LEVEL WRAPPER — fills the whole page ===== */
 .certificate-wrapper {
   display: block;
-  width: 297mm;
-  height: 210mm;
+  width: 100%;
+  height: 100%;
   background: #FAF5F0;
   border: 3px solid #BB6707;
   border-radius: 8px;
@@ -154,94 +148,95 @@ html, body { margin:0; padding:0; width:297mm; height:210mm; overflow:hidden;
   text-align: center;
   font-family: 'Instrument Serif', Georgia, serif;
   font-weight: 400;
-  font-size: 30pt;
+  font-size: 32px;
   color: #714109;
-  margin: 20px 0 6px;
+  margin: 25px 0 6px;
   padding: 0;
 }
-
 /* ===== DECORATIVE DIVIDER ===== */
 .divider { display: block; text-align: center; margin-bottom: 0; }
 .divider .line {
-  display: inline-block; width: 80pt; height: 0;
-  border-top: 1px solid #F5A74C; vertical-align: middle; margin: 0 6pt;
+  display: inline-block; width: 101px; height: 0;
+  border-top: 1px solid #F5A74C; vertical-align: middle; margin: 0 6px;
 }
 .divider .diamond {
-  display: inline-block; width: 7pt; height: 7pt;
+  display: inline-block; width: 8px; height: 8px;
   background: #BB6707; vertical-align: middle; transform: rotate(45deg);
 }
 
-/* ===== BODY — centred absolutely ===== */
+/* ===== BODY — natural flow ===== */
 .cert-body-stack {
-  position: absolute;
-  left: 24px; right: 24px;
-  top: 50%; margin-top: -60px;   /* nudge up from true centre */
+  display: block;
+  width: 100%;
   text-align: center;
+  margin-top: 60px;
 }
 .sub-label {
   display: block;
   font-family: 'Plus Jakarta Sans', Arial, sans-serif;
-  font-weight: 500; font-size: 9pt; color: #595F69;
+  font-weight: 500; font-size: 14px; color: #595F69;
   text-transform: uppercase; letter-spacing: 0.04em;
-  margin: 0 0 4px;
+  margin: 0 0 10px;
 }
 .recipient-name {
   display: block;
   font-family: 'Instrument Serif', Georgia, serif;
-  font-style: italic; font-weight: 400; font-size: 28pt;
-  color: #17191C; margin: 0 0 6px;
+  font-style: italic; font-weight: 400; font-size: 36px;
+  color: #17191C; margin: 0 0 12px;
 }
 .course-name {
   display: block;
   font-family: 'Plus Jakarta Sans', Arial, sans-serif;
-  font-weight: 700; font-size: 14pt;
+  font-weight: 700; font-size: 20px;
   color: #714109; margin: 0;
 }
 
 /* ===== FOOTER — table layout, pinned to bottom ===== */
 .cert-footer {
   position: absolute;
-  bottom: 14px; left: 24px; right: 24px;
-  display: table; width: calc(100% - 48px);
+  bottom: 24px; left: 30px; right: 30px;
+  display: table; width: calc(100% - 60px);
   table-layout: fixed;
 }
 .date-block {
-  display: table-cell; width: 130px;
+  display: table-cell; width: 200px;
   text-align: left; vertical-align: bottom;
+  white-space: nowrap;
 }
 .seal-badge-container {
   display: table-cell;
   text-align: center; vertical-align: bottom;
 }
 .seal-badge-container svg {
-  width: 52px; height: 52px;
-  background: #F5A74C; border: 2px solid #BB6707; border-radius: 26px;
-  padding: 12px; box-sizing: border-box; display: inline-block;
+  width: 72px; height: 72px;
+  background: #F5A74C; border: 2px solid #BB6707; border-radius: 36px;
+  padding: 16px; box-sizing: border-box; display: inline-block;
 }
 .signature-block {
-  display: table-cell; width: 130px;
+  display: table-cell; width: 200px;
   text-align: right; vertical-align: bottom;
+  white-space: nowrap;
 }
 .date-value {
-  display: block; font-weight: 600; font-size: 8pt; color: #595F69; margin-bottom: 4px;
+  display: block; font-weight: 600; font-size: 13px; color: #595F69; margin-bottom: 6px;
 }
 .signature-handwritten {
   display: block;
   font-family: 'Parisienne', Georgia, serif;
-  font-weight: 400; font-size: 16pt; color: #714109; margin-bottom: 4px;
+  font-weight: 400; font-size: 24px; color: #714109; margin-bottom: 6px;
 }
 .foot-line {
   display: block; width: 100%; height: 0;
   border-top: 1px solid #ECEDEF; margin-bottom: 4px;
 }
 .foot-label {
-  display: block; font-weight: 600; font-size: 7pt;
+  display: block; font-weight: 600; font-size: 11px;
   color: #9CA1AB; text-transform: uppercase; letter-spacing: 0.1em;
 }
 
 /* ===== MODERN TEMPLATE overrides ===== */
 .certificate {
-  position: absolute; top: 0; left: 0; width: 297mm; height: 210mm;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   background: #FBF9F4; overflow: hidden;
 }
 .frame-pattern {
@@ -307,14 +302,7 @@ html, body { margin:0; padding:0; width:297mm; height:210mm; overflow:hidden;
 </body>
 </html>"""
 
-    # ── Generate PDF via wkhtmltopdf directly ─────────────────────────────────
-    # We bypass frappe.utils.pdf.get_pdf because it forcibly adds:
-    #   --margin-top 15mm  --margin-bottom 15mm  (even when we pass 0)
-    #   --print-media-type  (triggers @media print CSS inside the template)
-    #   --disable-local-file-access (breaks embedded font loading)
-    # Calling wkhtmltopdf via subprocess gives us complete option control.
     import subprocess, tempfile
-
     with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as _tf:
         _tf.write(html)
         _html_path = _tf.name
@@ -322,11 +310,18 @@ html, body { margin:0; padding:0; width:297mm; height:210mm; overflow:hidden;
     _pdf_path = _html_path.replace(".html", ".pdf")
 
     try:
+        page_width = "297mm"
+        page_height = "210mm"
+        if "inner-gold-frame" in html_template or (cert.template and "Classic" in cert.template):
+            page_height = "109mm"
+        elif "frame-pattern" in html_template or (cert.template and "Modern" in cert.template):
+            page_height = "218mm"
+
         subprocess.check_call(
             [
                 "wkhtmltopdf",
-                "--page-size",        "A4",
-                "--orientation",      "Landscape",
+                "--page-width",       page_width,
+                "--page-height",      page_height,
                 "--margin-top",       "0",
                 "--margin-right",     "0",
                 "--margin-bottom",    "0",
@@ -357,5 +352,3 @@ html, body { margin:0; padding:0; width:297mm; height:210mm; overflow:hidden;
     frappe.local.response.filename    = filename
     frappe.local.response.filecontent = pdf_data
     frappe.local.response.type        = "download"
-
-

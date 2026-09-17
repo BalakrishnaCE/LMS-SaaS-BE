@@ -10,6 +10,7 @@
   "user",
   "learning_path",
   "status",
+  "is_saved",
   "progress_percentage",
   "total_score",
   "started_on",
@@ -43,6 +44,12 @@
    "options": "Not started\nIn Progress\nCompleted\nFailed",
    "reqd": 1,
    "description": "Select the overall progress status of the learning path."
+  },
+  {
+   "default": "0",
+   "fieldname": "is_saved",
+   "fieldtype": "Check",
+   "label": "Is Saved"
   },
   {
    "fieldname": "progress_percentage",
