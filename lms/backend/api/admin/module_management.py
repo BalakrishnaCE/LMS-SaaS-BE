@@ -376,6 +376,46 @@ def reorder_content_blocks(chapter_name, ordered_references):
         raise
 
 @frappe.whitelist(allow_guest=False)
+def rename_lesson(lesson_name, new_title, new_description=None):
+    """Rename an existing LMS Lesson's title and optionally its description."""
+    if not lesson_name or not new_title or not new_title.strip():
+        frappe.throw("Lesson ID and new title are required")
+
+    if not frappe.db.exists("LMS Lesson", lesson_name):
+        frappe.throw(f"Lesson '{lesson_name}' not found")
+
+    if not frappe.has_permission("LMS Lesson", "write", lesson_name):
+        frappe.throw("Not permitted to edit this lesson", frappe.PermissionError)
+
+    new_title = new_title.strip()
+    updates = {"lesson_name": new_title}
+    if new_description is not None:
+        updates["description"] = new_description
+        
+    frappe.db.set_value("LMS Lesson", lesson_name, updates)
+
+    return {"status": "success", "lesson_name": lesson_name, "title": new_title}
+
+
+@frappe.whitelist(allow_guest=False)
+def rename_chapter(chapter_name, new_title):
+    """Rename an existing LMS Chapter's title."""
+    if not chapter_name or not new_title or not new_title.strip():
+        frappe.throw("Chapter ID and new title are required")
+
+    if not frappe.db.exists("LMS Chapter", chapter_name):
+        frappe.throw(f"Chapter '{chapter_name}' not found")
+
+    if not frappe.has_permission("LMS Chapter", "write", chapter_name):
+        frappe.throw("Not permitted to edit this chapter", frappe.PermissionError)
+
+    new_title = new_title.strip()
+    frappe.db.set_value("LMS Chapter", chapter_name, "title", new_title)
+
+    return {"status": "success", "chapter_name": chapter_name, "title": new_title}
+
+
+@frappe.whitelist(allow_guest=False)
 def remove_lesson(module_name, lesson_name):
     module = frappe.get_doc("LMS Module", module_name)
     module.lessons = [ml for ml in module.lessons if ml.lesson != lesson_name]
