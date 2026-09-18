@@ -293,14 +293,13 @@ def get_module_certificates(module_id):
     module = frappe.get_doc("LMS Module", module_id)
     validity_days = module.certificate_validity_period or 0
     
-    # Get all completed trackers
-    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_id, "status": "Completed"}, fields=["name", "user", "total_score"])
+    # Get all completed and failed trackers
+    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_id, "status": ["in", ["Completed", "Failed"]]}, fields=["name", "user", "total_score", "status"])
     
-    # Get all certificates
     certs = frappe.get_all(
         "LMS Certificate",
         filters={"module": module_id},
-        fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on"]
+        fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on", "pdf_status", "pdf_file_url"]
     )
     cert_map = {c.user: c for c in certs}
     
@@ -351,6 +350,8 @@ def get_module_certificates(module_id):
                 "status": status,
                 "score": score,
                 "certificate_pdf": cert.certificate_pdf or None,
+                "pdf_status": cert.pdf_status or "Pending",
+                "pdf_file_url": cert.pdf_file_url or None,
                 "revocationReason": cert.revocation_reason,
                 "customRevocationReason": cert.custom_revocation_reason,
                 "revokedBy": revoked_by_name,
@@ -365,6 +366,7 @@ def get_module_certificates(module_id):
             try:
                 user_doc = frappe.get_doc("User", tracker.user)
                 score = f"{tracker.total_score}" if tracker.total_score is not None else "--"
+                status_val = "Failed" if tracker.status == "Failed" else "Pending"
                 certificate_data.append({
                     "id": f"pending-{tracker.name}",
                     "certificate_id": "-",
@@ -372,9 +374,11 @@ def get_module_certificates(module_id):
                     "email": user_doc.email,
                     "issueDate": None,
                     "expiryDate": None,
-                    "status": "Pending",
+                    "status": status_val,
                     "score": score,
                     "certificate_pdf": None,
+                    "pdf_status": "Pending",
+                    "pdf_file_url": None,
                     "revocationReason": None,
                     "customRevocationReason": None,
                     "revokedBy": None,

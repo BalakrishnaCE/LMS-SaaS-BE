@@ -326,7 +326,6 @@ def update_content_progress(module, content_reference, content_type=None, status
         if status == "Completed":
             existing_cp.is_completed = 1
             
-    tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_doc.name)
     # If the tracker was previously marked "Excluded" (admin unassign sentinel),
     # reset it so Frappe's Select validation doesn't reject the save.
     if tracker_doc.status == "Excluded":

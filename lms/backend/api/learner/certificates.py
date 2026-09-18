@@ -69,7 +69,7 @@ def get_learner_certificates():
             "title": title,
             "subtitle": subtitle,
             "issueDate": cert.issued_on,
-            "pdfUrl": f"/api/method/lms.backend.api.common.certificate.download_certificate_pdf?certificate_name={cert.name}",
+            "pdfUrl": cert.name, # Use name as the ID for fetching HTML later
             "score": score,
             "status": status,
             "earned": status == "Issued",

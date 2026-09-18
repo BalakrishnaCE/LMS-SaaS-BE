@@ -183,7 +183,7 @@ def get_learner_summary(timeframe="month"):
         score = round(t.total_score) if t.total_score is not None else 100
         # Check if certificate exists
         cert_name = frappe.db.get_value("LMS Certificate", {"user": user, "module": t.module, "is_valid": 1}, "name")
-        pdf_url = f"/api/method/lms.backend.api.common.certificate.download_certificate_pdf?certificate_name={cert_name}" if cert_name else None
+        pdf_url = cert_name if cert_name else None
         
         recently_completed.append({
             "id": t.module,
@@ -298,7 +298,8 @@ def get_saved_items():
                 is_overdue = days_left < 0
                 
         total_items = frappe.db.count("LMS Module Lesson Child", {"parent": t.module})
-        completed_items = frappe.db.sql("SELECT count(name) FROM `tabLMS Lesson Progress` WHERE parent = %s AND status = 'Completed'", t.name)[0][0]
+        progress_val = t.progress_percentage or 0
+        completed_items = round(total_items * (progress_val / 100))
         
         from lms.backend.api.learner.dashboard import get_module_category
         results.append({
@@ -372,24 +373,24 @@ def get_continue_learning(item_type="module"):
         
         if item_type in ["module", "both"]:
             not_started_queries.append("""
-                SELECT 'Module' as type, ma.module as id, ma.creation
+                SELECT 'Module' as type, ma.module as id, ma.creation, t.progress_percentage
                 FROM `tabLMS Module Assignment` ma
                 INNER JOIN `tabLMS Module` m ON m.name = ma.module
                 INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
                 LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
                 WHERE au.user = %s
                   AND m.status = 'Published'
-                  AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
+                  AND (t.name IS NULL OR t.status = 'Not started')
             """)
             ns_params.extend([user, user])
             
         if item_type in ["path", "both"]:
             not_started_queries.append("""
-                SELECT 'Path' as type, lp.name as id, lp.creation
+                SELECT 'Path' as type, lp.name as id, lp.creation, t.progress_percentage
                 FROM `tabLMS Learning Path` lp
                 LEFT JOIN `tabLMS Learning Path Tracker` t ON t.learning_path = lp.name AND t.user = %s
                 WHERE lp.status = 'Published'
-                  AND (t.name IS NULL OR t.status NOT IN ('In Progress', 'Completed'))
+                  AND (t.name IS NULL OR t.status = 'Not started')
             """)
             ns_params.append(user)
             

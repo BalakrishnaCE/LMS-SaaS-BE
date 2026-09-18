@@ -86,17 +86,12 @@ def get_learner_modules(filter_type="all"):
             days_left = date_diff(due_date, today_dt)
             is_overdue = days_left < 0
 
-        # Calculate completedCount and totalCount for module (completed lessons vs total lessons)
+        # Calculate completedCount and totalCount for module
         total_items = frappe.db.count("LMS Module Lesson Child", {"parent": a.module})
         completed_items = 0
         if tracker:
-            # Count completed lessons (matching lesson-level, not content-block-level)
-            tracker_name = frappe.db.get_value("LMS Module Tracker", {"user": user, "module": a.module}, "name")
-            if tracker_name:
-                completed_items = frappe.db.sql(
-                    "SELECT count(name) FROM `tabLMS Lesson Progress` WHERE parent = %s AND status = 'Completed'",
-                    tracker_name
-                )[0][0]
+            progress_val = tracker.progress_percentage or 0
+            completed_items = round(total_items * (progress_val / 100))
 
         # Calculate estimated duration from curriculum
         est_hours = get_estimated_hours_from_curriculum(a.module)
