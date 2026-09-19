@@ -13,6 +13,8 @@
   "enrollment",
   "template",
   "score",
+  "pdf_status",
+  "pdf_file_url",
   "issued_on",
   "certificate_pdf",
   "is_valid",
@@ -71,6 +73,17 @@
    "fieldtype": "Float",
    "label": "Score",
    "description": "The learner's final score. Auto-fetched from LMS Module Tracker."
+  },
+  {
+   "fieldname": "pdf_status",
+   "fieldtype": "Select",
+   "label": "PDF Generation Status",
+   "options": "\nPending\nGenerating\nCompleted\nFailed"
+  },
+  {
+   "fieldname": "pdf_file_url",
+   "fieldtype": "Data",
+   "label": "PDF File URL"
   },
   {
    "fieldname": "issued_on",

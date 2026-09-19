@@ -149,19 +149,21 @@ def generate_pdf_worker(certificate_name, **kwargs):
             
         _, tmp_pdf_path = tempfile.mkstemp(suffix=".pdf")
         
-        # Run puppeteer script
+        # Run playwright script
         node_script = frappe.get_app_path("lms", "..", "pdf_engine", "generate.js")
         # Resolve it absolutely
         node_script = os.path.abspath(node_script)
         
+        bash_command = f"source ~/.nvm/nvm.sh && node {node_script} --input {tmp_html_path} --output {tmp_pdf_path}"
+        
         result = subprocess.run(
-            ["node", node_script, "--input", tmp_html_path, "--output", tmp_pdf_path],
+            ["/bin/bash", "-c", bash_command],
             capture_output=True,
             text=True
         )
         
         if result.returncode != 0:
-            frappe.log_error(f"Puppeteer Error: {result.stderr}", "Certificate PDF Generation")
+            frappe.log_error(f"Playwright Error: {result.stderr}", "Certificate PDF Generation")
             cert.db_set("pdf_status", "Failed")
         else:
             # Read generated PDF and save as Frappe File
