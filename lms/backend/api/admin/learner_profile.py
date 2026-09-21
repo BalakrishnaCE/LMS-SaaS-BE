@@ -154,10 +154,23 @@ def _evaluate_user_risks(users):
 
 @frappe.whitelist(allow_guest=True)
 def get_learner_kpis():
+    from lms.backend.api.common.analytics import _get_filter_for_user
+    user_filter = _get_filter_for_user()
+    if user_filter == []:
+        return {
+            "totalLearners": 0,
+            "activeLearners": 0,
+            "inactiveLearners": 0,
+            "atRiskLearners": 0
+        }
+        
     learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     filters = {"name": ("!=", "Administrator")}
     if learner_roles:
-        filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
+        allowed_roles = [r for r in learner_roles if r != "Administrator"]
+        if user_filter is not None:
+            allowed_roles = [r for r in allowed_roles if r in user_filter]
+        filters["name"] = ("in", allowed_roles)
         
     users = frappe.get_all("User", filters=filters, fields=["name", "enabled"], ignore_permissions=True)
     total = len(users)
@@ -192,6 +205,11 @@ def get_learner_kpis():
 
 @frappe.whitelist(allow_guest=True)
 def get_learners(search="", limit=10, status="all", risk="all", department="all", designation="all", offset=0):
+    from lms.backend.api.common.analytics import _get_filter_for_user
+    user_filter = _get_filter_for_user()
+    if user_filter == []:
+        return {"learners": [], "total": 0, "departments": [], "designations": []}
+
     try:
         limit = int(limit)
         offset = int(offset)
@@ -202,7 +220,10 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
     filters = {"name": ("!=", "Administrator")}
     learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     if learner_roles:
-        filters["name"] = ("in", [r for r in learner_roles if r != "Administrator"])
+        allowed_roles = [r for r in learner_roles if r != "Administrator"]
+        if user_filter is not None:
+            allowed_roles = [r for r in allowed_roles if r in user_filter]
+        filters["name"] = ("in", allowed_roles)
 
     order_by = "creation desc" if risk and risk.lower() == "recent" else "name asc"
     users = frappe.get_all("User", filters=filters, fields=["name", "email", "full_name", "enabled", "user_image"], order_by=order_by, ignore_permissions=True)
@@ -271,12 +292,20 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
     if designation and designation.lower() != "all":
         results = [r for r in results if r["designation"] and designation.lower() == r["designation"].lower()]
         
-    # Fetch all possible departments (Teams) and designations from the database
-    teams = frappe.get_all("LMS Team", pluck="name", ignore_permissions=True)
-    all_departments = set(teams)
-    
-    settings = frappe.get_all("LMS User Settings", fields=["designation"], distinct=1, ignore_permissions=True)
-    all_designations = set(s.designation for s in settings if s.designation)
+    if user_filter is not None:
+        # Constrain to teams and designations of the users this manager has access to
+        user_teams = frappe.get_all("LMS Team Member", filters={"user": ("in", user_filter)}, pluck="parent", ignore_permissions=True)
+        all_departments = set(user_teams)
+        
+        settings = frappe.get_all("LMS User Settings", filters={"system_user": ("in", user_filter)}, fields=["designation"], distinct=1, ignore_permissions=True)
+        all_designations = set(s.designation for s in settings if s.designation)
+    else:
+        # System Admin sees all
+        teams = frappe.get_all("LMS Team", pluck="name", ignore_permissions=True)
+        all_departments = set(teams)
+        
+        settings = frappe.get_all("LMS User Settings", fields=["designation"], distinct=1, ignore_permissions=True)
+        all_designations = set(s.designation for s in settings if s.designation)
 
     total = len(results)
     
@@ -294,6 +323,11 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
 
 @frappe.whitelist(allow_guest=True)
 def get_learner_details(user_id):
+    from lms.backend.api.common.analytics import _get_filter_for_user
+    user_filter = _get_filter_for_user()
+    if user_filter is not None and user_id not in user_filter:
+        frappe.throw("Not permitted to view this learner's details", frappe.PermissionError)
+
     user = frappe.get_doc("User", user_id)
     if not user:
         return {}

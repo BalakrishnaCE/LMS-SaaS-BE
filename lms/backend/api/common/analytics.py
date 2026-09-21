@@ -8,14 +8,17 @@ def _get_filter_for_user():
     user = frappe.session.user
     roles = frappe.get_roles(user)
     
-    if "System Manager" in roles or "LMS Admin" in roles:
-        return None # No filter, return all
-        
-    if "LMS Manager" in roles:
+    # LMS-TL (Team Lead) and LMS Manager are scoped to their own teams.
+    # Check these BEFORE System Manager so that TLs who also have System Manager
+    # are still correctly scoped when using the manager portal.
+    if "LMS-TL" in roles or "LMS Manager" in roles:
         member_emails = _get_team_member_emails(user)
         if not member_emails:
             return [] # Returns empty list to indicate no data
         return member_emails
+
+    if "System Manager" in roles or "LMS Admin" in roles:
+        return None # No filter, return all data
         
     return [] # Default fallback
 
@@ -328,104 +331,60 @@ def debug_correct_options(question_id):
 def get_assessment_performance(assessment_type="all"):
     user_filter = _get_filter_for_user()
     if user_filter == []:
-        return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": []}
-        
-    if assessment_type == "qa":
         monthly_data = [{"month": calendar.month_abbr[month], "attempts": 0} for month in range(1, 13)]
         return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": monthly_data}
-        
+
     filters = {}
     if user_filter is not None:
         filters["user"] = ["in", user_filter]
 
+    # All three tabs use the same source: LMS Quiz Submission
+    submissions = frappe.get_all(
+        "LMS Quiz Submission",
+        filters=filters,
+        fields=["passed", "score", "creation", "user", "quiz"],
+        ignore_permissions=True
+    )
+
+    # Filter by quiz type if needed
     if assessment_type in ["quiz", "qa"]:
-        submissions = frappe.get_all("LMS Quiz Submission", filters=filters, fields=["passed", "score", "creation", "user", "quiz"], ignore_permissions=True)
-        
         quiz_names = list(set([s.quiz for s in submissions]))
         if quiz_names:
-            quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "evaluation_method", "title"])
-            
-            def is_qa_quiz(q):
-                return q.evaluation_method == "Manual review" or q.title == "QA Assessment"
-                
-            quiz_is_qa_map = {q.name: is_qa_quiz(q) for q in quizzes}
-            
+            quizzes = frappe.get_all("LMS Quiz", filters={"name": ["in", quiz_names]}, fields=["name", "quiz_type"])
+            quiz_type_map = {q.name: q.quiz_type for q in quizzes}
+
             if assessment_type == "qa":
-                submissions = [s for s in submissions if quiz_is_qa_map.get(s.quiz)]
-            else:
-                submissions = [s for s in submissions if not quiz_is_qa_map.get(s.quiz)]
-                
-        total_attempts = len(submissions)
-        if total_attempts == 0:
-            monthly_data = [{"month": calendar.month_abbr[month], "attempts": 0} for month in range(1, 13)]
-            return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": monthly_data}
-            
-        passed_submissions = [s for s in submissions if s.passed]
-        total_passed = len(passed_submissions)
-        total_failed = total_attempts - total_passed
-        
-        avg_score = sum([s.score or 0 for s in submissions]) / total_attempts
-        pass_rate = int((total_passed / total_attempts) * 100)
-        
-        user_quiz_counts = {}
-        for s in submissions:
-            key = (s.user, s.quiz)
-            user_quiz_counts[key] = user_quiz_counts.get(key, 0) + 1
-            
-        retakes = sum(1 for count in user_quiz_counts.values() if count > 1)
-        retake_rate = int((retakes / len(user_quiz_counts)) * 100) if user_quiz_counts else 0
+                submissions = [s for s in submissions if quiz_type_map.get(s.quiz) == "QA Assessment"]
+            else:  # quiz
+                submissions = [s for s in submissions if quiz_type_map.get(s.quiz) != "QA Assessment"]
 
-        current_year = getdate(today()).year
-        monthly_attempts = defaultdict(int)
-        for s in submissions:
-            s_date = getdate(s.creation)
-            if s_date.year == current_year:
-                monthly_attempts[s_date.month] += 1
-                
-        monthly_data = [{"month": calendar.month_abbr[month], "attempts": monthly_attempts[month]} for month in range(1, 13)]
+    total_attempts = len(submissions)
+    if total_attempts == 0:
+        monthly_data = [{"month": calendar.month_abbr[month], "attempts": 0} for month in range(1, 13)]
+        return {"averageScore": 0, "passRate": 0, "needsRetake": 0, "totalAttempts": 0, "retakeRate": 0, "monthlyAttempts": monthly_data}
 
-        return {
-            "averageScore": int(avg_score),
-            "passRate": pass_rate,
-            "needsRetake": total_failed,
-            "totalAttempts": total_attempts,
-            "retakeRate": retake_rate,
-            "monthlyAttempts": monthly_data
-        }
+    passed_submissions = [s for s in submissions if s.passed]
+    total_passed = len(passed_submissions)
+    total_failed = total_attempts - total_passed
 
-        
-    trackers = frappe.get_all("LMS Module Tracker", filters=filters, fields=["status", "total_score", "creation", "user", "module"])
-    
-    completed_trackers = [t for t in trackers if t.status == "Completed"]
-    failed_trackers = [t for t in trackers if t.status == "Failed"]
-    
-    total_completed = len(completed_trackers)
-    total_failed = len(failed_trackers)
-    
-    avg_score = 0
-    if total_completed > 0:
-        avg_score = sum([t.total_score for t in completed_trackers if t.total_score is not None]) / total_completed
-        
-    total_attempts = total_completed + total_failed
-    pass_rate = int((total_completed / total_attempts) * 100) if total_attempts > 0 else 0
-    
-    user_module_counts = {}
-    for t in trackers:
-        if t.status in ("Completed", "Failed"):
-            key = (t.user, t.module)
-            user_module_counts[key] = user_module_counts.get(key, 0) + 1
-            
-    retakes = sum(1 for count in user_module_counts.values() if count > 1)
-    retake_rate = int((retakes / len(user_module_counts)) * 100) if user_module_counts else 0
+    avg_score = sum([s.score or 0 for s in submissions]) / total_attempts
+    pass_rate = int((total_passed / total_attempts) * 100)
+
+    user_quiz_counts = {}
+    for s in submissions:
+        key = (s.user, s.quiz)
+        user_quiz_counts[key] = user_quiz_counts.get(key, 0) + 1
+
+    retakes = sum(1 for count in user_quiz_counts.values() if count > 1)
+    retake_rate = int((retakes / len(user_quiz_counts)) * 100) if user_quiz_counts else 0
 
     current_year = getdate(today()).year
     monthly_attempts = defaultdict(int)
-    for t in trackers:
-        if t.status in ("Completed", "Failed"):
-            t_date = getdate(t.creation)
-            if t_date.year == current_year:
-                monthly_attempts[t_date.month] += 1
-                
+    for s in submissions:
+        s_date = getdate(s.creation)
+        if s_date.year == current_year:
+            monthly_attempts[s_date.month] += 1
+
     monthly_data = [{"month": calendar.month_abbr[month], "attempts": monthly_attempts[month]} for month in range(1, 13)]
 
     return {
@@ -442,16 +401,15 @@ def get_department_performance():
     user = frappe.session.user
     roles = frappe.get_roles(user)
     
-    if "System Manager" in roles or "LMS Admin" in roles:
-        teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
-    elif "LMS Manager" in roles:
-        # Manager can only see their own teams!
-        # First get teams where user is manager
-        managed_teams = frappe.get_all("LMS Team Manager", filters={"user": user}, fields=["parent"])
-        team_names = [t.parent for t in managed_teams]
+    # Check TL/Manager role first so it takes precedence over System Manager
+    if "LMS-TL" in roles or "LMS Manager" in roles:
+        lead_rows = frappe.get_all("LMS Team Lead", filters={"user": user, "parenttype": "LMS Team"}, fields=["parent"])
+        team_names = list({r.parent for r in lead_rows})
         if not team_names:
             return []
         teams = frappe.get_all("LMS Team", filters={"name": ["in", team_names]}, fields=["name", "team_name"])
+    elif "System Manager" in roles or "LMS Admin" in roles:
+        teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
     else:
         return []
     
@@ -493,6 +451,90 @@ def get_department_performance():
             "criticalOverdue": len(overdue_users) > 5
         })
     return results
+
+
+@frappe.whitelist(allow_guest=True)
+def get_department_assessment_performance(assessment_type="all"):
+    """
+    Returns pass-rate per department based on LMS Quiz Submission data.
+    assessment_type: "all" | "quiz" | "qa"
+    """
+    user = frappe.session.user
+    roles = frappe.get_roles(user)
+
+    # Check TL/Manager role first so it takes precedence over System Manager
+    if "LMS-TL" in roles or "LMS Manager" in roles:
+        lead_rows = frappe.get_all("LMS Team Lead", filters={"user": user, "parenttype": "LMS Team"}, fields=["parent"])
+        team_names = list({r.parent for r in lead_rows})
+        if not team_names:
+            return []
+        teams = frappe.get_all("LMS Team", filters={"name": ["in", team_names]}, fields=["name", "team_name"])
+    elif "System Manager" in roles or "LMS Admin" in roles:
+        teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
+    else:
+        return []
+
+    # Build quiz_type filter map
+    quiz_type_filter = None
+    if assessment_type == "quiz":
+        quiz_type_filter = "Quiz"
+    elif assessment_type == "qa":
+        quiz_type_filter = "QA Assessment"
+
+    results = []
+    for t in teams:
+        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
+        member_emails = [m.user for m in members]
+
+        if not member_emails:
+            continue
+
+        # Fetch submissions for these users
+        sub_filters = {"user": ["in", member_emails]}
+        submissions = frappe.get_all(
+            "LMS Quiz Submission",
+            filters=sub_filters,
+            fields=["quiz", "passed", "user"],
+            ignore_permissions=True
+        )
+
+        # Filter by quiz_type if needed
+        if quiz_type_filter and submissions:
+            quiz_names = list(set([s.quiz for s in submissions]))
+            quizzes = frappe.get_all(
+                "LMS Quiz",
+                filters={"name": ["in", quiz_names]},
+                fields=["name", "quiz_type"],
+                ignore_permissions=True
+            )
+            valid_quiz_names = set(q.name for q in quizzes if q.quiz_type == quiz_type_filter)
+            submissions = [s for s in submissions if s.quiz in valid_quiz_names]
+
+        total = len(submissions)
+        if total == 0:
+            # Include dept with 0% so it still shows in the bar chart
+            results.append({
+                "name": t.team_name,
+                "completionRate": 0,
+                "avgScore": 0,
+                "overdueLearners": 0,
+                "criticalOverdue": False
+            })
+            continue
+
+        passed = len([s for s in submissions if s.passed])
+        pass_rate = int((passed / total) * 100)
+
+        results.append({
+            "name": t.team_name,
+            "completionRate": pass_rate,   # reuse completionRate field so the component works unchanged
+            "avgScore": 0,
+            "overdueLearners": 0,
+            "criticalOverdue": False
+        })
+
+    return results
+
 
 @frappe.whitelist(allow_guest=True)
 def get_recently_assigned_learning(learning_type="all"):
@@ -914,7 +956,8 @@ def get_assessment_details(submission_id):
         )
         
         if requires_manual:
-            q_max_score = sum(int(opt.score) if opt.score else 5 for opt in q_opts) if q_opts else 5
+            criteria_sum = sum(float(opt.score or 0) for opt in q_opts) if q_opts else 0
+            q_max_score = criteria_sum if criteria_sum > 0 else float(q_info.score or 1)
             q_actual_score = float(r.manual_score or 0)
         else:
             q_max_score = 1
@@ -964,6 +1007,18 @@ def get_assessment_details(submission_id):
 
     taken_on = frappe.utils.formatdate(sub.submitted_on, "MMM dd, yyyy") if sub.submitted_on else ""
 
+    # Fetch attempt history
+    all_submissions = frappe.get_all("LMS Quiz Submission", filters={"user": sub.user, "quiz": sub.quiz}, fields=["name", "creation", "score", "passed"], order_by="creation asc", ignore_permissions=True)
+    history = []
+    for idx, s in enumerate(all_submissions):
+        history.append({
+            "submissionId": s.name,
+            "attemptNumber": idx + 1,
+            "date": frappe.utils.format_datetime(s.creation, "MMM dd, yyyy h:mm a") if s.creation else "",
+            "score": int(s.score or 0),
+            "passed": bool(s.passed)
+        })
+
     return {
         "assessmentTitle": quiz.title if quiz else sub.quiz,
         "moduleName": module_name,
@@ -980,7 +1035,8 @@ def get_assessment_details(submission_id):
         "timeTaken": time_taken_str,
         "overallFeedback": sub.evaluation_feedback or "",
         "summary": f"{correct_count} correct · {incorrect_count} incorrect",
-        "responses": responses_data
+        "responses": responses_data,
+        "history": history
     }
 
 @frappe.whitelist(allow_guest=True)

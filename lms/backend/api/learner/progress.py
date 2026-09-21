@@ -201,6 +201,10 @@ def get_learner_deadlines():
     for t in module_trackers:
         if not t.started_on or t.module in seen_ids:
             continue
+            
+        tracker_doc = frappe.get_doc("LMS Module Tracker", t.name)
+        if hasattr(tracker_doc, "has_pending_evaluations") and tracker_doc.has_pending_evaluations():
+            continue
 
         # Only include published modules
         module_status = frappe.get_value("LMS Module", t.module, "status")

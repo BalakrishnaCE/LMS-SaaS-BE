@@ -77,10 +77,20 @@ def get_manager_metrics():
                 filters=filters,
                 fields=["user", "status", "module", "started_on", "modified", "completed_on"],
             )
+            
+            lp_trackers = frappe.get_all(
+                "LMS Learning Path Tracker",
+                filters=filters,
+                fields=["user", "status"],
+            )
 
-            # Active: at least one tracker with status "In Progress"
+            # Active: at least one tracker (module or learning path) with status "In Progress"
             active_users = set(
                 t.user for t in trackers
+                if t.status == "In Progress"
+            )
+            active_users.update(
+                t.user for t in lp_trackers
                 if t.status == "In Progress"
             )
             active_count = len(active_users)
@@ -105,11 +115,36 @@ def get_manager_metrics():
 
             return active_count, pass_rate, len(at_risk)
 
+        today_dt = getdate(today())
         for dt in intervals:
-            if getdate(dt) > getdate(today()):
-                active_learners_history.append(0)
-                pass_rate_history.append(0)
-                at_risk_history.append(0)
+            dt_date = getdate(dt)
+            if dt_date > today_dt:
+                if dt_date.year == today_dt.year and dt_date.month == today_dt.month:
+                    # We are in the same month, but the interval date (e.g., 21st, 28th) hasn't passed.
+                    # Compute data as of today so the current period doesn't show as 0.
+                    # For month view (weeks), only compute if it's the week we are currently in.
+                    if timeframe == "month":
+                        # If dt is within 7 days of today_dt, it's the current week.
+                        if (dt_date - today_dt).days < 7:
+                            a, p, r = compute_for_date(today_dt)
+                            active_learners_history.append(a)
+                            pass_rate_history.append(p)
+                            at_risk_history.append(r)
+                        else:
+                            active_learners_history.append(0)
+                            pass_rate_history.append(0)
+                            at_risk_history.append(0)
+                    else:
+                        # Year view: evaluate current month as of today
+                        a, p, r = compute_for_date(today_dt)
+                        active_learners_history.append(a)
+                        pass_rate_history.append(p)
+                        at_risk_history.append(r)
+                else:
+                    # Future month
+                    active_learners_history.append(0)
+                    pass_rate_history.append(0)
+                    at_risk_history.append(0)
             else:
                 a, p, r = compute_for_date(dt)
                 active_learners_history.append(a)
@@ -176,12 +211,75 @@ def get_manager_metrics():
 @frappe.whitelist()
 def get_team_performance_overview(timeframe="7days"):
     tl_user = frappe.session.user
-    member_emails = _get_team_member_emails(tl_user)
+
+    # Fetch the teams this TL manages
+    lead_rows = frappe.get_all(
+        "LMS Team Lead",
+        filters={"user": tl_user, "parenttype": "LMS Team"},
+        fields=["parent"],
+    )
+    tl_team_names = list({r.parent for r in lead_rows})
+
+    if not tl_team_names:
+        return {"items": [], "total": 0}
+
+    # Get all members from those teams
+    member_emails = set()
+    for team_name in tl_team_names:
+        members = frappe.get_all(
+            "LMS Team Member",
+            filters={"parent": team_name, "parenttype": "LMS Team"},
+            fields=["user"],
+        )
+        for m in members:
+            member_emails.add(m.user)
 
     if not member_emails:
-        return []
+        return {"items": [], "total": 0}
 
-    from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
+    member_emails = list(member_emails)
+
+    # Build the scoped assignment list per user using the hybrid rule:
+    # 1. Everyone assignments (company-wide) — always included
+    # 2. Manual assignments directly to this learner — always included
+    # 3. Team assignments ONLY for teams managed by this TL — included
+    # 4. Team assignments for other teams — EXCLUDED
+    tl_team_placeholders = ", ".join(["%s"] * len(tl_team_names))
+    member_placeholders = ", ".join(["%s"] * len(member_emails))
+
+    scoped_rows = frappe.db.sql(f"""
+        SELECT au.user, ma.module, ma.duration
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
+        WHERE au.user IN ({member_placeholders})
+        AND ma.assignment_type = 'Manual'
+
+        UNION
+
+        SELECT tm.user, ma.module, ma.duration
+        FROM `tabLMS Module Assignment` ma
+        INNER JOIN `tabLMS Assignment Team` at2 ON at2.parent = ma.name
+        INNER JOIN `tabLMS Team Member` tm ON tm.parent = at2.team
+        WHERE tm.user IN ({member_placeholders})
+        AND ma.assignment_type = 'Team'
+        AND at2.team IN ({tl_team_placeholders})
+
+        UNION
+
+        SELECT u.email, ma.module, ma.duration
+        FROM `tabLMS Module Assignment` ma
+        CROSS JOIN `tabUser` u
+        WHERE ma.assignment_type = 'Everyone'
+        AND u.email IN ({member_placeholders})
+    """, tuple(member_emails) + tuple(member_emails) + tuple(tl_team_names) + tuple(member_emails), as_dict=True)
+
+    # user -> {module -> duration}
+    user_module_map = {}
+    for row in scoped_rows:
+        if row.user not in user_module_map:
+            user_module_map[row.user] = {}
+        if row.module not in user_module_map[row.user]:
+            user_module_map[row.user][row.module] = row.duration
 
     status_counts = {
         "Completed": 0,
@@ -191,30 +289,31 @@ def get_team_performance_overview(timeframe="7days"):
     }
 
     today_dt = getdate(today())
-    
+
     trackers = frappe.get_all(
-        "LMS Module Tracker", 
-        filters={"user": ["in", member_emails]}, 
+        "LMS Module Tracker",
+        filters={"user": ["in", member_emails]},
         fields=["user", "module", "status", "started_on"]
     )
     tracker_map = {(t.user, t.module): t for t in trackers}
 
-    for user in member_emails:
-        assigned_modules = get_all_assigned_modules_for_learner(user)
-        for assignment in assigned_modules:
-            module_name = assignment.get("module")
+    unique_modules = set()
+
+    for user, modules in user_module_map.items():
+        for module_name, duration in modules.items():
+            unique_modules.add(module_name)
             t = tracker_map.get((user, module_name))
-            
+
             if t:
                 if t.status == "Completed":
                     status_counts["Completed"] += 1
                 else:
                     is_overdue = False
-                    if t.started_on and assignment.get("duration"):
-                        due = add_days(getdate(t.started_on), assignment.get("duration"))
+                    if t.started_on and duration:
+                        due = add_days(getdate(t.started_on), duration)
                         if getdate(due) < today_dt:
                             is_overdue = True
-                    
+
                     if is_overdue:
                         status_counts["Overdue"] += 1
                     elif t.status == "In Progress":
@@ -224,12 +323,13 @@ def get_team_performance_overview(timeframe="7days"):
             else:
                 status_counts["Not Started"] += 1
 
-    results = []
-    for k, v in status_counts.items():
-        if v > 0:
-            results.append({
-                "name": k,
-                "value": v
-            })
+    results = [{"name": k, "value": v} for k, v in status_counts.items() if v > 0]
 
-    return results
+    published_modules = 0
+    if unique_modules:
+        published_modules = frappe.db.count(
+            "LMS Module",
+            {"name": ["in", list(unique_modules)], "status": "Published"}
+        )
+
+    return {"items": results, "total": published_modules}

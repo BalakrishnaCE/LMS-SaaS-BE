@@ -29,7 +29,8 @@ def get_qa_submission_details(submission_id):
             requires_manual = True
         elif q_doc.question_type == "Fill in the Blank" and len(q_doc.options) == 0:
             requires_manual = True
-            
+
+        # Skip auto-graded questions — they don't need manager review
         if not requires_manual:
             continue
         

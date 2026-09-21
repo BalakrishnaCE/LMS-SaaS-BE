@@ -13,9 +13,11 @@ class LMSModuleTracker(Document):
 		if not self.module:
 			return
 
-		# Count total items in the module safely
-		total_items = 0
 		module_doc = frappe.get_doc("LMS Module", self.module)
+		passing_score = module_doc.certificate_passing_percentage or 0
+
+		# ── Collect all content items in the module (excluding flashcards) ──────
+		total_items = 0
 		for ml in module_doc.get("lessons", []):
 			if not ml.lesson: continue
 			lesson_doc = frappe.get_doc("LMS Lesson", ml.lesson)
@@ -26,38 +28,58 @@ class LMSModuleTracker(Document):
 					if c.content_type != "LMS Flashcard Content":
 						total_items += 1
 
+		# ── Build a quick lookup of content_progress by reference ────────────────
+		cp_map = {cp.content_reference: cp for cp in self.get("content_progress", [])}
+
+		# ── Count "effectively completed" items ──────────────────────────────────
+		# Non-scored content (video/text/image) → done when status == "Completed"
+		# Scored content (quiz/assessment)      → done only when score >= passing threshold
+		#   (This means a failed quiz stays uncounted, giving correct progress %)
+		SCORED_TYPES = ("LMS Quiz Content", "LMS Assessment Content")
+		completed_items = 0
+		scored_items = 0
+		total_score_sum = 0.0
+
+		for cp in self.get("content_progress", []):
+			if cp.content_type == "LMS Flashcard Content":
+				continue
+			if cp.content_type in SCORED_TYPES:
+				scored_items += 1
+				total_score_sum += float(cp.score or 0)
+				# Counts toward progress only when passing threshold is met
+				if float(cp.score or 0) >= passing_score:
+					completed_items += 1
+			else:
+				if cp.status == "Completed":
+					completed_items += 1
+
 		if total_items == 0:
 			self.progress_percentage = 0
 		else:
-			# Count completed items in the tracker
-			completed_items = sum(1 for cp in self.get("content_progress", []) if cp.status == "Completed" and cp.content_type != "LMS Flashcard Content")
 			self.progress_percentage = round((completed_items / total_items) * 100)
 
-		# Calculate total score from scored items
-		scored_items = 0
-		total_score_sum = 0
-		for cp in self.get("content_progress", []):
-			if cp.content_type in ("LMS Quiz Content", "LMS Assessment Content"):
-				scored_items += 1
-				total_score_sum += float(cp.score or 0)
-		
+		# ── Total score (average of all scored items) ────────────────────────────
 		if scored_items > 0:
 			self.total_score = round(total_score_sum / scored_items, 2)
 		else:
-			self.total_score = 0
+			self.total_score = self.progress_percentage
 
-		# Auto-update tracker status based on progress
-		if self.progress_percentage >= 100:
-			self.progress_percentage = 100
-			
-			is_failed = False
-			if module_doc.is_score_required:
-				passing_score = module_doc.certificate_passing_percentage or 0
-				if self.total_score < passing_score:
-					is_failed = True
-					
-			target_status = "Failed" if is_failed else "Completed"
-			
+		# ── Determine tracker status ─────────────────────────────────────────────
+		all_content_submitted = sum(
+			1 for cp in self.get("content_progress", [])
+			if cp.status == "Completed" and cp.content_type != "LMS Flashcard Content"
+		) >= total_items and total_items > 0
+
+		if all_content_submitted:
+			is_pending_eval = self.has_pending_evaluations()
+
+			if is_pending_eval:
+				target_status = "In Progress"
+			elif module_doc.is_score_required and scored_items > 0:
+				target_status = "Failed" if self.total_score < passing_score else "Completed"
+			else:
+				target_status = "Completed"
+
 			if self.status != target_status:
 				self.status = target_status
 				if target_status == "Completed":
@@ -67,6 +89,15 @@ class LMSModuleTracker(Document):
 
 		if self.status in ["In Progress", "Completed", "Failed"] and not self.started_on:
 			self.started_on = frappe.utils.now_datetime()
+
+	def has_pending_evaluations(self):
+		subs = frappe.get_all("LMS Quiz Submission", filters={"enrollment": self.name}, fields=["name", "quiz", "score"])
+		for sub in subs:
+			if sub.score is None or sub.score == 0.0:
+				eval_method = frappe.db.get_value("LMS Quiz", sub.quiz, "evaluation_method")
+				if eval_method == "Manual review":
+					return True
+		return False
 
 	def on_update(self):
 		self.update_learning_path_trackers()
@@ -87,6 +118,14 @@ class LMSModuleTracker(Document):
 		if exists:
 			return
 			
+		template_name = module.certificate_template or "Classic Template"
+		if not frappe.db.exists("LMS Certificate Template", template_name):
+			available = frappe.get_all("LMS Certificate Template", limit=1)
+			if available:
+				template_name = available[0].name
+			else:
+				return
+			
 		cert = frappe.new_doc("LMS Certificate")
 		
 		ref_no = module.certificate_reference_number or "CERT-.####"
@@ -105,7 +144,7 @@ class LMSModuleTracker(Document):
 		cert.user = self.user
 		cert.module = self.module
 		cert.enrollment = self.name
-		cert.template = module.certificate_template or "Classic Template"
+		cert.template = template_name
 		cert.issued_on = frappe.utils.nowdate()
 		cert.score = self.total_score
 		cert.is_valid = 1
