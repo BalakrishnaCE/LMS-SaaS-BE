@@ -590,7 +590,7 @@ def unassign_learning(user_id, item_id, item_type):
     if item_type == "Learning Path":
         trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": item_id, "user": user_id})
         for t in trackers:
-            frappe.db.delete("LMS Learning Path Tracker", {"name": t.name})
+            frappe.db.set_value("LMS Learning Path Tracker", t.name, "status", "Unassigned")
         
         # Remove from Manual Learning Path Assignments
         assignments = frappe.get_all("LMS Learning Path Assignment", filters={"learning_path": item_id, "assignment_type": "Manual"})
@@ -609,31 +609,28 @@ def unassign_learning(user_id, item_id, item_type):
             """, (item_id, user_id))
             
     else:
-        # 1. Delete any existing Module Tracker for this user+module
-        frappe.db.sql("""
-            DELETE FROM `tabLMS Module Tracker`
-            WHERE user = %s AND module = %s
-        """, (user_id, item_id))
+        # 1. Instead of deleting, mark any existing Module Tracker as Unassigned
+        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id, "module": item_id})
+        if trackers:
+            for t in trackers:
+                frappe.db.set_value("LMS Module Tracker", t.name, "status", "Unassigned")
+        else:
+            # Insert sentinel tracker so the module is hidden even if assigned via Learning Path
+            excl_name = "EXCL-" + hashlib.md5(f"{user_id}:{item_id}".encode()).hexdigest()[:20]
+            now = frappe.utils.now()
+            frappe.db.sql("""
+                INSERT INTO `tabLMS Module Tracker`
+                    (name, user, module, status, progress_percentage, creation, modified, owner, modified_by, docstatus)
+                VALUES (%s, %s, %s, 'Unassigned', 0, %s, %s, %s, %s, 0)
+                ON DUPLICATE KEY UPDATE status = 'Unassigned', modified = %s
+            """, (excl_name, user_id, item_id, now, now, user_id, user_id, now))
 
-        # 2. Remove the user from standalone Manual Module Assignments
         assignments = frappe.get_all("LMS Module Assignment", filters={"module": item_id, "assignment_type": "Manual"})
         for a in assignments:
             frappe.db.sql("""
                 DELETE FROM `tabLMS Assignment User`
                 WHERE parent = %s AND user = %s
             """, (a.name, user_id))
-
-        # 3. Insert an 'Excluded' sentinel tracker directly via SQL so the module
-        #    is hidden even when it comes through a Learning Path assignment.
-        #    We bypass Frappe's select-field validation intentionally here.
-        excl_name = "EXCL-" + hashlib.md5(f"{user_id}:{item_id}".encode()).hexdigest()[:20]
-        now = frappe.utils.now()
-        frappe.db.sql("""
-            INSERT INTO `tabLMS Module Tracker`
-                (name, user, module, status, progress_percentage, creation, modified, owner, modified_by, docstatus)
-            VALUES (%s, %s, %s, 'Excluded', 0, %s, %s, %s, %s, 0)
-            ON DUPLICATE KEY UPDATE status = 'Excluded', modified = %s
-        """, (excl_name, user_id, item_id, now, now, user_id, user_id, now))
 
     frappe.db.commit()
     return {"status": "success"}

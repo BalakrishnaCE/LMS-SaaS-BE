@@ -42,7 +42,7 @@ class LMSLearningPathTracker(Document):
 		for mod in module_names:
 			mt = tracker_map.get(mod)
 			
-			if mt and mt.status == "Excluded":
+			if mt and mt.status == "Unassigned":
 				continue
 				
 			valid_modules_count += 1

@@ -129,10 +129,24 @@ def save_import_assignment(groups_json):
             if existing:
                 doc = frappe.get_doc("LMS Module Assignment", existing)
                 existing_emails = {row.user for row in doc.get("learners", [])}
+                newly_added = []
                 for email in valid_emails:
                     if email not in existing_emails:
                         doc.append("learners", {"user": email})
+                        newly_added.append(email)
                 doc.save(ignore_permissions=True)
+                # Restore any Unassigned tracker for re-added learners
+                for email in newly_added:
+                    tracker = frappe.db.get_value(
+                        "LMS Module Tracker",
+                        {"user": email, "module": module_id},
+                        ["name", "status", "progress_percentage"],
+                        as_dict=True
+                    )
+                    if tracker and tracker.status == "Unassigned":
+                        # Restore to In Progress if they had progress, else Not started
+                        restored = "In Progress" if (tracker.progress_percentage or 0) > 0 else "Not started"
+                        frappe.db.set_value("LMS Module Tracker", tracker.name, "status", restored)
                 created["module_assignments"].append(existing)
             else:
                 doc = frappe.new_doc("LMS Module Assignment")
@@ -141,6 +155,17 @@ def save_import_assignment(groups_json):
                 for email in valid_emails:
                     doc.append("learners", {"user": email})
                 doc.insert(ignore_permissions=True)
+                # Restore any Unassigned trackers for these learners
+                for email in valid_emails:
+                    tracker = frappe.db.get_value(
+                        "LMS Module Tracker",
+                        {"user": email, "module": module_id},
+                        ["name", "status", "progress_percentage"],
+                        as_dict=True
+                    )
+                    if tracker and tracker.status == "Unassigned":
+                        restored = "In Progress" if (tracker.progress_percentage or 0) > 0 else "Not started"
+                        frappe.db.set_value("LMS Module Tracker", tracker.name, "status", restored)
                 created["module_assignments"].append(doc.name)
 
         # Step 3: Create/update LMS Learning Path Assignments

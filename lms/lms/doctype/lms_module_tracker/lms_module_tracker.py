@@ -84,8 +84,21 @@ class LMSModuleTracker(Document):
 				self.status = target_status
 				if target_status == "Completed":
 					self.completed_on = frappe.utils.now_datetime()
-		elif (self.progress_percentage > 0 or len(self.get("content_progress", [])) > 0) and self.status == "Not started":
-			self.status = "In Progress"
+		else:
+			if self.progress_percentage > 0 or len(self.get("content_progress", [])) > 0:
+				if self.status != "In Progress":
+					self.status = "In Progress"
+					
+			# Always revoke certificates if progress is below 100%
+			certs = frappe.get_all("LMS Certificate", filters={"enrollment": self.name, "status": ("in", ["Issued", "Reissued"])})
+			for c in certs:
+				frappe.db.set_value("LMS Certificate", c.name, {
+					"status": "Revoked",
+					"revocation_reason": "Certification requirements changed",
+					"custom_revocation_reason": "Module content was updated. Learner must complete the new requirements to regain certification.",
+					"revoked_by": frappe.session.user,
+					"revoked_on": frappe.utils.now_datetime()
+				})
 
 		if self.status in ["In Progress", "Completed", "Failed"] and not self.started_on:
 			self.started_on = frappe.utils.now_datetime()
@@ -114,8 +127,16 @@ class LMSModuleTracker(Document):
 			return
 			
 		# Check if certificate already exists
-		exists = frappe.db.exists("LMS Certificate", {"user": self.user, "module": self.module})
-		if exists:
+		existing_cert = frappe.db.get_value("LMS Certificate", {"user": self.user, "module": self.module}, "name")
+		if existing_cert:
+			cert = frappe.get_doc("LMS Certificate", existing_cert)
+			if cert.status in ["Issued", "Reissued"]:
+				return
+			
+			cert.status = "Reissued"
+			cert.issued_on = frappe.utils.nowdate()
+			cert.score = self.total_score
+			cert.save(ignore_permissions=True)
 			return
 			
 		template_name = module.certificate_template or "Classic Template"
@@ -147,7 +168,7 @@ class LMSModuleTracker(Document):
 		cert.template = template_name
 		cert.issued_on = frappe.utils.nowdate()
 		cert.score = self.total_score
-		cert.is_valid = 1
+		cert.status = "Issued"
 		cert.insert(ignore_permissions=True)
 
 	def update_learning_path_trackers(self):

@@ -9,14 +9,17 @@ def get_learner_certificates():
     certificates = frappe.get_all(
         "LMS Certificate",
         filters={"user": user},
-        fields=["name", "certificate_id", "module", "issued_on", "is_valid", "certificate_pdf", "score", "template", "is_claimed"],
-        order_by="issued_on desc"
+        fields=["name", "certificate_id", "module", "issued_on", "status", "certificate_pdf", "score", "template", "is_claimed"],
+        order_by="status asc, issued_on desc"
     )
     
     results = []
     processed_modules = []
     
     for cert in certificates:
+        if cert.module in processed_modules:
+            continue
+            
         title = ""
         subtitle = "Official Course Path Certificate"
         validity_days = 0
@@ -33,10 +36,11 @@ def get_learner_certificates():
             processed_modules.append(cert.module)
             
         # Determine Status
-        status = "Issued" if cert.is_valid else "Revoked"
+        status = cert.status
+            
         expiry_date = None
         
-        if status == "Issued":
+        if status in ["Issued", "Reissued"]:
             if not cert.issued_on:
                 status = "Pending"
             else:
@@ -72,11 +76,12 @@ def get_learner_certificates():
             "pdfUrl": cert.name, # Use name as the ID for fetching HTML later
             "score": score,
             "status": status,
-            "earned": status == "Issued",
+            "earned": status in ["Issued", "Reissued"],
             "progress": 100,
             "previewImage": preview_image,
             "isClaimed": bool(cert.is_claimed),
-            "sourceType": "Module"
+            "sourceType": "Module",
+            "moduleId": cert.module
         })
         
     # 2. Trackers without Certificates (Ongoing OR Pending if completed but no certificate doc)

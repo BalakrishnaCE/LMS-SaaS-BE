@@ -17,7 +17,7 @@
   "pdf_file_url",
   "issued_on",
   "certificate_pdf",
-  "is_valid",
+  "status",
   "revocation_reason",
   "custom_revocation_reason",
   "revoked_by",
@@ -99,11 +99,12 @@
    "description": "The generated PDF file of the certificate. Backend generates this using the HTML template and attaches it here automatically."
   },
   {
-   "default": "1",
-   "fieldname": "is_valid",
-   "fieldtype": "Check",
-   "label": "Is Valid",
-   "description": "Admin can uncheck to revoke a certificate."
+   "default": "Issued",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Issued\nRevoked\nReissued",
+   "description": "Current status of the certificate."
   },
   {
    "fieldname": "revocation_reason",
