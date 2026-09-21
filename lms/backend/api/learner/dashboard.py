@@ -342,7 +342,7 @@ def get_continue_learning(item_type="module"):
     
     if item_type in ["module", "both"]:
         queries.append("""
-            SELECT 'Module' as type, t.module as id, t.progress_percentage, t.modified
+            SELECT 'Module' as type, t.module as id, t.name as tracker_name, t.progress_percentage, t.modified
             FROM `tabLMS Module Tracker` t
             INNER JOIN `tabLMS Module` m ON m.name = t.module
             WHERE t.user = %s AND t.status = 'In Progress' AND m.status = 'Published'
@@ -351,7 +351,7 @@ def get_continue_learning(item_type="module"):
         
     if item_type in ["path", "both"]:
         queries.append("""
-            SELECT 'Path' as type, t.learning_path as id, t.progress_percentage, t.modified
+            SELECT 'Path' as type, t.learning_path as id, t.name as tracker_name, t.progress_percentage, t.modified
             FROM `tabLMS Learning Path Tracker` t
             INNER JOIN `tabLMS Learning Path` lp ON lp.name = t.learning_path
             WHERE t.user = %s AND t.status = 'In Progress' AND lp.status = 'Published'
@@ -361,12 +361,19 @@ def get_continue_learning(item_type="module"):
     if not queries:
         return None
         
-    union_query = " UNION ALL ".join(queries) + " ORDER BY modified DESC LIMIT 1"
-    tracker = frappe.db.sql(union_query, tuple(params), as_dict=True)
+    union_query = " UNION ALL ".join(queries) + " ORDER BY modified DESC"
+    trackers = frappe.db.sql(union_query, tuple(params), as_dict=True)
 
-    if tracker:
-        t = tracker[0]
-    else:
+    t = None
+    for cand in trackers:
+        if cand.type == 'Module':
+            tracker_doc = frappe.get_doc("LMS Module Tracker", cand.tracker_name)
+            if hasattr(tracker_doc, "has_pending_evaluations") and tracker_doc.has_pending_evaluations():
+                continue
+        t = cand
+        break
+
+    if not t:
         # Priority 2: first assigned item the user hasn't started at all
         not_started_queries = []
         ns_params = []

@@ -80,12 +80,34 @@ def get_metrics_summary():
             
             return active_learners_val, completion_rate_val, overdue_assignments_val, compliance_completion_val
 
+        today_dt = getdate(now())
         for dt in intervals:
-            if getdate(dt) > getdate(now()):
-                active_learners_history.append(0)
-                completion_rate_history.append(0)
-                overdue_assignments_history.append(0)
-                compliance_completion_history.append(0)
+            dt_date = getdate(dt)
+            if dt_date > today_dt:
+                if dt_date.year == today_dt.year and dt_date.month == today_dt.month:
+                    if timeframe == "month":
+                        if (dt_date - today_dt).days < 7:
+                            a, c, o, cc = compute_metrics_for_date(today_dt)
+                            active_learners_history.append(a)
+                            completion_rate_history.append(c)
+                            overdue_assignments_history.append(o)
+                            compliance_completion_history.append(cc)
+                        else:
+                            active_learners_history.append(0)
+                            completion_rate_history.append(0)
+                            overdue_assignments_history.append(0)
+                            compliance_completion_history.append(0)
+                    else:
+                        a, c, o, cc = compute_metrics_for_date(today_dt)
+                        active_learners_history.append(a)
+                        completion_rate_history.append(c)
+                        overdue_assignments_history.append(o)
+                        compliance_completion_history.append(cc)
+                else:
+                    active_learners_history.append(0)
+                    completion_rate_history.append(0)
+                    overdue_assignments_history.append(0)
+                    compliance_completion_history.append(0)
             else:
                 a, c, o, cc = compute_metrics_for_date(dt)
                 active_learners_history.append(a)

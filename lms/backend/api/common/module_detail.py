@@ -489,6 +489,24 @@ def get_all_assigned_modules_for_learner(user):
             if row.module not in assigned_modules:
                 assigned_modules[row.module] = row
 
+    # 7. Self-Enrolled / Started Modules
+    # If a user has a tracker for a module, it means they started it or were enrolled at some point.
+    # It should be included in their active modules even if the formal assignment record is missing.
+    trackers = frappe.db.sql("""
+        SELECT module, creation
+        FROM `tabLMS Module Tracker`
+        WHERE user = %s AND status != 'Excluded'
+    """, user, as_dict=True)
+    
+    for row in trackers:
+        if row.module not in assigned_modules:
+            assigned_modules[row.module] = frappe._dict({
+                "module": row.module,
+                "duration": 0,
+                "is_mandatory": 0,
+                "creation": row.creation
+            })
+
     published_modules = set([
         m.name for m in frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name"])
     ])
