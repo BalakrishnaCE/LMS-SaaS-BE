@@ -830,7 +830,7 @@ def reissue_certificates(certificate_ids):
         # Update the issue date to today
         cert.issued_on = frappe.utils.nowdate()
         # Ensure the certificate is valid again if it was revoked
-        cert.is_valid = 1
+        cert.status = "Reissued"
         cert.revocation_reason = None
         cert.custom_revocation_reason = None
         cert.revoked_by = None
@@ -961,6 +961,12 @@ def get_module_learners(module_name):
     
     for user, data in users.items():
         tracker = tracker_map.get(user)
+        
+        # Skip learners who have been explicitly unassigned — their data is preserved
+        # but they should not appear in the active learners list
+        if tracker and tracker.status == "Unassigned":
+            continue
+        
         u_info = user_map.get(user)
         department = user_team_map.get(user, "Unknown")
         

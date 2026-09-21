@@ -299,7 +299,7 @@ def get_module_certificates(module_id):
     certs = frappe.get_all(
         "LMS Certificate",
         filters={"module": module_id},
-        fields=["name", "certificate_id", "user", "issued_on", "is_valid", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on", "pdf_status", "pdf_file_url"]
+        fields=["name", "certificate_id", "user", "issued_on", "status", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on", "pdf_status", "pdf_file_url"]
     )
     cert_map = {c.user: c for c in certs}
     
@@ -314,9 +314,9 @@ def get_module_certificates(module_id):
                 expiry_date = frappe.utils.add_days(cert.issued_on, validity_days)
 
             # Determine dynamic status
-            status = "Issued" if cert.is_valid else "Revoked"
+            status = cert.status
             
-            if status == "Issued":
+            if status in ["Issued", "Reissued"]:
                 if not cert.issued_on:
                     status = "Pending"
                 elif expiry_date and frappe.utils.getdate(frappe.utils.nowdate()) > frappe.utils.getdate(expiry_date):
@@ -527,7 +527,7 @@ def revoke_certificates(certificate_ids, reason=None, custom_reason=None):
         
     for cert_id in certificate_ids:
         cert = frappe.get_doc("LMS Certificate", cert_id)
-        cert.is_valid = 0
+        cert.status = "Revoked"
         cert.revocation_reason = reason
         cert.custom_revocation_reason = custom_reason
         cert.revoked_by = frappe.session.user

@@ -108,7 +108,11 @@ class BadgeEvaluator:
             return 0.0, "0%"
         
         avg_score = sum(s[0] for s in scores) / len(scores)
-        progress = min((avg_score / min_score) * 100, 100)
+        score_progress = min((avg_score / min_score) * 100, 100)
+        count_progress = (len(scores) / target_count) * 100
+        
+        # Must meet both criteria: score and module count
+        progress = min(score_progress, count_progress)
         return progress, f"{int(progress)}%"
 
     def eval_knowledge_seeker(self, badge):

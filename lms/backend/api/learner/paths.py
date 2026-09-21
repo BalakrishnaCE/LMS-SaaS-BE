@@ -85,7 +85,7 @@ def get_learner_path_detail(path_id):
             # Identify progress for this module from the tracker map
             mod_prog = module_progress_map.get(mod.name, {})
             
-            if mod_prog.get("status") == "Excluded":
+            if mod_prog.get("status") == "Unassigned":
                 continue
                 
             mod["learner_status"] = mod_prog.get("status", "Not Started")
@@ -202,7 +202,7 @@ def get_learner_paths():
         
         for m in modules:
             mt = module_status_map.get(m.module)
-            if mt and mt.status == "Excluded":
+            if mt and mt.status == "Unassigned":
                 continue
                 
             valid_module_count += 1

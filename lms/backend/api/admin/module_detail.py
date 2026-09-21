@@ -54,20 +54,43 @@ def get_ai_insights(module_id):
 def get_assessment_analytics(module_id):
     import re
     module = frappe.get_doc("LMS Module", module_id)
-    if not module.final_assessments:
-        return {"stats": {"passRate": 0, "averageScore": 0, "learnersRetested": 0, "retestPercentage": 0}, "missedQuestion": None, "analytics": []}
+    quiz_names = []
     
-    quiz_name = module.final_assessments[0].assessment
-    if not quiz_name:
+    # 1. Get quizzes from chapters
+    quizzes = frappe.db.sql("""
+            SELECT cc.content_reference, cc.content_type
+            FROM `tabLMS Chapter Content` cc
+            JOIN `tabLMS Lesson Chapter` lc ON cc.parent = lc.chapter
+            JOIN `tabLMS Module Lesson Child` mlc ON lc.parent = mlc.lesson
+            WHERE mlc.parent = %s AND cc.content_type IN ('LMS Assessment Content', 'LMS Quiz Content')
+        """, (module_id,), as_dict=True)
+        
+    for q in quizzes:
+        if q.content_type == 'LMS Assessment Content':
+            assessment = frappe.get_value("LMS Assessment Content", q.content_reference, "assessment")
+            if assessment:
+                quiz_names.append(assessment)
+        elif q.content_type == 'LMS Quiz Content':
+            quiz = frappe.get_value("LMS Quiz Content", q.content_reference, "quiz")
+            if quiz:
+                quiz_names.append(quiz)
+                
+    # 2. Get final assessments
+    if getattr(module, "final_assessments", None):
+        for fa in module.final_assessments:
+            if fa.assessment:
+                quiz_names.append(fa.assessment)
+                
+    if not quiz_names:
         return {"stats": {"passRate": 0, "averageScore": 0, "learnersRetested": 0, "retestPercentage": 0}, "missedQuestion": None, "analytics": []}
-    
+
     trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_id}, pluck="name")
     if not trackers:
         return {"stats": {"passRate": 0, "averageScore": 0, "learnersRetested": 0, "retestPercentage": 0}, "missedQuestion": None, "analytics": []}
         
     submissions = frappe.get_all("LMS Quiz Submission", 
-        filters={"quiz": quiz_name, "enrollment": ["in", trackers]},
-        fields=["name", "user", "score", "passed"]
+        filters={"quiz": ["in", quiz_names], "enrollment": ["in", trackers]},
+        fields=["name", "user", "score", "passed", "quiz"]
     )
     
     if not submissions:

@@ -187,7 +187,7 @@ def save_qa_evaluation(submission_id, evaluations, overall_feedback=""):
                     
                     # Re-save tracker so update_progress() recalculates total_score
                     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
-                    if tracker_doc.status == "Excluded":
+                    if tracker_doc.status == "Unassigned":
                         tracker_doc.status = "In Progress"
                     tracker_doc.save(ignore_permissions=True)
     except Exception as e:

@@ -44,7 +44,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "In Progress\nCompleted\nFailed\nNot started",
+   "options": "In Progress\nCompleted\nFailed\nNot started\nUnassigned",
    "reqd": 1
   },
   {

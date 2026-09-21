@@ -194,7 +194,7 @@ def get_learner_deadlines():
     # ── Module Trackers ────────────────────────────────────────────────────────
     module_trackers = frappe.get_all(
         "LMS Module Tracker",
-        filters={"user": user, "status": ["!=", "Completed"]},
+        filters={"user": user, "status": ["not in", ["Completed", "Unassigned"]]},
         fields=["name", "module", "status", "started_on", "progress_percentage"]
     )
 
@@ -241,7 +241,7 @@ def get_learner_deadlines():
     try:
         lp_trackers = frappe.get_all(
             "LMS Learning Path Tracker",
-            filters={"user": user, "status": ["!=", "Completed"]},
+            filters={"user": user, "status": ["not in", ["Completed", "Unassigned"]]},
             fields=["name", "learning_path", "status", "started_on"]
         )
 
@@ -330,9 +330,10 @@ def update_content_progress(module, content_reference, content_type=None, status
         if status == "Completed":
             existing_cp.is_completed = 1
             
-    # If the tracker was previously marked "Excluded" (admin unassign sentinel),
+
+    # If the tracker was previously marked "Unassigned" (admin unassign sentinel),
     # reset it so Frappe's Select validation doesn't reject the save.
-    if tracker_doc.status == "Excluded":
+    if tracker_doc.status == "Unassigned":
         tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
@@ -373,6 +374,8 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         limit=1
     )
     
+    content_just_completed = False
+    
     if not cp:
         doc = frappe.get_doc({
             "doctype": "LMS Content Progress",
@@ -389,6 +392,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         })
         if doc.is_completed:
             doc.status = "Completed"
+            content_just_completed = True
         doc.insert(ignore_permissions=True)
     else:
         doc = frappe.get_doc("LMS Content Progress", cp[0].name)
@@ -406,18 +410,29 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
             if highest >= (total_duration * 0.9):
                 doc.is_completed = 1
                 doc.status = "Completed"
+                content_just_completed = True
                 
         doc.save(ignore_permissions=True)
         
 
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
-    # If the tracker was previously marked "Excluded" (admin unassign sentinel),
+    needs_save = False
+
+    # If the tracker was previously marked "Unassigned" (admin unassign sentinel),
     # reset it so Frappe's Select validation doesn't reject the save.
-    if tracker_doc.status == "Excluded":
+    if tracker_doc.status == "Unassigned":
         tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
-    tracker_doc.save(ignore_permissions=True)
+        needs_save = True
+
+    # If the content just completed, it will affect the module progress, so save the tracker
+    if content_just_completed:
+        needs_save = True
+
+    if needs_save:
+        tracker_doc.save(ignore_permissions=True)
+        
     frappe.db.commit()
     
     return {"status": "success", "is_completed": doc.is_completed, "highest_position": doc.highest_position, "last_position": doc.last_position}
@@ -473,9 +488,9 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
     })
 
 
-    # If the tracker was previously marked "Excluded" (admin unassign sentinel),
+    # If the tracker was previously marked "Unassigned" (admin unassign sentinel),
     # reset it so Frappe's Select validation doesn't reject the save.
-    if tracker_doc.status == "Excluded":
+    if tracker_doc.status == "Unassigned":
         tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()

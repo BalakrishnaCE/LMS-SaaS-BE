@@ -37,15 +37,15 @@ def get_learner_summary(timeframe="month"):
         filters={"user": user},
         fields=["module", "status", "progress_percentage", "started_on"]
     )
-    # Exclude sentinel 'Excluded' trackers written by the admin unassign action
-    all_trackers = [t for t in all_trackers if t.status != "Excluded"]
+    # Exclude sentinel 'Unassigned' trackers written by the admin unassign action
+    all_trackers = [t for t in all_trackers if t.status != "Unassigned"]
     tracked_modules = [t.module for t in all_trackers]
     
     assigned_module_names = list(set(explicitly_assigned + tracked_modules))
     # Also exclude modules that have been explicitly unassigned for this user
     excluded_modules = frappe.db.sql("""
         SELECT module FROM `tabLMS Module Tracker`
-        WHERE user = %s AND status = 'Excluded'
+        WHERE user = %s AND status = 'Unassigned'
     """, user, as_list=True)
     excluded_set = {row[0] for row in excluded_modules}
     assigned_module_names = [m for m in assigned_module_names if m not in excluded_set]
@@ -69,11 +69,14 @@ def get_learner_summary(timeframe="month"):
         filters={"user": user},
         fields=["badge", "awarded_on"]
     )
+    unique_badges = {b.badge for b in badges}
+    
     badges_this_month_start = frappe.utils.get_first_day(today())
-    badges_this_month = [b for b in badges if b.awarded_on and getdate(b.awarded_on) >= getdate(badges_this_month_start)]
+    badges_this_month = {b.badge for b in badges if b.awarded_on and getdate(b.awarded_on) >= getdate(badges_this_month_start)}
+
 
     # Certificates
-    certificates_earned = frappe.db.count("LMS Certificate", {"user": user, "is_valid": 1})
+    certificates_earned = frappe.db.count("LMS Certificate", {"user": user, "status": ("in", ["Issued", "Reissued"])})
 
     first_name = frappe.get_value("User", user, "first_name") or "Learner"
 
@@ -182,8 +185,8 @@ def get_learner_summary(timeframe="month"):
         module_title = frappe.get_value("LMS Module", t.module, "module_name")
         score = round(t.total_score) if t.total_score is not None else 100
         # Check if certificate exists
-        cert_name = frappe.db.get_value("LMS Certificate", {"user": user, "module": t.module, "is_valid": 1}, "name")
-        pdf_url = cert_name if cert_name else None
+        cert_name = frappe.db.get_value("LMS Certificate", {"user": user, "module": t.module, "status": ("in", ["Issued", "Reissued"])}, "name")
+        pdf_url = f"/api/method/lms.backend.api.common.certificate.download_certificate_pdf?certificate_name={cert_name}" if cert_name else None
         
         recently_completed.append({
             "id": t.module,
@@ -200,7 +203,7 @@ def get_learner_summary(timeframe="month"):
         "inProgressModules": len(in_progress),
         "inProgressPaths": in_progress_paths,
         "completedModules": len(completed),
-        "badgesEarned": len(badges),
+        "badgesEarned": len(unique_badges),
         "badgesThisMonth": len(badges_this_month),
         "certificatesEarned": certificates_earned,
         "firstName": first_name,
