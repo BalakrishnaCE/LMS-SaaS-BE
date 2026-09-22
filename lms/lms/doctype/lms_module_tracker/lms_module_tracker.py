@@ -106,7 +106,7 @@ class LMSModuleTracker(Document):
 	def has_pending_evaluations(self):
 		subs = frappe.get_all("LMS Quiz Submission", filters={"enrollment": self.name}, fields=["name", "quiz", "score"])
 		for sub in subs:
-			if sub.score is None or sub.score == 0.0:
+			if sub.score is None:
 				eval_method = frappe.db.get_value("LMS Quiz", sub.quiz, "evaluation_method")
 				if eval_method == "Manual review":
 					return True

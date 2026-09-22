@@ -572,36 +572,39 @@ def get_recently_assigned_learning(learning_type="all"):
                     break
                     
         if recent_modules:
-            modules = frappe.get_all("LMS Module", filters={"name": ["in", recent_modules]}, fields=["name", "module_name"])
-            module_map = {m.name: m.module_name for m in modules}
-            
-            all_module_categories = frappe.get_all("LMS Module Category", fields=["parent", "category"])
-            module_categories_map = {}
-            for mc in all_module_categories:
-                if mc.parent not in module_categories_map:
-                    module_categories_map[mc.parent] = set()
-                module_categories_map[mc.parent].add(mc.category)
+            modules = frappe.get_all("LMS Module", filters={"name": ["in", recent_modules], "status": "Published"}, fields=["name", "module_name"])
+            if not modules:
+                recent_modules = []
+            else:
+                module_map = {m.name: m.module_name for m in modules}
                 
-            trackers = frappe.get_all(
-                "LMS Module Tracker",
-                filters={"module": ["in", recent_modules], "user": ["in", eligible_learners]},
-                fields=["module", "status", "user"]
-            )
-            
-            for mod in recent_modules:
-                mod_trackers = [t for t in trackers if t.module == mod]
-                assigned = len(mod_trackers)
-                if assigned == 0: continue
-                in_progress = len([t for t in mod_trackers if t.status == "In Progress"])
-                completed = len([t for t in mod_trackers if t.status == "Completed"])
-                c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
-                cats = list(module_categories_map.get(mod, []))
-                cat_str = cats[0] if cats else "General"
-                results.append({
-                    "id": mod, "name": module_map.get(mod, mod), "type": "Module",
-                    "category": cat_str, "assignedLearners": assigned, "inProgress": in_progress,
-                    "completed": completed, "completionRate": c_rate
-                })
+                all_module_categories = frappe.get_all("LMS Module Category", fields=["parent", "category"])
+                module_categories_map = {}
+                for mc in all_module_categories:
+                    if mc.parent not in module_categories_map:
+                        module_categories_map[mc.parent] = set()
+                    module_categories_map[mc.parent].add(mc.category)
+                    
+                trackers = frappe.get_all(
+                    "LMS Module Tracker",
+                    filters={"module": ["in", list(module_map.keys())], "user": ["in", eligible_learners]},
+                    fields=["module", "status", "user"]
+                )
+                
+                for mod in list(module_map.keys()):
+                    mod_trackers = [t for t in trackers if t.module == mod]
+                    assigned = len(mod_trackers)
+                    if assigned == 0: continue
+                    in_progress = len([t for t in mod_trackers if t.status == "In Progress"])
+                    completed = len([t for t in mod_trackers if t.status == "Completed"])
+                    c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
+                    cats = list(module_categories_map.get(mod, []))
+                    cat_str = cats[0] if cats else "General"
+                    results.append({
+                        "id": mod, "name": module_map.get(mod, mod), "type": "Module",
+                        "category": cat_str, "assignedLearners": assigned, "inProgress": in_progress,
+                        "completed": completed, "completionRate": c_rate
+                    })
 
     if learning_type in ["all", "paths"]:
         recent_trackers = frappe.get_all(
@@ -621,22 +624,25 @@ def get_recently_assigned_learning(learning_type="all"):
                     break
                     
         if recent_paths:
-            paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", recent_paths]}, fields=["name", "path_name as module_name"])
-            path_map = {p.name: p.module_name for p in paths}
-            
-            trackers = frappe.get_all(
-                "LMS Learning Path Tracker",
-                filters={"learning_path": ["in", recent_paths], "user": ["in", eligible_learners]},
-                fields=["learning_path", "status", "user"]
-            )
-            
-            for p in recent_paths:
-                p_trackers = [t for t in trackers if t.learning_path == p]
-                assigned = len(p_trackers)
-                if assigned == 0: continue
-                in_progress = len([t for t in p_trackers if t.status == "In Progress"])
-                completed = len([t for t in p_trackers if t.status == "Completed"])
-                c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
+            paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", recent_paths], "status": "Published"}, fields=["name", "path_name as module_name"])
+            if not paths:
+                recent_paths = []
+            else:
+                path_map = {p.name: p.module_name for p in paths}
+                
+                trackers = frappe.get_all(
+                    "LMS Learning Path Tracker",
+                    filters={"learning_path": ["in", list(path_map.keys())], "user": ["in", eligible_learners]},
+                    fields=["learning_path", "status", "user"]
+                )
+                
+                for p in list(path_map.keys()):
+                    p_trackers = [t for t in trackers if t.learning_path == p]
+                    assigned = len(p_trackers)
+                    if assigned == 0: continue
+                    in_progress = len([t for t in p_trackers if t.status == "In Progress"])
+                    completed = len([t for t in p_trackers if t.status == "Completed"])
+                    c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
                 results.append({
                     "id": p, "name": path_map.get(p, p), "type": "Learning Path",
                     "category": "Path", "assignedLearners": assigned, "inProgress": in_progress,
@@ -1115,7 +1121,11 @@ def get_learning_performance_list():
     assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
     assignment_map = {a.module: a for a in assignments}
     
-    trackers = frappe.get_all("LMS Module Tracker", filters={"user": ["in", user_emails]}, fields=["user", "status", "progress_percentage", "module", "started_on"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"user": ["in", user_emails], "module": ["in", published_modules]}, fields=["user", "status", "progress_percentage", "module", "started_on"])
     try:
         employees = frappe.get_all("Employee", filters={"user_id": ["in", user_emails]}, fields=["user_id", "designation"])
         emp_map = {e.user_id: e.designation for e in employees}
@@ -1222,21 +1232,23 @@ def get_learner_details(learner_email):
     mod_assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
     mod_assign_map = {a.module: a for a in mod_assignments}
     
-    mod_trackers = frappe.get_all("LMS Module Tracker", filters={"user": learner_email}, fields=["module", "status", "progress_percentage", "started_on"])
+    published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    mod_trackers = frappe.get_all("LMS Module Tracker", filters={"user": learner_email, "module": ["in", published_module_ids] if published_module_ids else ["in", [""]]}, fields=["module", "status", "progress_percentage", "started_on"])
     mod_names = [t.module for t in mod_trackers]
     mod_titles = {}
     if mod_names:
-        modules = frappe.get_all("LMS Module", filters={"name": ["in", mod_names]}, fields=["name", "module_name"])
+        modules = frappe.get_all("LMS Module", filters={"name": ["in", mod_names], "status": "Published"}, fields=["name", "module_name"])
         mod_titles = {m.name: m.module_name for m in modules}
     
     path_assignments = frappe.get_all("LMS Learning Path Assignment", fields=["learning_path", "duration"]) if frappe.db.exists("DocType", "LMS Learning Path Assignment") else []
     path_assign_map = {a.learning_path: a for a in path_assignments}
     
-    path_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": learner_email}, fields=["learning_path", "status", "progress_percentage", "started_on"]) if frappe.db.exists("DocType", "LMS Learning Path Tracker") else []
+    published_lp_ids = frappe.get_all("LMS Learning Path", filters={"status": "Published"}, pluck="name") if frappe.db.exists("DocType", "LMS Learning Path Tracker") else []
+    path_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": learner_email, "learning_path": ["in", published_lp_ids] if published_lp_ids else ["in", [""]]}, fields=["learning_path", "status", "progress_percentage", "started_on"]) if frappe.db.exists("DocType", "LMS Learning Path Tracker") else []
     path_names = [t.learning_path for t in path_trackers]
     path_titles = {}
     if path_names:
-        paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", path_names]}, fields=["name", "path_name"])
+        paths = frappe.get_all("LMS Learning Path", filters={"name": ["in", path_names], "status": "Published"}, fields=["name", "path_name"])
         path_titles = {p.name: p.path_name for p in paths}
         
     learnings = []

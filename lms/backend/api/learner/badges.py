@@ -85,7 +85,7 @@ class BadgeEvaluator:
         query = """
             SELECT COUNT(DISTINCT DATE(modified))
             FROM `tabLMS Module Tracker`
-            WHERE user = %s AND modified >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            WHERE user = %s AND status NOT IN ('Unassigned', 'Not started') AND modified >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
         """
         count = frappe.db.sql(query, (self.user, target))[0][0] or 0
         progress = min((count / target) * 100, 100)
@@ -161,7 +161,7 @@ class BadgeEvaluator:
         avg_score = frappe.db.sql(query_score, self.user)[0][0] or 0
         
         # 3. 3 months consistency (e.g. 90 days of activity)
-        query_days = "SELECT COUNT(DISTINCT DATE(modified)) FROM `tabLMS Module Tracker` WHERE user = %s AND modified >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"
+        query_days = "SELECT COUNT(DISTINCT DATE(modified)) FROM `tabLMS Module Tracker` WHERE user = %s AND status NOT IN ('Unassigned', 'Not started') AND modified >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"
         active_days = frappe.db.sql(query_days, self.user)[0][0] or 0
         
         # Evaluate Progress Multipliers

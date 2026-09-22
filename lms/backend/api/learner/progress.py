@@ -5,6 +5,15 @@ from frappe.utils import today, add_days, getdate, date_diff, now_datetime
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _is_admin_user(user):
+    """Return True if the user has an LMS admin role (System Manager or LMS-Admin).
+    Such users browsing content from the admin panel should NOT have their
+    activity counted as learner progress.
+    """
+    admin_roles = {"System Manager", "LMS-Admin"}
+    user_roles = set(frappe.get_roles(user))
+    return bool(user_roles & admin_roles)
+
 def _timeframe_start(filter_mode):
     """Return the start date for the selected filter window."""
     from frappe.utils import getdate, now_datetime, add_days, add_months
@@ -289,7 +298,7 @@ def get_learner_deadlines():
 @frappe.whitelist()
 def update_content_progress(module, content_reference, content_type=None, status="Completed", score=None):
     user = frappe.session.user
-    
+
     tracker = frappe.get_all(
         "LMS Module Tracker", 
         filters={"user": user, "module": module}, 
@@ -345,7 +354,7 @@ def update_content_progress(module, content_reference, content_type=None, status
 @frappe.whitelist()
 def heartbeat(module, content_reference, content_type, current_position=0, total_duration=0, time_spent_increment=10):
     user = frappe.session.user
-    
+
     current_position = float(current_position)
     total_duration = float(total_duration)
     time_spent_increment = int(time_spent_increment)

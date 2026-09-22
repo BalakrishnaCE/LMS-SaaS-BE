@@ -43,13 +43,15 @@ def get_metrics_summary():
         def compute_metrics_for_date(dt):
             learners_by_dt = set([r.parent for r in all_learner_roles if getdate(r.creation) <= getdate(dt)])
             thirty_days_before_dt = add_days(dt, -30)
-            trackers_dt = frappe.get_all("LMS Module Tracker", filters={"creation": ["<=", dt]}, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
+            next_day = add_days(dt, 1)
+            trackers_dt = frappe.get_all("LMS Module Tracker", filters={"creation": ["<", next_day]}, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
             
             active_users_at_dt = set()
             for t in trackers_dt:
-                if t.modified and getdate(thirty_days_before_dt) <= getdate(t.modified) <= getdate(dt):
-                    if t.user in learners_by_dt:
-                        active_users_at_dt.add(t.user)
+                if t.status and t.status in ("In Progress", "Completed", "Failed"):
+                    if t.modified and getdate(thirty_days_before_dt) <= getdate(t.modified) <= getdate(dt):
+                        if t.user in learners_by_dt:
+                            active_users_at_dt.add(t.user)
             active_learners_val = len(active_users_at_dt)
             
             total_dt = len(trackers_dt)
@@ -166,7 +168,11 @@ def get_metrics_summary():
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_content_summary():
-    trackers = frappe.get_all("LMS Module Tracker", fields=["name", "status", "module", "started_on", "creation", "user"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"module": ["in", published_modules]}, fields=["name", "status", "module", "started_on", "creation", "user"])
     
     assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
     assignment_map = {a.module: a for a in assignments}
@@ -228,7 +234,11 @@ def get_learning_content_summary():
 
 @frappe.whitelist(allow_guest=True)
 def get_learning_content_by_completion():
-    trackers = frappe.get_all("LMS Module Tracker", fields=["status", "module", "user"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"module": ["in", published_modules]}, fields=["status", "module", "user"])
 
     counts = {
         "Highest Completion": 0,
@@ -282,7 +292,11 @@ def get_learning_content_by_completion():
 
 @frappe.whitelist(allow_guest=True)
 def get_needs_attention_metrics():
-    trackers = frappe.get_all("LMS Module Tracker", fields=["status", "total_score", "module", "started_on", "creation"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"module": ["in", published_modules]}, fields=["status", "total_score", "module", "started_on", "creation"])
     
     assignments = frappe.get_all("LMS Module Assignment", fields=["module", "duration"])
     assignment_map = {a.module: a for a in assignments}
@@ -302,10 +316,31 @@ def get_needs_attention_metrics():
                     overdue_learning += 1
                 
     thirty_days_ago = add_days(today(), -30)
-    current_learners = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, pluck="parent")
-    total_learners = len(current_learners)
-    active_users = len(set([t.user for t in frappe.get_all("LMS Module Tracker", fields=["user"], filters={"modified": [">=", thirty_days_ago]})]))
-    inactive_learners = max(0, total_learners - active_users)
+    
+    # Get all users with LMS-Learner role, excluding system accounts
+    current_learners = frappe.get_all("Has Role", filters={
+        "role": "LMS-Learner",
+        "parent": ["not in", ["Administrator", "Guest"]]
+    }, pluck="parent")
+    total_learners = len(set(current_learners))
+    
+    all_trackers = frappe.get_all("LMS Module Tracker", fields=["user", "status", "modified"])
+    
+    # Build a set of valid learner emails (same base as total_learners)
+    learner_set = set(current_learners)
+    
+    # 1. Active learners are those who have made some progress in the last 30 days
+    #    AND are in the learner base (have LMS-Learner role)
+    active_learners = set()
+    for t in all_trackers:
+        if t.user not in learner_set:
+            continue
+        if t.status and t.status in ("In Progress", "Completed", "Failed"):
+            if t.modified and getdate(t.modified) >= getdate(thirty_days_ago):
+                active_learners.add(t.user)
+                
+    # 2. Inactive learners = Total learners - Active learners
+    inactive_learners = max(0, total_learners - len(active_learners))
 
     return {
         "overdueLearning": overdue_learning,
@@ -315,7 +350,11 @@ def get_needs_attention_metrics():
 
 @frappe.whitelist(allow_guest=True)
 def get_assessment_performance():
-    trackers = frappe.get_all("LMS Module Tracker", fields=["status", "total_score", "creation", "user", "module"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"module": ["in", published_modules]}, fields=["status", "total_score", "creation", "user", "module"])
     
     completed_trackers = [t for t in trackers if t.status == "Completed"]
     failed_trackers = [t for t in trackers if t.status == "Failed"]
@@ -399,7 +438,11 @@ def get_onboarding_status():
 @frappe.whitelist(allow_guest=True)
 def get_learning_insights():
     insights = []
-    trackers = frappe.get_all("LMS Module Tracker", fields=["name", "status", "user", "module", "creation", "started_on"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"module": ["in", published_modules]}, fields=["name", "status", "user", "module", "creation", "started_on"])
     if not trackers:
         return []
         

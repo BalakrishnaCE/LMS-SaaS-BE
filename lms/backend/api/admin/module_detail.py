@@ -10,7 +10,12 @@ def get_ai_insights(module_id):
         fields=["status", "user", "total_score", "started_on", "completed_on"]
     )
 
-    total = len(trackers)
+    from lms.backend.api.admin.module_management import get_module_learners
+    
+    assigned_data = get_module_learners(module_id)
+    assigned_learners = assigned_data.get("learners", []) if assigned_data else []
+    total = len(assigned_learners)
+    
     if total == 0:
         return {"insights": [
             "No learner data yet. Assign this module to learners to see insights."

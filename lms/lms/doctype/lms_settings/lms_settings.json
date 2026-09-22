@@ -7,9 +7,17 @@
  "engine": "InnoDB",
  "field_order": [
   "brand_name",
+  "brand_tagline",
   "brand_logo",
   "primary_color",
   "enable_discussions",
+  "support_email",
+  "login_page_section",
+  "login_label",
+  "login_title",
+  "login_subtitle",
+  "login_tagline",
+  "login_background_image",
   "feature_toggles"
  ],
  "fields": [
@@ -18,6 +26,12 @@
    "fieldname": "brand_name",
    "fieldtype": "Data",
    "label": "Brand Name"
+  },
+  {
+   "fieldname": "brand_tagline",
+   "fieldtype": "Data",
+   "label": "Brand Tagline",
+   "description": "Short tagline shown under the brand name (e.g. LEARNING FOR EVERYONE)"
   },
   {
    "description": "Upload the brand logo file.",
@@ -37,6 +51,42 @@
    "fieldname": "enable_discussions",
    "fieldtype": "Check",
    "label": "Enable Discussions"
+  },
+  {
+   "fieldname": "support_email",
+   "fieldtype": "Data",
+   "label": "Support Email",
+   "description": "Email address for users facing login issues"
+  },
+  {
+   "fieldname": "login_page_section",
+   "fieldtype": "Section Break",
+   "label": "Login Page Background"
+  },
+  {
+   "fieldname": "login_label",
+   "fieldtype": "Data",
+   "label": "Login Label"
+  },
+  {
+   "fieldname": "login_title",
+   "fieldtype": "Data",
+   "label": "Login Title"
+  },
+  {
+   "fieldname": "login_subtitle",
+   "fieldtype": "Text",
+   "label": "Login Subtitle"
+  },
+  {
+   "fieldname": "login_tagline",
+   "fieldtype": "Data",
+   "label": "Login Tagline"
+  },
+  {
+   "fieldname": "login_background_image",
+   "fieldtype": "Attach Image",
+   "label": "Login Background Image"
   },
   {
    "description": "Allows new features to be toggled without schema changes",

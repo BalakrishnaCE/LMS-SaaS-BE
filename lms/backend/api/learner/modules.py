@@ -365,6 +365,7 @@ def get_learner_module_viewer_data(module_id):
         "duration": duration_str,
         "dueDate": None,
         "isSaved": False,
+        "isSequential": bool(module.get("is_sequential", 0)),
     }
 
     # Compute due_date from assignment if available

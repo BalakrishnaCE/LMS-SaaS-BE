@@ -100,6 +100,8 @@ def get_learner_certificates():
         mod_template = None
         try:
             mod = frappe.get_doc("LMS Module", tracker.module)
+            if mod.status != "Published":
+                continue
             enable_cert = mod.enable_certificate
             module_name = mod.module_name
             mod_template = mod.certificate_template
