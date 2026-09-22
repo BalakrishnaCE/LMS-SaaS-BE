@@ -42,20 +42,27 @@ class LMSModuleAssignment(Document):
                 users.add(u.name)
                 
         # Find existing trackers
-        existing_trackers = frappe.get_all("LMS Module Tracker", filters={"module": self.module}, fields=["name", "user"])
-        existing_users = set(t.user for t in existing_trackers)
+        existing_trackers = frappe.get_all("LMS Module Tracker", filters={"module": self.module}, fields=["name", "user", "status", "progress_percentage"])
+        existing_map = {t.user: t for t in existing_trackers}
         
-        # Delete trackers for users no longer assigned
+        # Mark trackers as Unassigned for users no longer assigned
         for t in existing_trackers:
-            if t.user not in users:
-                frappe.db.delete("LMS Module Tracker", {"name": t.name})
+            if t.user not in users and t.status != "Unassigned":
+                frappe.db.set_value("LMS Module Tracker", t.name, "status", "Unassigned")
                 
-        # Create trackers for new users
+        # Create trackers for new users or restore Unassigned ones
         for user in users:
-            if user not in existing_users:
+            if user not in existing_map:
                 tracker = frappe.new_doc("LMS Module Tracker")
                 tracker.user = user
                 tracker.module = self.module
                 tracker.status = "Not started"
                 tracker.progress_percentage = 0
                 tracker.insert(ignore_permissions=True)
+            else:
+                # Restore if it was Unassigned
+                tracker = existing_map[user]
+                if tracker.status == "Unassigned":
+                    prog = tracker.progress_percentage or 0
+                    restored = "Completed" if prog >= 100 else ("In Progress" if prog > 0 else "Not started")
+                    frappe.db.set_value("LMS Module Tracker", tracker.name, "status", restored)

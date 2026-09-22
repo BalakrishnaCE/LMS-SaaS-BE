@@ -987,8 +987,8 @@ def get_module_learners(module_name):
             "trackerName": tracker.name if tracker else None
         }
         
-        start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else getdate(data["creation"])
-        if data["duration"]:
+        start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else None
+        if data.get("duration") and start_dt:
             due = add_days(start_dt, data["duration"])
             learner_info["dueDate"] = str(due)
             if getdate(due) < getdate(today()) and (not tracker or tracker.status != "Completed"):
@@ -996,6 +996,8 @@ def get_module_learners(module_name):
                 stats["overdue"] += 1
                 needs_attention["overdueLearning"] += 1
                 learner_info["needsAttention"] = True
+        else:
+            learner_info["dueDate"] = None
 
         if tracker:
             learner_info["status"] = tracker.status
@@ -1045,6 +1047,12 @@ def get_module_learners(module_name):
                 learner_info["needsAttention"] = True
             
         results.append(learner_info)
+        
+    # Sort results by recent activity (lastActivity or assignedDate)
+    results.sort(
+        key=lambda x: str(x.get("lastActivity") or x.get("assignedDate") or ""), 
+        reverse=True
+    )
         
     return {
         "stats": stats,

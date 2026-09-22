@@ -12,7 +12,12 @@ def get_upcoming_deadlines():
     approaching = {}
     today_dt = getdate(today())
     
-    trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["!=", "Completed"]}, fields=["module", "started_on"])
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    trackers = []
+    if published_modules:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"status": ["!=", "Completed"], "module": ["in", published_modules]}, fields=["module", "started_on"])
+        
     for t in trackers:
         if not t.started_on:
             continue
@@ -61,7 +66,13 @@ def get_upcoming_deadlines():
 
 @frappe.whitelist(allow_guest=True)
 def get_recently_assigned():
+    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    
+    if not published_modules:
+        return []
+
     assignments = frappe.get_all("LMS Module Assignment", 
+        filters={"module": ["in", published_modules]},
         fields=["name", "module", "creation", "duration"],
         limit=20,
         order_by="creation desc"

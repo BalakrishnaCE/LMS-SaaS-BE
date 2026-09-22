@@ -49,6 +49,12 @@ def get_learner_summary(timeframe="month"):
     """, user, as_list=True)
     excluded_set = {row[0] for row in excluded_modules}
     assigned_module_names = [m for m in assigned_module_names if m not in excluded_set]
+
+    # Filter out unpublished modules
+    if assigned_module_names:
+        published_modules = frappe.get_all("LMS Module", filters={"name": ("in", assigned_module_names), "status": "Published"}, pluck="name")
+        assigned_module_names = [m for m in assigned_module_names if m in published_modules]
+
     total_assigned = len(assigned_module_names)
 
 
@@ -92,6 +98,13 @@ def get_learner_summary(timeframe="month"):
     except Exception:
         pass
         
+    # Filter out unpublished learning paths
+    if lp_trackers:
+        lp_names = list(set([lp.learning_path for lp in lp_trackers]))
+        if lp_names:
+            published_lps = frappe.get_all("LMS Learning Path", filters={"name": ("in", lp_names), "status": "Published"}, pluck="name")
+            lp_trackers = [lp for lp in lp_trackers if lp.learning_path in published_lps]
+            
     total_learning_paths = len(list(set([lp.learning_path for lp in lp_trackers])))
     in_progress_paths = len([lp for lp in lp_trackers if lp.status == "In Progress"])
     total_assigned = len(assigned_module_names) + total_learning_paths

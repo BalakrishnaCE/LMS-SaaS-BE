@@ -13,16 +13,30 @@ def get_tenant_settings():
         # Merge the distinct discussion toggle into features for unified frontend access
         features["Discussions"] = bool(settings.enable_discussions)
         return {
-            "color": settings.primary_color or "#2563eb",
-            "logo": settings.brand_logo or None,
-            "brand_name": settings.brand_name or "LMS Portal",
+            "color": settings.primary_color,
+            "logo": settings.brand_logo,
+            "brand_name": settings.brand_name,
+            "brand_tagline": settings.brand_tagline,
+            "support_email": settings.support_email,
+            "login_label": settings.login_label,
+            "login_title": settings.login_title,
+            "login_subtitle": settings.login_subtitle,
+            "login_tagline": settings.login_tagline,
+            "login_background_image": settings.login_background_image,
             "features": features
         }
     except Exception:
         return {
-            "color": "#2563eb",
+            "color": None,
             "logo": None,
-            "brand_name": "LMS Portal",
+            "brand_name": None,
+            "brand_tagline": None,
+            "support_email": None,
+            "login_label": None,
+            "login_title": None,
+            "login_subtitle": None,
+            "login_tagline": None,
+            "login_background_image": None,
             "features": {}
         }
 
@@ -44,6 +58,10 @@ def save_tenant_settings(color=None, logo=None):
 @frappe.whitelist(allow_guest=True)
 def get_csrf_token():
     return frappe.sessions.get_csrf_token()
+
+@frappe.whitelist(allow_guest=True)
+def get_logged_user():
+    return frappe.session.user
 
 @frappe.whitelist()
 def delete_file(file_url):

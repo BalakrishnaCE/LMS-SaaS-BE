@@ -11,15 +11,17 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
         limit = 10
         offset = 0
         
+    published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name", ignore_permissions=True)
+
     trackers = frappe.get_all(
         "LMS Module Tracker", 
-        filters={"user": user_id}, 
+        filters={"user": user_id, "module": ["in", published_module_ids] if published_module_ids else ["in", [""]]}, 
         fields=["name", "module", "status", "progress_percentage", "started_on", "creation"],
         order_by="creation desc",
         ignore_permissions=True
     )
     
-    modules = frappe.get_all("LMS Module", fields=["name", "module_name", "duration", "is_mandatory", "image"], ignore_permissions=True)
+    modules = frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name", "module_name", "duration", "is_mandatory", "image"], ignore_permissions=True)
     mod_dict = {m.name: m for m in modules}
     
     module_names = [m.name for m in modules]
@@ -103,7 +105,10 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
     )
     
     if lp_trackers:
+        published_lp_ids = frappe.get_all("LMS Learning Path", filters={"status": "Published"}, pluck="name", ignore_permissions=True)
         for t in lp_trackers:
+            if t.learning_path not in published_lp_ids:
+                continue
             try:
                 lp_doc = frappe.get_doc("LMS Learning Path", t.learning_path)
             except:
@@ -159,7 +164,8 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
 
 def get_learner_assessments(user_id, categories=None, statuses=None, types=None, priorities=None):
     try:
-        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id}, fields=["name", "module", "status"])
+        published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id, "module": ["in", published_module_ids] if published_module_ids else ["in", [""]]}, fields=["name", "module", "status"])
         
         import json
         if categories and isinstance(categories, str): categories = json.loads(categories)
@@ -200,12 +206,16 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                 if fa_row.assessment:
                     final_quiz_names.append(fa_row.assessment)
 
-            # Fetch all submissions for this tracker enrollment
-            submissions = frappe.get_all(
-                "LMS Quiz Submission",
-                filters={"enrollment": tracker_name},
-                fields=["quiz", "score", "passed", "extra_attempts_granted"]
-            )
+            # Fetch all submissions for these quizzes by this user
+            all_quizzes = list(lesson_quiz_map.keys()) + final_quiz_names
+            if all_quizzes:
+                submissions = frappe.get_all(
+                    "LMS Quiz Submission",
+                    filters={"user": user_id, "quiz": ["in", all_quizzes]},
+                    fields=["quiz", "score", "passed", "extra_attempts_granted"]
+                )
+            else:
+                submissions = []
 
             # Aggregate submissions per quiz
             ass_dict = {}

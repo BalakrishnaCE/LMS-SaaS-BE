@@ -22,11 +22,14 @@ def _evaluate_user_risks(users):
     for tm in team_members:
         user_teams[tm.user].append(tm.parent)
 
-    modules = frappe.get_all("LMS Module", fields=["name", "duration", "is_mandatory"])
+    modules = frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name", "duration", "is_mandatory"])
     modules_dict = {m.name: m for m in modules}
+    published_module_ids = list(modules_dict.keys())
 
-    trackers = frappe.get_all("LMS Module Tracker", filters={"user": ("in", user_names)}, fields=["name", "user", "module", "status", "progress_percentage", "started_on", "creation", "modified"])
-    lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": ("in", user_names)}, fields=["name", "user", "learning_path", "status", "progress_percentage", "started_on", "creation", "modified"])
+    published_lp_ids = frappe.get_all("LMS Learning Path", filters={"status": "Published"}, pluck="name")
+
+    trackers = frappe.get_all("LMS Module Tracker", filters={"user": ("in", user_names), "module": ("in", published_module_ids) if published_module_ids else ("in", [""])}, fields=["name", "user", "module", "status", "progress_percentage", "started_on", "creation", "modified"])
+    lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": ("in", user_names), "learning_path": ("in", published_lp_ids) if published_lp_ids else ("in", [""])}, fields=["name", "user", "learning_path", "status", "progress_percentage", "started_on", "creation", "modified"])
     submissions = frappe.get_all("LMS Quiz Submission", filters={"user": ("in", user_names)}, fields=["name", "user", "quiz", "passed", "creation"], order_by="creation desc")
     
     user_trackers = {u: [] for u in user_names}
@@ -342,8 +345,9 @@ def get_learner_details(user_id):
     elif avatar.startswith("/"):
         avatar = get_url(avatar)
 
-    trackers = frappe.get_all("LMS Module Tracker", filters={"user": user.name}, fields=["name", "module", "status", "creation"], order_by="creation asc")
-    modules = frappe.get_all("LMS Module", fields=["name", "is_mandatory"])
+    published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
+    trackers = frappe.get_all("LMS Module Tracker", filters={"user": user.name, "module": ("in", published_module_ids) if published_module_ids else ("in", [""])}, fields=["name", "module", "status", "creation"], order_by="creation asc")
+    modules = frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name", "is_mandatory"])
     mod_dict = {m.name: m.is_mandatory for m in modules}
 
     # Get earliest tracker activity as "joined date"
@@ -403,7 +407,8 @@ def get_learner_details(user_id):
             if t.status == "Completed":
                 optional_completed += 1
                 
-    lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": user.name}, fields=["name", "learning_path", "status"])
+    published_lp_ids = frappe.get_all("LMS Learning Path", filters={"status": "Published"}, pluck="name")
+    lp_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"user": user.name, "learning_path": ("in", published_lp_ids) if published_lp_ids else ("in", [""])}, fields=["name", "learning_path", "status"])
 
     lp_mandatory_assigned = 0
     lp_mandatory_completed = 0
