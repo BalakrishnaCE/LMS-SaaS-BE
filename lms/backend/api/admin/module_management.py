@@ -835,8 +835,18 @@ def reissue_certificates(certificate_ids):
         cert.custom_revocation_reason = None
         cert.revoked_by = None
         cert.revoked_on = None
+        # Delete old generated PDF files from Frappe to save disk space
+        old_files = frappe.get_all("File", filters={
+            "attached_to_doctype": "LMS Certificate",
+            "attached_to_name": cert.name
+        })
+        for f in old_files:
+            frappe.delete_doc("File", f.name, ignore_permissions=True)
+            
         # Reset the generated PDF so it regenerates on next download
         cert.certificate_pdf = None
+        cert.pdf_status = "Pending"
+        cert.pdf_file_url = None
         cert.flags.ignore_links = True
         cert.save(ignore_permissions=True)
         

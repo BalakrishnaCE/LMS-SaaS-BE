@@ -8,9 +8,9 @@ def get_learner_certificates():
     # 1. Existing Certificates (Issued, Revoked, Expired, Pending if no issued_on)
     certificates = frappe.get_all(
         "LMS Certificate",
-        filters={"user": user},
-        fields=["name", "certificate_id", "module", "issued_on", "status", "certificate_pdf", "score", "template", "is_claimed"],
-        order_by="status asc, issued_on desc"
+        filters={"user": user, "docstatus": 1} if hasattr(frappe.get_meta("LMS Certificate"), "is_submittable") and frappe.get_meta("LMS Certificate").is_submittable else {"user": user},
+        fields=["name", "module", "issued_on", "status", "certificate_pdf", "score", "template", "is_claimed"],
+        order_by="issued_on desc"
     )
     
     results = []
@@ -69,7 +69,7 @@ def get_learner_certificates():
         
         results.append({
             "id": cert.name,
-            "certificateId": cert.certificate_id or cert.name,
+            "certificateId": cert.name,
             "title": title,
             "subtitle": subtitle,
             "issueDate": cert.issued_on,

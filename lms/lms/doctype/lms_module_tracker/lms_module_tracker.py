@@ -149,19 +149,6 @@ class LMSModuleTracker(Document):
 			
 		cert = frappe.new_doc("LMS Certificate")
 		
-		ref_no = module.certificate_reference_number or "CERT-.####"
-		# Frappe requires dots around the hashes, e.g. .####.
-		# If user typed #### without dots, auto-correct it for them
-		import re
-		if "#" in ref_no:
-			ref_no = re.sub(r'(?<!\.)(#+)(?!\.)', r'.\1.', ref_no)
-		
-		try:
-			from frappe.model.naming import make_autoname
-			cert.certificate_id = make_autoname(ref_no)
-		except Exception:
-			cert.certificate_id = f"CERT-{frappe.generate_hash(length=8).upper()}"
-			
 		cert.user = self.user
 		cert.module = self.module
 		cert.enrollment = self.name
