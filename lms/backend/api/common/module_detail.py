@@ -299,7 +299,7 @@ def get_module_certificates(module_id):
     certs = frappe.get_all(
         "LMS Certificate",
         filters={"module": module_id},
-        fields=["name", "certificate_id", "user", "issued_on", "status", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on", "pdf_status", "pdf_file_url"]
+        fields=["name", "user", "issued_on", "status", "certificate_pdf", "revocation_reason", "custom_revocation_reason", "revoked_by", "revoked_on", "pdf_status", "pdf_file_url"]
     )
     cert_map = {c.user: c for c in certs}
     
@@ -342,7 +342,7 @@ def get_module_certificates(module_id):
 
             certificate_data.append({
                 "id": cert.name,
-                "certificate_id": cert.certificate_id or cert.name,
+                "certificate_id": cert.name,
                 "learnerName": user_doc.full_name,
                 "email": user_doc.email,
                 "issueDate": str(cert.issued_on) if cert.issued_on else None,
@@ -397,9 +397,13 @@ def get_module_certificates(module_id):
             }
         except Exception:
             pass
+            
+    from lms.backend.api.common.certificate import get_signature_html
+    signature_html = get_signature_html(module.name)
     
     return {
         "template": template,
+        "signature_html": signature_html,
         "certificates": certificate_data,
         "course_name": module.module_name
     }

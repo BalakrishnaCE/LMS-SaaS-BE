@@ -1,6 +1,36 @@
 import frappe
 from frappe.utils import getdate
 
+def get_signature_html(module_name):
+    signature_html = "J. Director" # default fallback
+    if not module_name:
+        return signature_html
+        
+    try:
+        mod = frappe.get_doc("LMS Module", module_name)
+        if mod.certificate_signature_by:
+            sig_doc = frappe.get_doc("LMS Authorized Signatory", mod.certificate_signature_by)
+            if sig_doc.signature_image:
+                from frappe.utils.file_manager import get_file_path
+                import base64
+                import mimetypes
+                import os
+                
+                file_path = get_file_path(sig_doc.signature_image)
+                if os.path.exists(file_path):
+                    mime_type, _ = mimetypes.guess_type(file_path)
+                    with open(file_path, "rb") as f:
+                        encoded_string = base64.b64encode(f.read()).decode('utf-8')
+                    signature_html = f'<img src="data:{mime_type};base64,{encoded_string}" style="max-height: 45px; object-fit: contain;">'
+                else:
+                    signature_html = f'<img src="{sig_doc.signature_image}" style="max-height: 45px; object-fit: contain;">'
+            elif sig_doc.signatory_name:
+                signature_html = sig_doc.signatory_name
+    except Exception:
+        pass
+        
+    return signature_html
+
 @frappe.whitelist(allow_guest=False)
 def get_certificate_html(certificate_name):
     """Return the populated HTML certificate template for frontend rendering."""
@@ -53,33 +83,10 @@ def get_certificate_html(certificate_name):
             issue_date = str(target_date)
 
     score_val = str(int(cert.score)) if cert.score else "N/A"
-    cert_id   = cert.certificate_id or cert.name
+    cert_id   = cert.name
     
     # 3. Fetch Signature
-    signature_html = "J. Director" # default fallback
-    if cert.module:
-        try:
-            mod = frappe.get_doc("LMS Module", cert.module)
-            if mod.certificate_signature_by:
-                sig_doc = frappe.get_doc("LMS Authorized Signatory", mod.certificate_signature_by)
-                if sig_doc.signature_image:
-                    from frappe.utils.file_manager import get_file_path
-                    import base64
-                    import mimetypes
-                    import os
-                    
-                    file_path = get_file_path(sig_doc.signature_image)
-                    if os.path.exists(file_path):
-                        mime_type, _ = mimetypes.guess_type(file_path)
-                        with open(file_path, "rb") as f:
-                            encoded_string = base64.b64encode(f.read()).decode('utf-8')
-                        signature_html = f'<img src="data:{mime_type};base64,{encoded_string}" style="max-height: 45px; object-fit: contain;">'
-                    else:
-                        signature_html = f'<img src="{sig_doc.signature_image}" style="max-height: 45px; object-fit: contain;">'
-                elif sig_doc.signatory_name:
-                    signature_html = sig_doc.signatory_name
-        except Exception:
-            pass
+    signature_html = get_signature_html(cert.module)
 
     # ── Replace placeholders ──────────────────────────────────────────────────
     html_body = html_template
