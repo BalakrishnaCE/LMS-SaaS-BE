@@ -157,3 +157,93 @@ def duplicate_learning_path(path_name):
     new_path.insert(ignore_permissions=True)
     
     return {"status": "success", "new_path_id": new_path.name}
+
+@frappe.whitelist()
+def get_learner_assignments(learner_email):
+    """
+    Returns lists of module names and learning path names that a specific learner
+    is already assigned to, via ANY assignment type (Everyone, Team, or Manual).
+    This is used by the Assign Learning modal to pre-check and disable already-assigned items.
+    """
+    assigned_modules = set()
+    assigned_paths = set()
+
+    # ----- Check which teams the learner belongs to -----
+    learner_teams = frappe.get_all(
+        "LMS Team Member",
+        filters={"user": learner_email},
+        fields=["parent"]
+    )
+    learner_team_ids = {t.parent for t in learner_teams}
+
+    # ----- Module Assignments -----
+    all_module_assignments = frappe.get_all(
+        "LMS Module Assignment",
+        fields=["name", "module", "assignment_type"]
+    )
+    module_assignment_names = [a.name for a in all_module_assignments]
+    module_map = {a.name: a.module for a in all_module_assignments}
+
+    # Everyone assignments — all learners are covered
+    for a in all_module_assignments:
+        if a.assignment_type == "Everyone":
+            assigned_modules.add(a.module)
+
+    # Manual assignments — check if learner's email is in child table
+    if module_assignment_names:
+        manual_records = frappe.get_all(
+            "LMS Assignment User",
+            filters={"parent": ["in", module_assignment_names], "user": learner_email},
+            fields=["parent"]
+        )
+        for r in manual_records:
+            assigned_modules.add(module_map.get(r.parent))
+
+    # Team assignments — check if learner's team is in any assignment
+    if learner_team_ids and module_assignment_names:
+        team_records = frappe.get_all(
+            "LMS Assignment Team",
+            filters={"parent": ["in", module_assignment_names], "team": ["in", list(learner_team_ids)]},
+            fields=["parent"]
+        )
+        for r in team_records:
+            assigned_modules.add(module_map.get(r.parent))
+
+    assigned_modules.discard(None)
+
+    # ----- Learning Path Assignments -----
+    all_path_assignments = frappe.get_all(
+        "LMS Learning Path Assignment",
+        fields=["name", "learning_path", "assignment_type"]
+    )
+    path_assignment_names = [a.name for a in all_path_assignments]
+    path_map = {a.name: a.learning_path for a in all_path_assignments}
+
+    for a in all_path_assignments:
+        if a.assignment_type == "Everyone":
+            assigned_paths.add(a.learning_path)
+
+    if path_assignment_names:
+        manual_lp_records = frappe.get_all(
+            "LMS Assignment User",
+            filters={"parent": ["in", path_assignment_names], "user": learner_email},
+            fields=["parent"]
+        )
+        for r in manual_lp_records:
+            assigned_paths.add(path_map.get(r.parent))
+
+    if learner_team_ids and path_assignment_names:
+        team_lp_records = frappe.get_all(
+            "LMS Assignment Team",
+            filters={"parent": ["in", path_assignment_names], "team": ["in", list(learner_team_ids)]},
+            fields=["parent"]
+        )
+        for r in team_lp_records:
+            assigned_paths.add(path_map.get(r.parent))
+
+    assigned_paths.discard(None)
+
+    return {
+        "modules": list(assigned_modules),
+        "learning_paths": list(assigned_paths)
+    }

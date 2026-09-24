@@ -12,9 +12,10 @@ def _evaluate_user_risks(users):
     roles = frappe.get_all("Has Role", filters={"parent": ("in", user_names), "role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent", "role"])
     user_has_learner_role = set(r.parent for r in roles)
 
-    # Fetch User Settings (for designation)
-    user_settings = frappe.get_all("LMS User Settings", filters={"system_user": ("in", user_names)}, fields=["system_user", "designation"])
+    # Fetch User Settings (for designation and joining date)
+    user_settings = frappe.get_all("LMS User Settings", filters={"system_user": ("in", user_names)}, fields=["system_user", "designation", "joining_date"])
     user_designation = {s.system_user: s.designation for s in user_settings}
+    user_joining_date = {s.system_user: s.joining_date for s in user_settings}
 
     # Fetch User Teams
     team_members = frappe.get_all("LMS Team Member", filters={"user": ("in", user_names)}, fields=["user", "parent"])
@@ -87,8 +88,18 @@ def _evaluate_user_risks(users):
                 last_activity_date = t.modified
                         
         no_activity_14_days = False
-        if last_activity_date and getdate(last_activity_date) < getdate(fourteen_days_ago):
-            no_activity_14_days = True
+        never_started = False
+        
+        if assigned > 0:
+            never_started = True
+            for t in u_trackers + u_lp_trackers:
+                if t.status not in ["Not started", "Unassigned"]:
+                    never_started = False
+                    break
+
+        if last_activity_date and not never_started:
+            if getdate(last_activity_date) < getdate(fourteen_days_ago):
+                no_activity_14_days = True
             
         latest_failed_twice = False
         score_below_pass = False
@@ -109,28 +120,32 @@ def _evaluate_user_risks(users):
                     quiz_fails[sub.quiz] = 0
                     
         risk_factors = []
-        learner_risk = "On Track"
         
-        if mandatory_overdue_count >= 2 or no_activity_14_days or latest_failed_twice:
-            learner_risk = "Overdue"
-            if mandatory_overdue_count >= 2:
-                risk_factors.append(f"{mandatory_overdue_count} mandatory modules overdue")
-            if no_activity_14_days:
-                risk_factors.append("No activity for 14 days")
-            if latest_failed_twice:
-                risk_factors.append("Latest assessment failed twice")
-        elif mandatory_overdue_count == 1 or score_below_pass:
-            learner_risk = "Needs Attention"
-            if mandatory_overdue_count == 1:
-                risk_factors.append("1 mandatory module overdue")
-            if score_below_pass:
-                risk_factors.append("Assessment score below pass threshold")
+        if assigned == 0:
+            learner_risk = "Unassigned"
+            risk_factors.append("No modules assigned")
+        elif never_started:
+            learner_risk = "Not Started"
+            risk_factors.append("Assigned modules not yet started")
         else:
-            if assigned > 0:
+            learner_risk = "On Track"
+            if mandatory_overdue_count >= 2 or no_activity_14_days or latest_failed_twice:
+                learner_risk = "Overdue"
+                if mandatory_overdue_count >= 2:
+                    risk_factors.append(f"{mandatory_overdue_count} mandatory modules overdue")
+                if no_activity_14_days:
+                    risk_factors.append("No activity for 14 days")
+                if latest_failed_twice:
+                    risk_factors.append("Latest assessment failed twice")
+            elif mandatory_overdue_count == 1 or score_below_pass:
+                learner_risk = "Needs Attention"
+                if mandatory_overdue_count == 1:
+                    risk_factors.append("1 mandatory module overdue")
+                if score_below_pass:
+                    risk_factors.append("Assessment score below pass threshold")
+            else:
                 risk_factors.append("All modules progressing on schedule")
                 risk_factors.append("Assessment scores above threshold")
-            else:
-                risk_factors.append("No modules assigned")
                 
         user_evals[u.name] = {
             "assigned": assigned,
@@ -143,6 +158,7 @@ def _evaluate_user_risks(users):
             "next_deadline": next_deadline.strftime("%b %d, %Y") if next_deadline else "None",
             "department": ", ".join(user_teams[u.name]) if user_teams.get(u.name) else "No Team",
             "designation": user_designation.get(u.name) or "",
+            "joining_date": user_joining_date.get(u.name),
             "has_trackers": len(u_trackers) > 0,
             "has_learner_role": u.name in user_has_learner_role,
             # Active = at least one tracker record with status "In Progress" in module or LP tracker
@@ -350,8 +366,16 @@ def get_learner_details(user_id):
     modules = frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name", "is_mandatory"])
     mod_dict = {m.name: m.is_mandatory for m in modules}
 
-    # Get earliest tracker activity as "joined date"
+    # Determine joined date
+    explicit_joining_date = eval_data.get("joining_date")
     first_activity_date = trackers[0].creation if trackers else None
+    
+    if explicit_joining_date:
+        final_joined_date = getdate(explicit_joining_date).strftime("%b %d, %Y")
+    elif first_activity_date:
+        final_joined_date = first_activity_date.strftime("%b %d, %Y")
+    else:
+        final_joined_date = getdate(user.creation).strftime("%b %d, %Y")
 
     mandatory_assigned = 0
     mandatory_completed = 0
@@ -553,7 +577,7 @@ def get_learner_details(user_id):
                 "avatar": avatar,
                 "department": eval_data.get("department", "No Team"),
                 "designation": eval_data.get("designation", "No Role"),
-                "joinedDate": first_activity_date.strftime("%b %d, %Y") if first_activity_date else "",
+                "joinedDate": final_joined_date,
                 "status": learner_status
             },
             "overview": {
@@ -608,7 +632,7 @@ def get_learner_details(user_id):
             "avatar": avatar,
             "department": eval_data.get("department", "No Team"),
             "designation": eval_data.get("designation", "No Role"),
-            "joinedDate": first_activity_date.strftime("%b %d, %Y") if first_activity_date else "",
+            "joinedDate": final_joined_date,
             "status": learner_status
         },
         "overview": {

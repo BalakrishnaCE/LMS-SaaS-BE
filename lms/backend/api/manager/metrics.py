@@ -70,7 +70,8 @@ def get_manager_metrics():
             if not member_emails:
                 return 0, 0, 0
 
-            filters = {"creation": ["<=", dt], "user": ["in", member_emails]}
+            next_day = add_days(dt, 1)
+            filters = {"creation": ["<", next_day], "user": ["in", member_emails]}
 
             trackers = frappe.get_all(
                 "LMS Module Tracker",
@@ -92,6 +93,7 @@ def get_manager_metrics():
             active_users.update(
                 t.user for t in lp_trackers
                 if t.status == "In Progress"
+                and t.user in set(u for u in member_emails)
             )
             active_count = len(active_users)
 

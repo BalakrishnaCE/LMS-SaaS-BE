@@ -10,20 +10,22 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
     except:
         limit = 10
         offset = 0
-        
-    published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name", ignore_permissions=True)
 
-    trackers = frappe.get_all(
-        "LMS Module Tracker", 
-        filters={"user": user_id, "module": ["in", published_module_ids] if published_module_ids else ["in", [""]]}, 
-        fields=["name", "module", "status", "progress_percentage", "started_on", "creation"],
-        order_by="creation desc",
-        ignore_permissions=True
-    )
-    
-    modules = frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name", "module_name", "duration", "is_mandatory", "image"], ignore_permissions=True)
+    import json
+    if categories and isinstance(categories, str):
+        categories = json.loads(categories)
+    if statuses and isinstance(statuses, str):
+        statuses = json.loads(statuses)
+    if types and isinstance(types, str):
+        types = json.loads(types)
+    if priorities and isinstance(priorities, str):
+        priorities = json.loads(priorities)
+
+    published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name", ignore_permissions=True)
+    modules = frappe.get_all("LMS Module", filters={"status": "Published"}, fields=["name", "module_name", "duration", "is_mandatory"], ignore_permissions=True)
     mod_dict = {m.name: m for m in modules}
-    
+
+    # Build category map
     module_names = [m.name for m in modules]
     mod_cat_dict = {}
     if module_names:
@@ -34,125 +36,234 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
         )
         for c in categories_data:
             if c.parent not in mod_cat_dict:
-                mod_cat_dict[c.parent] = c.category
-    
-    import json
-    if categories and isinstance(categories, str):
-        categories = json.loads(categories)
-    if statuses and isinstance(statuses, str):
-        statuses = json.loads(statuses)
-    if types and isinstance(types, str):
-        types = json.loads(types)
-    if priorities and isinstance(priorities, str):
-        priorities = json.loads(priorities)
-    
+                mod_cat_dict[c.parent] = []
+            if c.category not in mod_cat_dict[c.parent]:
+                mod_cat_dict[c.parent].append(c.category)
+
+    # Build user's team memberships
+    user_teams = [m.parent for m in frappe.get_all("LMS Team Member", filters={"user": user_id}, fields=["parent"], ignore_permissions=True)]
+
+    # Resolve all modules assigned to this user via assignments
+    assigned_modules = {}  # module_name -> assignment creation date
+
+    all_assignments = frappe.get_all(
+        "LMS Module Assignment",
+        fields=["name", "module", "assignment_type", "duration", "creation"],
+        ignore_permissions=True
+    )
+
+    for a in all_assignments:
+        if a.module not in published_module_ids:
+            continue
+        is_assigned = False
+        if a.assignment_type == "Everyone":
+            is_assigned = True
+        elif a.assignment_type == "Manual":
+            is_assigned = bool(frappe.get_all(
+                "LMS Assignment User",
+                filters={"parent": a.name, "user": user_id},
+                limit=1, ignore_permissions=True
+            ))
+        else:
+            if user_teams:
+                is_assigned = bool(frappe.get_all(
+                    "LMS Assignment Team",
+                    filters={"parent": a.name, "team": ["in", user_teams]},
+                    limit=1, ignore_permissions=True
+                ))
+
+        if is_assigned and a.module not in assigned_modules:
+            assigned_modules[a.module] = a.creation
+
+    # Fetch existing tracker records so we have progress/status for assigned modules
+    tracker_list = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user_id, "module": ["in", list(assigned_modules.keys())] if assigned_modules else ["in", [""]]},
+        fields=["name", "module", "status", "progress_percentage", "started_on", "creation"],
+        ignore_permissions=True
+    )
+    tracker_map = {t.module: t for t in tracker_list}
+
+    # Also pick up any tracker records for modules NOT found via assignments
+    # (e.g. modules where tracker was created but assignment was removed)
+    extra_trackers = frappe.get_all(
+        "LMS Module Tracker",
+        filters={"user": user_id, "module": ["in", published_module_ids] if published_module_ids else ["in", [""]]},
+        fields=["name", "module", "status", "progress_percentage", "started_on", "creation"],
+        ignore_permissions=True
+    )
+    for t in extra_trackers:
+        if t.module not in assigned_modules:
+            assigned_modules[t.module] = t.creation
+            tracker_map[t.module] = t
+
     results = []
     current_date = getdate(today())
-    
-    for t in trackers:
-        mod = mod_dict.get(t.module)
+
+    for module_name, assignment_creation in assigned_modules.items():
+        mod = mod_dict.get(module_name)
         if not mod:
             continue
-            
+
+        tracker = tracker_map.get(module_name)
+
+        # Determine status
+        if tracker and tracker.status == "Unassigned":
+            mod_status = "Unassigned"
+        elif tracker:
+            mod_status = tracker.status or "Not Started"
+        else:
+            mod_status = "Not Started"
+
+        progress = int((tracker.progress_percentage or 0) if tracker else 0)
+
         due_date = "None"
-        start = t.started_on or t.creation
+        start = (tracker.started_on if tracker else None) or assignment_creation
         if start and mod.duration:
             due_dt = add_days(start, mod.duration)
             due_date_obj = getdate(due_dt)
             due_date = due_date_obj.strftime("%b %-d, %Y")
-            
-            # Check overdue
-            if t.status != "Completed" and current_date > due_date_obj:
-                t.status = "Overdue"
-                
-        mod_status = t.status or "Not Started"
-        mod_category = mod_cat_dict.get(mod.name) or "General"
+            if mod_status not in ("Completed", "Unassigned") and current_date > due_date_obj:
+                mod_status = "Overdue"
+
+        cat_list = mod_cat_dict.get(mod.name, [])
+        mod_category = " • ".join(cat_list) if cat_list else "General"
         is_mandatory = bool(mod.is_mandatory)
-        
+        mod_type = "Module"
+        mod_priority = "Mandatory" if is_mandatory else "Optional"
+
         # Apply filters
         if categories and not any(c.lower() in mod_category.lower() for c in categories):
             continue
-            
         if statuses and mod_status.lower() not in [s.lower() for s in statuses]:
             continue
-            
-        mod_type = "Module"
         if types and mod_type.lower() not in [ty.lower() for ty in types]:
             continue
-            
-        mod_priority = "Mandatory" if is_mandatory else "Optional"
         if priorities and mod_priority.lower() not in [p.lower() for p in priorities]:
             continue
-                
+
         results.append({
-            "id": t.name,
+            "id": tracker.name if tracker else f"no-tracker-{module_name}",
             "moduleId": mod.name,
             "name": mod.module_name or mod.name,
             "category": mod_category,
-            "progress": int(t.progress_percentage or 0),
+            "progress": progress,
             "status": mod_status,
             "dueDate": due_date,
             "isMandatory": is_mandatory,
             "type": mod_type,
-            "creation": t.creation
+            "creation": tracker.creation if tracker else assignment_creation
         })
-        
-    lp_trackers = frappe.get_all(
+
+    # ── Learning Paths ───────────────────────────────────────────────────────
+    published_lp_ids = frappe.get_all("LMS Learning Path", filters={"status": "Published"}, pluck="name", ignore_permissions=True)
+
+    assigned_lps = {}  # lp_name -> creation
+
+    all_lp_assignments = frappe.get_all(
+        "LMS Learning Path Assignment",
+        fields=["name", "learning_path", "assignment_type", "creation"],
+        ignore_permissions=True
+    )
+    for a in all_lp_assignments:
+        if a.learning_path not in published_lp_ids:
+            continue
+        is_assigned = False
+        if a.assignment_type == "Everyone":
+            is_assigned = True
+        elif a.assignment_type == "Manual":
+            is_assigned = bool(frappe.get_all(
+                "LMS Assignment User",
+                filters={"parent": a.name, "user": user_id},
+                limit=1, ignore_permissions=True
+            ))
+        else:
+            if user_teams:
+                is_assigned = bool(frappe.get_all(
+                    "LMS Assignment Team",
+                    filters={"parent": a.name, "team": ["in", user_teams]},
+                    limit=1, ignore_permissions=True
+                ))
+        if is_assigned and a.learning_path not in assigned_lps:
+            assigned_lps[a.learning_path] = a.creation
+
+    # Native LP learner enrollment
+    for e in frappe.get_all("LMS Learning Path Learner", filters={"learner": user_id}, fields=["parent", "creation"], ignore_permissions=True):
+        if e.parent in published_lp_ids and e.parent not in assigned_lps:
+            assigned_lps[e.parent] = e.creation
+
+    lp_tracker_list = frappe.get_all(
         "LMS Learning Path Tracker",
-        filters={"user": user_id},
+        filters={"user": user_id, "learning_path": ["in", list(assigned_lps.keys())] if assigned_lps else ["in", [""]]},
         fields=["name", "learning_path", "status", "progress_percentage", "started_on", "creation"],
         ignore_permissions=True
     )
-    
-    if lp_trackers:
-        published_lp_ids = frappe.get_all("LMS Learning Path", filters={"status": "Published"}, pluck="name", ignore_permissions=True)
-        for t in lp_trackers:
-            if t.learning_path not in published_lp_ids:
-                continue
-            try:
-                lp_doc = frappe.get_doc("LMS Learning Path", t.learning_path)
-            except:
-                continue
-                
-            due_date = "None"
-            lp_status = t.status or "Not Started"
-            is_mandatory = bool(lp_doc.get("is_mandatory", False))
-            
-            lp_category = "General"
-            if hasattr(lp_doc, "category") and lp_doc.category:
-                if isinstance(lp_doc.category, list) and len(lp_doc.category) > 0:
-                    lp_category = getattr(lp_doc.category[0], "category", "General")
-                elif isinstance(lp_doc.category, str):
-                    lp_category = lp_doc.category
-                    
-            if categories and not any(c.lower() in lp_category.lower() for c in categories): continue
-            if statuses and lp_status.lower() not in [s.lower() for s in statuses]: continue
-            
-            mod_type = "Learning Path"
-            if types and mod_type.lower() not in [ty.lower() for ty in types]: continue
-            
-            mod_priority = "Mandatory" if is_mandatory else "Optional"
-            if priorities and mod_priority.lower() not in [p.lower() for p in priorities]: continue
-                    
-            results.append({
-                "id": t.name,
-                "moduleId": t.learning_path,
-                "name": lp_doc.path_name or t.learning_path,
-                "category": lp_category,
-                "progress": int(t.progress_percentage or 0),
-                "status": lp_status,
-                "dueDate": due_date,
-                "isMandatory": is_mandatory,
-                "type": mod_type,
-                "creation": t.creation
-            })
-            
-    # Sort results by creation desc
-    results.sort(key=lambda x: x.get("creation") or "", reverse=True)
-        
+    lp_tracker_map = {t.learning_path: t for t in lp_tracker_list}
+
+    # Also pick up LP trackers not found via assignments
+    extra_lp_trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user_id, "learning_path": ["in", published_lp_ids] if published_lp_ids else ["in", [""]]},
+        fields=["name", "learning_path", "status", "progress_percentage", "started_on", "creation"],
+        ignore_permissions=True
+    )
+    for t in extra_lp_trackers:
+        if t.learning_path not in assigned_lps:
+            assigned_lps[t.learning_path] = t.creation
+            lp_tracker_map[t.learning_path] = t
+
+    for lp_name, assignment_creation in assigned_lps.items():
+        try:
+            lp_doc = frappe.get_doc("LMS Learning Path", lp_name)
+        except Exception:
+            continue
+
+        tracker = lp_tracker_map.get(lp_name)
+
+        if tracker and tracker.status == "Unassigned":
+            lp_status = "Unassigned"
+        elif tracker:
+            lp_status = tracker.status or "Not Started"
+        else:
+            lp_status = "Not Started"
+
+        progress = int((tracker.progress_percentage or 0) if tracker else 0)
+        is_mandatory = bool(lp_doc.get("is_mandatory", False))
+
+        lp_category = "General"
+        if hasattr(lp_doc, "category") and lp_doc.category:
+            if isinstance(lp_doc.category, list) and len(lp_doc.category) > 0:
+                cats = [getattr(c, "category", "") for c in lp_doc.category]
+                lp_category = " • ".join([c for c in cats if c]) or "General"
+            elif isinstance(lp_doc.category, str):
+                lp_category = lp_doc.category
+
+        mod_type = "Learning Path"
+        mod_priority = "Mandatory" if is_mandatory else "Optional"
+
+        if categories and not any(c.lower() in lp_category.lower() for c in categories): continue
+        if statuses and lp_status.lower() not in [s.lower() for s in statuses]: continue
+        if types and mod_type.lower() not in [ty.lower() for ty in types]: continue
+        if priorities and mod_priority.lower() not in [p.lower() for p in priorities]: continue
+
+        results.append({
+            "id": tracker.name if tracker else f"no-tracker-lp-{lp_name}",
+            "moduleId": lp_name,
+            "name": lp_doc.path_name or lp_name,
+            "category": lp_category,
+            "progress": progress,
+            "status": lp_status,
+            "dueDate": "None",
+            "isMandatory": is_mandatory,
+            "type": mod_type,
+            "creation": tracker.creation if tracker else assignment_creation
+        })
+
+    results.sort(key=lambda x: str(x.get("creation") or ""), reverse=True)
+
     total = len(results)
-    paginated = results[offset:offset+limit]
-    
+    paginated = results[offset:offset + limit]
+
     return {
         "items": paginated,
         "total": total,
@@ -641,6 +752,21 @@ def unassign_learning(user_id, item_id, item_type):
                 DELETE FROM `tabLMS Assignment User`
                 WHERE parent = %s AND user = %s
             """, (a.name, user_id))
+
+    frappe.db.commit()
+    return {"status": "success"}
+
+@frappe.whitelist()
+def reassign_learning(user_id, item_id, item_type):
+    """Re-activates a previously unassigned tracker by setting its status back to Not Started."""
+    if item_type == "Learning Path":
+        trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": item_id, "user": user_id, "status": "Unassigned"})
+        for t in trackers:
+            frappe.db.set_value("LMS Learning Path Tracker", t.name, "status", "Not Started")
+    else:
+        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id, "module": item_id, "status": "Unassigned"})
+        for t in trackers:
+            frappe.db.set_value("LMS Module Tracker", t.name, "status", "Not Started")
 
     frappe.db.commit()
     return {"status": "success"}

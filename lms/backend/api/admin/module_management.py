@@ -1024,7 +1024,7 @@ def get_module_learners(module_name):
                 if learner_info["score"] < PASSING_PERCENTAGE:
                     needs_attention["lowAssessmentScores"] += 1
                     learner_info["needsAttention"] = True
-            elif tracker.status in ("Completed", "Failed") and tracker.total_score:
+            elif tracker.status in ("Completed", "Failed") and tracker.total_score is not None and float(tracker.total_score) >= 0:
                 # Legacy: score stored only in tracker, not in a submission record
                 learner_info["score"] = float(tracker.total_score)
                 if learner_info["score"] < PASSING_PERCENTAGE:
