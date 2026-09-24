@@ -228,6 +228,72 @@ def get_learner_summary(timeframe="month"):
         "recentlyCompleted": recently_completed,
     }
 
+@frappe.whitelist()
+def get_learner_path_summary():
+    """
+    Returns a summary of the current learner's dashboard stats specifically for Learning Paths.
+    """
+    user = frappe.session.user
+    
+    # Get all learning path trackers for the user
+    trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user},
+        fields=["learning_path", "status", "total_score", "modified", "name"]
+    )
+    
+    total_paths = len(trackers)
+    completed_paths = len([t for t in trackers if t.status == "Completed"])
+    
+    # Calculate Average Score across paths
+    scored_trackers = [t for t in trackers if t.total_score is not None and t.total_score >= 0]
+    average_score = 0
+    if scored_trackers:
+        average_score = sum(t.total_score for t in scored_trackers) / len(scored_trackers)
+        
+    # Certificates earned: currently paths do not issue certificates, 
+    # but we can count certificates earned for modules within these assigned paths.
+    certificates_earned = 0
+    if trackers:
+        path_names = [t.learning_path for t in trackers]
+        # Get all modules in these paths
+        path_courses = frappe.get_all(
+            "LMS Learning Path Course", 
+            filters={"parent": ("in", path_names)}, 
+            fields=["module"]
+        )
+        if path_courses:
+            module_names = list(set([pc.module for pc in path_courses if pc.module]))
+            if module_names:
+                certificates_earned = frappe.db.count("LMS Certificate", {"user": user, "module": ("in", module_names), "is_valid": 1})
+
+    # Recently Completed Paths
+    recently_completed = []
+    recent_completed_trackers = sorted(
+        [t for t in trackers if t.status == "Completed"], 
+        key=lambda x: x.modified or frappe.utils.now_datetime(), 
+        reverse=True
+    )[:3]
+    
+    for t in recent_completed_trackers:
+        path_title = frappe.get_value("LMS Learning Path", t.learning_path, "path_name")
+        score = round(t.total_score) if t.total_score is not None else 100
+        recently_completed.append({
+            "id": t.learning_path,
+            "title": path_title,
+            "completedDate": frappe.utils.getdate(t.modified).strftime("%b %d"),
+            "score": score,
+            "pdfUrl": None
+        })
+        
+    return {
+        "completedPaths": completed_paths,
+        "totalPaths": total_paths,
+        "certificatesEarned": certificates_earned,
+        "averageScore": round(average_score),
+        "recentlyCompleted": recently_completed
+    }
+
 # ─── Saved Learning ────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
@@ -396,24 +462,23 @@ def get_continue_learning(item_type="module"):
         
         if item_type in ["module", "both"]:
             not_started_queries.append("""
-                SELECT 'Module' as type, ma.module as id, ma.creation, t.progress_percentage
-                FROM `tabLMS Module Assignment` ma
-                INNER JOIN `tabLMS Module` m ON m.name = ma.module
-                INNER JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-                LEFT JOIN `tabLMS Module Tracker` t ON t.module = ma.module AND t.user = %s
-                WHERE au.user = %s
+                SELECT 'Module' as type, t.module as id, t.creation, t.progress_percentage
+                FROM `tabLMS Module Tracker` t
+                INNER JOIN `tabLMS Module` m ON m.name = t.module
+                WHERE t.user = %s
                   AND m.status = 'Published'
-                  AND (t.name IS NULL OR t.status = 'Not started')
+                  AND t.status = 'Not started'
             """)
-            ns_params.extend([user, user])
+            ns_params.append(user)
             
         if item_type in ["path", "both"]:
             not_started_queries.append("""
-                SELECT 'Path' as type, lp.name as id, lp.creation, t.progress_percentage
-                FROM `tabLMS Learning Path` lp
-                LEFT JOIN `tabLMS Learning Path Tracker` t ON t.learning_path = lp.name AND t.user = %s
-                WHERE lp.status = 'Published'
-                  AND (t.name IS NULL OR t.status = 'Not started')
+                SELECT 'Path' as type, t.learning_path as id, t.creation, t.progress_percentage
+                FROM `tabLMS Learning Path Tracker` t
+                INNER JOIN `tabLMS Learning Path` lp ON lp.name = t.learning_path
+                WHERE t.user = %s
+                  AND lp.status = 'Published'
+                  AND t.status = 'Not started'
             """)
             ns_params.append(user)
             

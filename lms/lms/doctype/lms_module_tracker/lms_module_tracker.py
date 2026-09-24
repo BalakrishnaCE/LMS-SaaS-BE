@@ -62,7 +62,7 @@ class LMSModuleTracker(Document):
 		if scored_items > 0:
 			self.total_score = round(total_score_sum / scored_items, 2)
 		else:
-			self.total_score = self.progress_percentage
+			self.total_score = -1
 
 		# ── Determine tracker status ─────────────────────────────────────────────
 		all_content_submitted = sum(

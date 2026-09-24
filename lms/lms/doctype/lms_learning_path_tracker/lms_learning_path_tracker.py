@@ -76,7 +76,7 @@ class LMSLearningPathTracker(Document):
 		if scored_modules > 0:
 			self.total_score = round(total_score_sum / scored_modules, 2)
 		else:
-			self.total_score = 0.0
+			self.total_score = -1
 			
 		# Auto-update status
 		if self.progress_percentage >= 100:
