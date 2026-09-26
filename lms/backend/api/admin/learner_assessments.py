@@ -122,9 +122,13 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
         if start and mod.duration:
             due_dt = add_days(start, mod.duration)
             due_date_obj = getdate(due_dt)
-            due_date = due_date_obj.strftime("%b %-d, %Y")
             if mod_status not in ("Completed", "Unassigned") and current_date > due_date_obj:
                 mod_status = "Overdue"
+
+            if mod_status.lower() == "not started":
+                due_date = "--"
+            else:
+                due_date = due_date_obj.strftime("%b %-d, %Y")
 
         cat_list = mod_cat_dict.get(mod.name, [])
         mod_category = " • ".join(cat_list) if cat_list else "General"
@@ -253,7 +257,7 @@ def get_learner_assigned_modules(user_id, limit=10, offset=0, categories=None, s
             "category": lp_category,
             "progress": progress,
             "status": lp_status,
-            "dueDate": "None",
+            "dueDate": "--",
             "isMandatory": is_mandatory,
             "type": mod_type,
             "creation": tracker.creation if tracker else assignment_creation
@@ -284,16 +288,19 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
         if types and isinstance(types, str): types = json.loads(types)
         if priorities and isinstance(priorities, str): priorities = json.loads(priorities)
         
+        # Fetch assigned modules to get their due dates
+        assigned_data = get_learner_assigned_modules(user_id, limit=999999)
+        due_date_map = {}
+        for item in assigned_data.get("items", []):
+            due_date_map[item.get("moduleId")] = item.get("dueDate", "--")
+
         results = []
         
-        def build_assessments_for_module(mod, tracker_name):
+        def build_assessments_for_module(mod, tracker_name, parent_due_date):
             """
             Build two lists of assessments:
             - lesson_assessments: quizzes/interactive content inside lesson chapters
             - final_assessments: quizzes in module.final_assessments table
-
-            lesson_quiz_map stores: quiz_name -> {"lesson_label": ..., "content_type": "Quiz"|"Assessment"|"Interactive"}
-            Interactive = no passing required, no attempts limit (mark as Completed when done)
             """
             lesson_quiz_map = {}  # quiz_name -> {"lesson_label": str, "content_type": str}
             for lesson_idx, lesson_row in enumerate(mod.lessons):
@@ -333,21 +340,35 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
             for s in submissions:
                 extra = s.get("extra_attempts_granted") or 0
                 if s.quiz not in ass_dict:
-                    ass_dict[s.quiz] = {"best_score": s.score, "attempts": 1, "passed": bool(s.passed), "extra_attempts": extra}
+                    ass_dict[s.quiz] = {
+                        "best_score": s.score, 
+                        "attempts": 1, 
+                        "passed": bool(s.passed), 
+                        "extra_attempts": extra,
+                        "has_pending": False
+                    }
                 else:
                     ass_dict[s.quiz]["attempts"] += 1
                     ass_dict[s.quiz]["extra_attempts"] += extra
-                    if s.score > ass_dict[s.quiz]["best_score"]:
+                    
+                    # Safely handle None scores for comparison
+                    curr_score = s.score if s.score is not None else 0
+                    best_score = ass_dict[s.quiz]["best_score"] if ass_dict[s.quiz]["best_score"] is not None else 0
+                    if curr_score > best_score:
                         ass_dict[s.quiz]["best_score"] = s.score
+                        
                     if s.passed:
                         ass_dict[s.quiz]["passed"] = True
+
+                if s.score is None:
+                    ass_dict[s.quiz]["has_pending"] = True
 
             def build_assessment_entry(quiz_name, lesson_label, assessment_type):
                 """
                 assessment_type: "Quiz", "Assessment", or "Interactive"
                 - Interactive: no pass score, no attempts limit, result is Completed/Not Started
                 """
-                data = ass_dict.get(quiz_name, {"best_score": 0, "attempts": 0, "passed": False, "extra_attempts": 0})
+                data = ass_dict.get(quiz_name, {"best_score": 0, "attempts": 0, "passed": False, "extra_attempts": 0, "has_pending": False})
                 quiz = frappe.get_doc("LMS Quiz", quiz_name)
                 max_att = quiz.max_attempts or 0
                 if max_att > 0:
@@ -362,9 +383,9 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                 best_score_raw = data.get("best_score", 0)
                 total_score = quiz.total_score or 0
                 if total_score > 0:
-                    best_score_pct = int(round((best_score_raw / total_score) * 100))
+                    best_score_pct = int(round(((best_score_raw or 0) / total_score) * 100))
                 else:
-                    best_score_pct = int(round(best_score_raw))
+                    best_score_pct = int(round(best_score_raw or 0))
 
                 if is_interactive:
                     # Interactive: result is Completed if submitted, else Not Started
@@ -382,17 +403,18 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                         "attemptsUsed": data["attempts"],
                         "maxAttempts": 0,
                         "result": res,
-                        "lesson": lesson_label
+                        "lesson": lesson_label,
+                        "dueDate": parent_due_date if parent_due_date and parent_due_date != "None" and res != "Not Started" else "--"
                     }
 
                 if data["attempts"] == 0:
                     res = "Not Started"
+                elif quiz.evaluation_method == "Manual review" and data.get("has_pending"):
+                    res = "Awaiting evaluation"
                 elif data["passed"]:
                     res = "Passed"
-                elif max_att > 0 and data["attempts"] >= max_att:
-                    res = "Failed"
                 else:
-                    res = "Needs attention"
+                    res = "Failed"
 
                 return {
                     "id": quiz_name,
@@ -404,7 +426,8 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                     "attemptsUsed": data["attempts"],
                     "maxAttempts": max_att,
                     "result": res,
-                    "lesson": lesson_label
+                    "lesson": lesson_label,
+                    "dueDate": parent_due_date if parent_due_date and parent_due_date != "None" and res != "Not Started" else "--"
                 }
 
             lesson_assessments = [
@@ -438,7 +461,9 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
         for t in trackers:
             mod = frappe.get_doc("LMS Module", t.module)
 
-            lesson_assessments, final_assessments, required_score, retake_used, retake_max = build_assessments_for_module(mod, t.name)
+            # Retrieve module's due date to pass to its assessments
+            module_due_date = due_date_map.get(mod.name, "--")
+            lesson_assessments, final_assessments, required_score, retake_used, retake_max = build_assessments_for_module(mod, t.name, module_due_date)
             all_assessments = lesson_assessments + final_assessments
 
             # Determine module result dynamically from all assessments
@@ -557,11 +582,14 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
         if types:
             results = [r for r in results if r["type"].lower() in [ty.lower() for ty in types]]
             
-        total_assessments_taken = 0
-        total_passed = 0
+        total_assessments_completed = 0
+        total_assessments_total = 0
         score_sum = 0
         score_count = 0
-        pending_tests = 0
+        quiz_score_sum = 0
+        quiz_count = 0
+        qa_score_sum = 0
+        qa_count = 0
         
         for r in results:
             mods = r.get("modules", []) if r["type"] == "Learning Path" else [r]
@@ -579,21 +607,30 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                     
             for m in mods:
                 for a in m.get("assessments", []):
+                    total_assessments_total += 1
+                    if a["result"] in ("Passed", "Completed"):
+                        total_assessments_completed += 1
                     if a["result"] == "Not Started":
                         continue
-                    total_assessments_taken += 1
-                    if a["result"] == "Passed":
-                        total_passed += 1
-                    else:
-                        pending_tests += 1
-                    score_sum += a["bestScore"]
+                    score = a.get("bestScore", 0) or 0
+                    score_sum += score
                     score_count += 1
+                    atype = (a.get("type") or "").lower()
+                    if "quiz" in atype or atype == "quiz":
+                        quiz_score_sum += score
+                        quiz_count += 1
+                    elif "qa" in atype or "assessment" in atype or "interactive" in atype:
+                        qa_score_sum += score
+                        qa_count += 1
                     
         stats = {
-            "assessmentsTaken": total_assessments_taken,
+            "assessmentsCompleted": total_assessments_completed,
+            "assessmentsTotal": total_assessments_total,
             "averageScore": int(score_sum / score_count) if score_count > 0 else 0,
-            "passingRate": total_passed,
-            "pendingTests": pending_tests
+            "quizPerformance": int(quiz_score_sum / quiz_count) if quiz_count > 0 else 0,
+            "quizCount": quiz_count,
+            "qaPerformance": int(qa_score_sum / qa_count) if qa_count > 0 else 0,
+            "qaCount": qa_count,
         }
         
         return {
@@ -612,19 +649,46 @@ def get_assessment_details(user_id, quiz_name):
         submissions = frappe.get_all(
             "LMS Quiz Submission",
             filters={"user": user_id, "quiz": quiz_name},
-            fields=["name", "score", "passed", "creation"],
+            fields=["name", "score", "passed", "creation", "time_taken"],
             order_by="creation asc"
         )
+        
+        learner_name = frappe.db.get_value("User", user_id, "full_name") or user_id
+        
+        # Determine source
+        source_title = "Unknown"
+        source_type = "Unknown"
+        
+        mod_name = frappe.db.get_value("LMS Module Assessment", {"assessment": quiz_name}, "parent")
+        if not mod_name:
+            qc = frappe.db.get_value("LMS Quiz Content", {"quiz": quiz_name}, "name")
+            ac = frappe.db.get_value("LMS Assessment Content", {"assessment": quiz_name}, "name")
+            ref_name = qc or ac
+            if ref_name:
+                chap_name = frappe.db.get_value("LMS Chapter Content", {"content_reference": ref_name}, "parent")
+                if chap_name:
+                    lesson_name = frappe.db.get_value("LMS Lesson Chapter", {"chapter": chap_name}, "parent")
+                    if lesson_name:
+                        mod_name = frappe.db.get_value("LMS Module Lesson Child", {"lesson": lesson_name}, "parent")
+                        
+        if mod_name:
+            mod_title = frappe.db.get_value("LMS Module", mod_name, "module_name")
+            source_title = mod_title or mod_name
+            source_type = "Module"
         
         history = []
         for i, s in enumerate(submissions):
             attempt_num = i + 1
+            t = int(s.time_taken or 0)
+            m, sec = divmod(t, 60)
+            dur_str = f"{m}m {sec}s" if m > 0 else f"{sec}s"
+            
             history.insert(0, {
                 "id": s.name,
                 "attempt": f"Attempt {attempt_num}",
                 "score": f"{int(s.score)}% {'Passed' if s.passed else 'Failed'}",
                 "date": s.creation.strftime("%b %-d, %Y"),
-                "duration": "14m 32s",
+                "duration": dur_str,
                 "raw_score": s.score
             })
             
@@ -645,11 +709,12 @@ def get_assessment_details(user_id, quiz_name):
             responses = frappe.get_all(
                 "LMS Quiz Response",
                 filters={"parent": best_sub_name, "parenttype": "LMS Quiz Submission"},
-                fields=["question", "is_correct"],
+                fields=["question", "is_correct", "selected_option", "manual_score", "evaluation_data"],
                 order_by="idx asc"
             )
             
             import re
+            import json
             for idx, r in enumerate(responses):
                 q_doc = frappe.get_doc("LMS Quiz Question", r.question)
                 is_correct = bool(r.is_correct)
@@ -660,21 +725,65 @@ def get_assessment_details(user_id, quiz_name):
                     
                 q_text = re.sub('<[^<]+>', '', q_doc.question_text or '')
                 
+                requires_manual = False
+                if q_doc.question_type == "Scenario Based":
+                    requires_manual = True
+                elif q_doc.question_type == "Fill in the Blank" and len(q_doc.options) == 0:
+                    requires_manual = True
+                    
+                max_score = 5
+                if requires_manual and q_doc.options:
+                    max_score = sum(int(opt.score) if opt.score else 5 for opt in q_doc.options)
+                elif not requires_manual:
+                    max_score = int(q_doc.score) if q_doc.score else 1
+                
+                eval_data = {}
+                if r.evaluation_data:
+                    try:
+                        eval_data = json.loads(r.evaluation_data)
+                    except:
+                        pass
+                
+                correct_answer = ""
+                if not requires_manual:
+                    correct_opts = [re.sub('<[^<]+>', '', opt.option_text or '').strip() for opt in q_doc.options if opt.is_correct]
+                    if correct_opts:
+                        correct_answer = ", ".join(correct_opts)
+
                 questions_performance.append({
                     "id": r.question,
                     "index": idx + 1,
                     "text": q_text.strip(),
-                    "isCorrect": is_correct
+                    "isCorrect": is_correct,
+                    "learnerResponse": r.selected_option or "",
+                    "correctAnswer": correct_answer,
+                    "managerFeedback": eval_data.get("feedback", ""),
+                    "manualScore": r.manual_score or 0,
+                    "maxScore": max_score,
+                    "requiresManual": requires_manual
                 })
                 
+        def format_time(seconds):
+            if not seconds:
+                return "--"
+            seconds = int(seconds)
+            if seconds < 60:
+                return f"{seconds} sec"
+            m, s = divmod(seconds, 60)
+            if s > 0:
+                return f"{m} min {s} sec"
+            return f"{m} min"
+            
         stats = {
             "questions": len(quiz.questions) if hasattr(quiz, "questions") else (correct_count + incorrect_count or 20),
             "correct": correct_count,
             "incorrect": incorrect_count,
             "attempts": total_attempts,
-            "bestScore": f"{int(best_score)}%",
-            "passingScore": f"{int(quiz.passing_percentage)}%" if getattr(quiz, "is_passing_required", 0) else "--",
-            "timeTaken": "14m 32s",
+            "maxAttempts": getattr(quiz, "max_attempts", 0),
+            "bestScore": f"{int(best_score)}%" if submissions else "--",
+            "passingScore": getattr(quiz, "passing_percentage", "--"),
+            "timeTaken": format_time(latest_sub.time_taken) if latest_sub and latest_sub.get("time_taken") else ("--" if not submissions else "14 min"),
+            "timeLimitMins": getattr(quiz, "time_limit_mins", 0),
             "dateTaken": latest_sub.creation.strftime("%b %-d, %Y") if latest_sub else "--"
         }
         
@@ -682,7 +791,10 @@ def get_assessment_details(user_id, quiz_name):
             "stats": stats,
             "history": history,
             "questions": questions_performance,
-            "title": quiz.title
+            "title": quiz.title,
+            "learnerName": learner_name,
+            "sourceTitle": source_title,
+            "sourceType": source_type
         }
         
     except Exception as e:

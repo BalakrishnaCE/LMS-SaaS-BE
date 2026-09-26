@@ -10,7 +10,7 @@ def _is_admin_user(user):
     Such users browsing content from the admin panel should NOT have their
     activity counted as learner progress.
     """
-    admin_roles = {"System Manager", "LMS-Admin"}
+    admin_roles = {"LMS-Admin"}
     user_roles = set(frappe.get_roles(user))
     return bool(user_roles & admin_roles)
 
@@ -299,6 +299,10 @@ def get_learner_deadlines():
 def update_content_progress(module, content_reference, content_type=None, status="Completed", score=None):
     user = frappe.session.user
 
+    # Admins browsing content in admin panel should not have progress tracked
+    if _is_admin_user(user):
+        return {"status": "skipped", "reason": "admin user"}
+
     tracker = frappe.get_all(
         "LMS Module Tracker", 
         filters={"user": user, "module": module}, 
@@ -354,6 +358,10 @@ def update_content_progress(module, content_reference, content_type=None, status
 @frappe.whitelist()
 def heartbeat(module, content_reference, content_type, current_position=0, total_duration=0, time_spent_increment=10):
     user = frappe.session.user
+
+    # Admins browsing content in admin panel should not have progress tracked
+    if _is_admin_user(user):
+        return {"status": "skipped", "reason": "admin user"}
 
     current_position = float(current_position)
     total_duration = float(total_duration)

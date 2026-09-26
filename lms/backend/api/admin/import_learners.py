@@ -14,12 +14,7 @@ def _ensure_user(learner: dict) -> str:
         return None
 
     if frappe.db.exists("User", email):
-        # Ensure System Manager role exists on already-created users
-        has_sys_mgr = frappe.db.exists("Has Role", {"parent": email, "role": "System Manager"})
-        if not has_sys_mgr:
-            existing_user = frappe.get_doc("User", email)
-            existing_user.append("roles", {"role": "System Manager"})
-            existing_user.save(ignore_permissions=True)
+        # User already exists — just return their email so assignments can proceed
         return email
 
     # Parse name into first/last
@@ -36,7 +31,7 @@ def _ensure_user(learner: dict) -> str:
     user.username = email.split("@")[0]
     user.send_welcome_email = 0
     user.enabled = 1
-    user.new_password = frappe.generate_hash(length=12)  # random temp password
+    user.new_password = "Password@123"  # Default password for imported learners
     user.append("roles", {"role": "LMS-Learner"})
     user.append("roles", {"role": "System Manager"})
     user.insert(ignore_permissions=True)
@@ -75,6 +70,24 @@ def _ensure_user(learner: dict) -> str:
             team_doc.save(ignore_permissions=True)
 
     return email
+
+@frappe.whitelist()
+def check_email(email):
+    """
+    Check if an LMS learner with the given email already exists.
+    Returns True if a user with LMS-Learner or LMS-TL role exists, False otherwise.
+    """
+    if not email:
+        return False
+    email = str(email).strip().lower()
+    if not frappe.db.exists("User", email):
+        return False
+    # Only flag if the user is already registered as an LMS learner
+    has_lms_role = frappe.db.exists("Has Role", {
+        "parent": email,
+        "role": ["in", ["LMS-Learner", "LMS-TL"]]
+    })
+    return has_lms_role is not None
 
 
 @frappe.whitelist()

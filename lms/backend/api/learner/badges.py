@@ -25,14 +25,7 @@ class BadgeEvaluator:
         else:
             progress, label = 0.0, "0%"
             
-        # Check dynamic dependencies from the required_badges child table
-        required_badges = self.deps_map.get(name, [])
         dependency_msg = None
-        for req_badge in required_badges:
-            if req_badge not in self.earned_map:
-                dependency_msg = f"Earn {req_badge} first"
-                break
-                
         return progress, label, dependency_msg
 
     def eval_learning_champion(self, badge):
@@ -42,6 +35,7 @@ class BadgeEvaluator:
             SELECT count(ma.module)
             FROM `tabLMS Assignment User` au
             JOIN `tabLMS Module Assignment` ma ON ma.name = au.parent
+            JOIN `tabLMS Module` m ON m.name = ma.module
             WHERE au.user = %s AND ma.is_mandatory = 1
             AND DATE_ADD(ma.creation, INTERVAL ma.duration DAY) >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
         """
@@ -54,6 +48,7 @@ class BadgeEvaluator:
             FROM `tabLMS Module Tracker` tr
             JOIN `tabLMS Assignment User` au ON au.user = tr.user
             JOIN `tabLMS Module Assignment` ma ON ma.name = au.parent AND ma.module = tr.module
+            JOIN `tabLMS Module` m ON m.name = tr.module
             WHERE tr.user = %s AND tr.status = 'Completed' AND ma.is_mandatory = 1
             AND DATE_ADD(ma.creation, INTERVAL ma.duration DAY) >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
             AND tr.completed_on <= DATE_ADD(ma.creation, INTERVAL ma.duration DAY)
@@ -71,6 +66,7 @@ class BadgeEvaluator:
             FROM `tabLMS Module Tracker` tr
             JOIN `tabLMS Assignment User` au ON au.user = tr.user
             JOIN `tabLMS Module Assignment` ma ON ma.name = au.parent AND ma.module = tr.module
+            JOIN `tabLMS Module` m ON m.name = tr.module
             WHERE tr.user = %s AND tr.status = 'Completed' AND ma.is_mandatory = 1
             AND tr.completed_on <= DATE_SUB(DATE_ADD(ma.creation, INTERVAL ma.duration DAY), INTERVAL 2 DAY)
         """
@@ -83,9 +79,10 @@ class BadgeEvaluator:
         # We query for 30 distinct days of activity within the last 30 days.
         target = badge.target_count or 30
         query = """
-            SELECT COUNT(DISTINCT DATE(modified))
-            FROM `tabLMS Module Tracker`
-            WHERE user = %s AND status NOT IN ('Unassigned', 'Not started') AND modified >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            SELECT COUNT(DISTINCT DATE(tr.modified))
+            FROM `tabLMS Module Tracker` tr
+            JOIN `tabLMS Module` m ON m.name = tr.module
+            WHERE tr.user = %s AND tr.status NOT IN ('Unassigned', 'Not started') AND tr.modified >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
         """
         count = frappe.db.sql(query, (self.user, target))[0][0] or 0
         progress = min((count / target) * 100, 100)
@@ -97,10 +94,11 @@ class BadgeEvaluator:
         min_score = badge.minimum_score or 90
         
         query = """
-            SELECT total_score
-            FROM `tabLMS Module Tracker`
-            WHERE user = %s AND status = 'Completed' AND total_score > 0
-            ORDER BY completed_on DESC
+            SELECT tr.total_score
+            FROM `tabLMS Module Tracker` tr
+            JOIN `tabLMS Module` m ON m.name = tr.module
+            WHERE tr.user = %s AND tr.status = 'Completed' AND tr.total_score > 0
+            ORDER BY tr.completed_on DESC
             LIMIT %s
         """
         scores = frappe.db.sql(query, (self.user, target_count))
@@ -121,6 +119,7 @@ class BadgeEvaluator:
         query = """
             SELECT count(DISTINCT tr.module)
             FROM `tabLMS Module Tracker` tr
+            JOIN `tabLMS Module` m ON m.name = tr.module
             WHERE tr.user = %s AND tr.status = 'Completed'
             AND NOT EXISTS (
                 SELECT 1 
@@ -140,6 +139,7 @@ class BadgeEvaluator:
         query_due = """
             SELECT count(ma.module)
             FROM `tabLMS Module Assignment` ma JOIN `tabLMS Assignment User` au ON ma.name = au.parent
+            JOIN `tabLMS Module` m ON m.name = ma.module
             WHERE au.user = %s AND ma.is_mandatory = 1 AND DATE_ADD(ma.creation, INTERVAL ma.duration DAY) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
         """
         total_due = frappe.db.sql(query_due, self.user)[0][0] or 0
@@ -148,6 +148,7 @@ class BadgeEvaluator:
                 SELECT count(DISTINCT tr.module)
                 FROM `tabLMS Module Tracker` tr JOIN `tabLMS Assignment User` au ON tr.user = au.user
                 JOIN `tabLMS Module Assignment` ma ON ma.name = au.parent AND ma.module = tr.module
+                JOIN `tabLMS Module` m ON m.name = tr.module
                 WHERE tr.user = %s AND tr.status = 'Completed' AND ma.is_mandatory = 1
                 AND DATE_ADD(ma.creation, INTERVAL ma.duration DAY) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) AND tr.completed_on <= DATE_ADD(ma.creation, INTERVAL ma.duration DAY)
             """
@@ -157,11 +158,11 @@ class BadgeEvaluator:
             on_time_pct = 0
             
         # 2. Assessment average
-        query_score = "SELECT AVG(total_score) FROM `tabLMS Module Tracker` WHERE user = %s AND status = 'Completed' AND total_score > 0"
+        query_score = "SELECT AVG(tr.total_score) FROM `tabLMS Module Tracker` tr JOIN `tabLMS Module` m ON m.name = tr.module WHERE tr.user = %s AND tr.status = 'Completed' AND tr.total_score > 0"
         avg_score = frappe.db.sql(query_score, self.user)[0][0] or 0
         
         # 3. 3 months consistency (e.g. 90 days of activity)
-        query_days = "SELECT COUNT(DISTINCT DATE(modified)) FROM `tabLMS Module Tracker` WHERE user = %s AND status NOT IN ('Unassigned', 'Not started') AND modified >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"
+        query_days = "SELECT COUNT(DISTINCT DATE(tr.modified)) FROM `tabLMS Module Tracker` tr JOIN `tabLMS Module` m ON m.name = tr.module WHERE tr.user = %s AND tr.status NOT IN ('Unassigned', 'Not started') AND tr.modified >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"
         active_days = frappe.db.sql(query_days, self.user)[0][0] or 0
         
         # Evaluate Progress Multipliers
@@ -197,15 +198,6 @@ def get_learner_badges(user_id=None):
         fields=["name", "badge_name", "description", "achievement_criteria", "badge_image as image", "minimum_score", "target_count"]
     )
     
-    # Fetch dependencies dynamically
-    badge_dependencies = frappe.get_all(
-        "LMS Badge Dependency",
-        fields=["parent", "badge"]
-    )
-    deps_map = {}
-    for d in badge_dependencies:
-        deps_map.setdefault(d.parent, []).append(d.badge)
-    
     # Fetch recently completed modules for 'Related Learning'
     recently_completed = frappe.get_all(
         "LMS Module Tracker",
@@ -220,7 +212,7 @@ def get_learner_badges(user_id=None):
         if title:
             related_learning.append({"title": title, "progress": 100})
 
-    evaluator = BadgeEvaluator(user, earned_map, deps_map)
+    evaluator = BadgeEvaluator(user, earned_map, {})
     results = []
     newly_awarded = []
 
@@ -231,7 +223,6 @@ def get_learner_badges(user_id=None):
         earners_percent = int(round((earned_count / total_users) * 100))
         
         earned_on = earned_map.get(b.name)
-        dep_count = len(deps_map.get(b.badge_name, []))
         if earned_on:
             results.append({
                 "id": b.name,
@@ -242,13 +233,12 @@ def get_learner_badges(user_id=None):
                 "earned": True,
                 "earnedOn": str(earned_on),
                 "relatedLearning": related_learning,
-                "earnersPercent": earners_percent,
-                "depCount": dep_count
+                "earnersPercent": earners_percent
             })
         else:
             progress, label, dependency_msg = evaluator.evaluate(b)
             progress = int(round(progress))
-            if progress >= 100 and not dependency_msg:
+            if progress >= 100:
                 doc = frappe.get_doc({
                     "doctype": "LMS Learner Badge",
                     "user": user,
@@ -268,8 +258,7 @@ def get_learner_badges(user_id=None):
                     "earned": True,
                     "earnedOn": str(doc.awarded_on),
                     "relatedLearning": related_learning,
-                    "earnersPercent": earners_percent,
-                    "depCount": dep_count
+                    "earnersPercent": earners_percent
                 })
             else:
                 results.append({
@@ -281,10 +270,8 @@ def get_learner_badges(user_id=None):
                     "earned": False,
                     "progress": progress,
                     "progressLabel": f"{progress}%",
-                    "dependencyWarning": dependency_msg,
                     "relatedLearning": related_learning,
-                    "earnersPercent": earners_percent,
-                    "depCount": dep_count
+                    "earnersPercent": earners_percent
                 })
 
     if newly_awarded:

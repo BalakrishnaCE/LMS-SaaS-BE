@@ -378,9 +378,9 @@ def get_learner_module_viewer_data(module_id):
         LIMIT 1
     """, {"user": user, "module": module_id}, as_dict=True)
 
-    if assignment and assignment[0].duration:
-        from frappe.utils import add_days, getdate, today
-        start = getdate(assignment[0].started_on) if assignment[0].started_on else getdate(today())
+    if assignment and assignment[0].duration and assignment[0].started_on:
+        from frappe.utils import add_days, getdate
+        start = getdate(assignment[0].started_on)
         due = getdate(add_days(start, int(assignment[0].duration)))
         metadata["dueDate"] = str(due)
 

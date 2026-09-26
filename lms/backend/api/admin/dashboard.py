@@ -462,7 +462,7 @@ def get_learning_insights():
     teams = frappe.get_all("LMS Team", fields=["name", "team_name"])
     user_team_map = {}
     for t in teams:
-        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
+        members = frappe.get_all("LMS Team Member", filters={"parent": t.name, "parentfield": "learners"}, fields=["user"])
         for m in members:
             user_team_map[m.user] = t.team_name
             

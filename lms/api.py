@@ -13,45 +13,70 @@ def get_tenant_settings():
         # Merge the distinct discussion toggle into features for unified frontend access
         features["Discussions"] = bool(settings.enable_discussions)
         return {
+            # Brand Identity
             "color": settings.primary_color,
-            "logo": settings.brand_logo,
+            "logo": settings.primary_logo,
+            "light_logo": settings.light_logo,
+            "app_icon": settings.app_icon,
+            # Brand Color & Theme
+            "default_theme": settings.default_theme or "Light",
+            # General
             "brand_name": settings.brand_name,
-            "brand_tagline": settings.brand_tagline,
-            "support_email": settings.support_email,
-            "login_label": settings.login_label,
-            "login_title": settings.login_title,
-            "login_subtitle": settings.login_subtitle,
-            "login_tagline": settings.login_tagline,
-            "login_background_image": settings.login_background_image,
+            "organization_website": settings.organization_website,
+            "industry": settings.industry,
+            "company_size": settings.company_size,
+            "learning_support_contact": settings.learning_support_contact,
+            "support_link": settings.support_link,
+            # Features
             "features": features
         }
     except Exception:
         return {
             "color": None,
             "logo": None,
+            "light_logo": None,
+            "app_icon": None,
+            "default_theme": "Light",
             "brand_name": None,
-            "brand_tagline": None,
-            "support_email": None,
-            "login_label": None,
-            "login_title": None,
-            "login_subtitle": None,
-            "login_tagline": None,
-            "login_background_image": None,
+            "organization_website": None,
+            "industry": None,
+            "company_size": None,
+            "learning_support_contact": None,
+            "support_link": None,
             "features": {}
         }
 
 @frappe.whitelist()
-def save_tenant_settings(color=None, logo=None):
+def save_tenant_settings(**kwargs):
     # Security: Ensure only authorized users (System Managers) can modify tenant branding
     if not frappe.has_permission("LMS Settings", "write"):
         frappe.throw("Not permitted", frappe.PermissionError)
         
     settings = frappe.get_single("LMS Settings")
-    if color:
-        settings.primary_color = color
-    if logo is not None:
-        settings.brand_logo = logo
+    
+    # List of allowed fields that can be updated via this API
+    allowed_fields = [
+        # Brand Identity
+        "primary_logo", "light_logo", "app_icon", "brand_name",
+        # Brand Color & Theme
+        "primary_color", "default_theme",
+        # General
+        "organization_website", "industry",
+        "company_size", "learning_support_contact", "support_link"
+    ]
+    
+    # Handle frontend aliases for backwards compatibility
+    if "color" in kwargs:
+        settings.primary_color = kwargs["color"]
         
+    # 'logo' maps to the new 'primary_logo' field
+    if "logo" in kwargs:
+        settings.primary_logo = kwargs["logo"]
+        
+    for field in allowed_fields:
+        if field in kwargs:
+            setattr(settings, field, kwargs[field])
+            
     settings.save(ignore_permissions=True)
     return {"status": "success"}
 
@@ -147,3 +172,23 @@ def validate_iframe_url(url):
     except requests.exceptions.RequestException:
         # If DNS fails, connection times out, etc.
         return {"state": "unavailable"}
+
+
+@frappe.whitelist()
+def get_user_profile():
+    user = frappe.session.user
+    if user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+        
+    doc = frappe.get_doc("User", user)
+    roles = [r.role for r in doc.roles]
+    
+    return {
+        "name": doc.name,
+        "email": doc.email,
+        "full_name": doc.full_name,
+        "first_name": doc.first_name,
+        "last_name": doc.last_name,
+        "user_image": doc.user_image,
+        "roles": roles
+    }

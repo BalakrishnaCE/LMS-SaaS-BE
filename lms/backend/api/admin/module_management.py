@@ -860,15 +860,19 @@ def get_module_learners(module_name):
     # Fetch assignments
     assignments = frappe.get_all("LMS Module Assignment", filters={"module": module_name}, fields=["name", "assignment_type", "duration"])
     
+    # Build set of admin users to exclude (LMS-Admin or System Manager)
+    admin_role_entries = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
+    admin_users_set = set(admin_role_entries)
+
     users = {}
-    
+
     for a in assignments:
         duration = a.duration or 0
         creation_date = a.creation
         if a.assignment_type == "Everyone":
             # Dynamically resolve to all active learners (has LMS-Learner or LMS-TL role)
             lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
-            valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
+            valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"] and r.parent not in admin_users_set]
             
             all_users = frappe.get_all(
                 "User",
@@ -884,14 +888,14 @@ def get_module_learners(module_name):
         elif a.assignment_type == "Manual":
             learners = frappe.get_all("LMS Assignment User", filters={"parent": a.name}, fields=["user"])
             for l in learners:
-                if l.user not in users:
+                if l.user not in users and l.user not in admin_users_set:
                     users[l.user] = {"duration": duration, "assigned_via": "Manual", "creation": creation_date}
         else:
             teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
             for t in teams:
-                members = frappe.get_all("LMS Team Member", filters={"parent": t.team}, fields=["user"])
+                members = frappe.get_all("LMS Team Member", filters={"parent": t.team, "parentfield": "learners"}, fields=["user"])
                 for m in members:
-                    if m.user not in users:
+                    if m.user not in users and m.user not in admin_users_set:
                         users[m.user] = {"duration": duration, "assigned_via": "Team", "team": t.team, "creation": creation_date}
 
 
