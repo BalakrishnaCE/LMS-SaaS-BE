@@ -125,7 +125,7 @@ def get_module_overview(module_id):
         else:  # Team
             teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
             for t in teams:
-                members = frappe.get_all("LMS Team Member", filters={"parent": t.team}, fields=["user"])
+                members = frappe.get_all("LMS Team Member", filters={"parent": t.team, "parentfield": "learners"}, fields=["user"])
                 for m in members:
                     if m.user not in assigned_users:
                         assigned_users[m.user] = {"duration": duration, "creation": creation_date}

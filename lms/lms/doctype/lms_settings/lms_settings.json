@@ -6,90 +6,129 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "brand_center_section",
+  "brand_identity_section_break",
   "brand_name",
-  "brand_tagline",
-  "brand_logo",
+  "primary_logo",
+  "light_logo",
+  "app_icon",
+  "brand_color_section_break",
   "primary_color",
+  "default_theme",
+  "general_section",
+  "organization_website",
+  "industry",
+  "company_size",
+  "learning_support_contact",
+  "support_link",
+  "features_section",
   "enable_discussions",
-  "support_email",
-  "login_page_section",
-  "login_label",
-  "login_title",
-  "login_subtitle",
-  "login_tagline",
-  "login_background_image",
   "feature_toggles"
  ],
  "fields": [
   {
-   "description": "The name of the application or company.",
+   "fieldname": "brand_center_section",
+   "fieldtype": "Section Break",
+   "label": "Brand Center"
+  },
+  {
+   "fieldname": "brand_identity_section_break",
+   "fieldtype": "Section Break",
+   "label": "Brand Identity"
+  },
+  {
+   "description": "The display name of the organisation or application.",
    "fieldname": "brand_name",
    "fieldtype": "Data",
    "label": "Brand Name"
   },
   {
-   "fieldname": "brand_tagline",
-   "fieldtype": "Data",
-   "label": "Brand Tagline",
-   "description": "Short tagline shown under the brand name (e.g. LEARNING FOR EVERYONE)"
-  },
-  {
-   "description": "Upload the brand logo file.",
-   "fieldname": "brand_logo",
+   "description": "Primary logo used throughout the LMS on light backgrounds. Upload SVG or PNG (max. 800x400px).",
+   "fieldname": "primary_logo",
    "fieldtype": "Attach Image",
-   "label": "Brand Logo"
+   "label": "Primary Logo"
   },
   {
-   "description": "Allows React frontend to fetch the hex code and change themes",
+   "description": "Light logo used when the client\u2019s branding creates a dark header or background. Upload SVG or PNG (max. 800x400px).",
+   "fieldname": "light_logo",
+   "fieldtype": "Attach Image",
+   "label": "Light Logo"
+  },
+  {
+   "description": "Used as the favicon, browser tab icon, and in compact spaces. Upload SVG or PNG (max. 600x400px).",
+   "fieldname": "app_icon",
+   "fieldtype": "Attach Image",
+   "label": "App Icon"
+  },
+  {
+   "fieldname": "brand_color_section_break",
+   "fieldtype": "Section Break",
+   "label": "Brand Color & Theme"
+  },
+  {
+   "default": "#0255E3",
+   "description": "Main accent color used dynamically across buttons, navigation, progress bars, and learner-facing experiences. The React frontend reads this and auto-generates hover, active, light, and subtle-background shades.",
    "fieldname": "primary_color",
    "fieldtype": "Color",
    "label": "Primary Color"
   },
   {
+   "default": "Light",
+   "description": "Default interface theme for all administrators and students. Can be overridden per-user.",
+   "fieldname": "default_theme",
+   "fieldtype": "Select",
+   "label": "Default Theme",
+   "options": "Light\nDark\nFollow Device Settings"
+  },
+  {
+   "fieldname": "general_section",
+   "fieldtype": "Section Break",
+   "label": "General"
+  },
+  {
+   "fieldname": "organization_website",
+   "fieldtype": "Data",
+   "label": "Organization Website",
+   "description": "The URL of the organization."
+  },
+  {
+   "fieldname": "industry",
+   "fieldtype": "Select",
+   "label": "Industry",
+   "options": "Technology\nHealthcare\nEducation\nManufacturing\nRetail\nFinance\nOther"
+  },
+  {
+   "fieldname": "company_size",
+   "fieldtype": "Select",
+   "label": "Company Size",
+   "options": "1-50\n51-200\n201-500\n501-1000\n1000+"
+  },
+  {
+   "fieldname": "learning_support_contact",
+   "fieldtype": "Data",
+   "label": "Learning Support Contact",
+   "description": "Name or team for support (e.g. HR Team)"
+  },
+  {
+   "fieldname": "support_link",
+   "fieldtype": "Data",
+   "label": "Support Link",
+   "description": "URL for support"
+  },
+  {
+   "fieldname": "features_section",
+   "fieldtype": "Section Break",
+   "label": "Features"
+  },
+  {
    "default": "0",
-   "description": "Toggle to enable or disable enable discussions.",
+   "description": "Toggle to enable or disable discussions.",
    "fieldname": "enable_discussions",
    "fieldtype": "Check",
    "label": "Enable Discussions"
   },
   {
-   "fieldname": "support_email",
-   "fieldtype": "Data",
-   "label": "Support Email",
-   "description": "Email address for users facing login issues"
-  },
-  {
-   "fieldname": "login_page_section",
-   "fieldtype": "Section Break",
-   "label": "Login Page Background"
-  },
-  {
-   "fieldname": "login_label",
-   "fieldtype": "Data",
-   "label": "Login Label"
-  },
-  {
-   "fieldname": "login_title",
-   "fieldtype": "Data",
-   "label": "Login Title"
-  },
-  {
-   "fieldname": "login_subtitle",
-   "fieldtype": "Text",
-   "label": "Login Subtitle"
-  },
-  {
-   "fieldname": "login_tagline",
-   "fieldtype": "Data",
-   "label": "Login Tagline"
-  },
-  {
-   "fieldname": "login_background_image",
-   "fieldtype": "Attach Image",
-   "label": "Login Background Image"
-  },
-  {
-   "description": "Allows new features to be toggled without schema changes",
+   "description": "Allows new features to be toggled without schema changes.",
    "fieldname": "feature_toggles",
    "fieldtype": "Table",
    "label": "Feature Toggles",
@@ -100,7 +139,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-11 13:31:49.157185",
+ "modified": "2026-09-23 05:00:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Settings",

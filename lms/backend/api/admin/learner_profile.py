@@ -47,6 +47,7 @@ def _evaluate_user_risks(users):
 
     current_date = getdate(today())
     fourteen_days_ago = add_days(today(), -14)
+    thirty_days_ago = getdate(add_days(today(), -30))
     
     user_evals = {}
     
@@ -73,7 +74,7 @@ def _evaluate_user_risks(users):
             
             module = modules_dict.get(t.module)
             if module and t.status != "Completed":
-                start_date = t.started_on or t.creation
+                start_date = t.started_on
                 if start_date and module.duration:
                     due_date = getdate(add_days(start_date, module.duration))
                     
@@ -161,10 +162,20 @@ def _evaluate_user_risks(users):
             "joining_date": user_joining_date.get(u.name),
             "has_trackers": len(u_trackers) > 0,
             "has_learner_role": u.name in user_has_learner_role,
-            # Active = at least one tracker record with status "In Progress" in module or LP tracker
+            # Active = had any tracker activity (In Progress, Completed, or Failed) in the last 30 days
             "has_in_progress": (
-                any(t.status == "In Progress" for t in u_trackers) or
-                any(t.status == "In Progress" for t in u_lp_trackers)
+                any(
+                    t.status in ("In Progress", "Completed", "Failed")
+                    and t.modified
+                    and getdate(t.modified) >= thirty_days_ago
+                    for t in u_trackers
+                ) or
+                any(
+                    t.status in ("In Progress", "Completed", "Failed")
+                    and t.modified
+                    and getdate(t.modified) >= thirty_days_ago
+                    for t in u_lp_trackers
+                )
             )
         }
         
@@ -183,10 +194,12 @@ def get_learner_kpis():
             "atRiskLearners": 0
         }
         
+    admin_roles_kpi = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
+    admin_users_kpi = set(admin_roles_kpi)
     learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     filters = {"name": ("!=", "Administrator")}
     if learner_roles:
-        allowed_roles = [r for r in learner_roles if r != "Administrator"]
+        allowed_roles = [r for r in learner_roles if r != "Administrator" and r not in admin_users_kpi]
         if user_filter is not None:
             allowed_roles = [r for r in allowed_roles if r in user_filter]
         filters["name"] = ("in", allowed_roles)
@@ -237,9 +250,11 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
         offset = 0
 
     filters = {"name": ("!=", "Administrator")}
+    admin_roles = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
+    admin_users = set(admin_roles)
     learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     if learner_roles:
-        allowed_roles = [r for r in learner_roles if r != "Administrator"]
+        allowed_roles = [r for r in learner_roles if r != "Administrator" and r not in admin_users]
         if user_filter is not None:
             allowed_roles = [r for r in allowed_roles if r in user_filter]
         filters["name"] = ("in", allowed_roles)
@@ -485,15 +500,18 @@ def get_learner_details(user_id):
     total_assessments = len(set([s.quiz for s in submissions]))
     
     quiz_attempts = {}
+    best_quiz_scores = {}
     for s in submissions:
         quiz_attempts[s.quiz] = quiz_attempts.get(s.quiz, 0) + 1
-        
+        if s.quiz not in best_quiz_scores or s.score > best_quiz_scores[s.quiz]:
+            best_quiz_scores[s.quiz] = s.score
+            
     retakes = sum(1 for q, count in quiz_attempts.items() if count > 1)
     
     avg_score = 0
     highest_score = 0
-    if submissions:
-        valid_scores = [s.score for s in submissions]
+    if best_quiz_scores:
+        valid_scores = list(best_quiz_scores.values())
         if valid_scores:
             avg_score = sum(valid_scores) / len(valid_scores)
             highest_score = max(valid_scores)

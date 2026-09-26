@@ -419,7 +419,7 @@ def get_department_performance():
     
     results = []
     for t in teams:
-        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
+        members = frappe.get_all("LMS Team Member", filters={"parent": t.name, "parentfield": "learners"}, fields=["user"])
         member_emails = [m.user for m in members]
         
         if not member_emails:
@@ -483,7 +483,7 @@ def get_department_assessment_performance(assessment_type="all"):
 
     results = []
     for t in teams:
-        members = frappe.get_all("LMS Team Member", filters={"parent": t.name}, fields=["user"])
+        members = frappe.get_all("LMS Team Member", filters={"parent": t.name, "parentfield": "learners"}, fields=["user"])
         member_emails = [m.user for m in members]
 
         if not member_emails:

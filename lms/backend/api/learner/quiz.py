@@ -38,11 +38,17 @@ def submit_quiz(module, content_reference, score=None, passed=0, time_taken=0, r
 
     user = frappe.session.user
 
+    # Admins previewing quizzes in admin panel should not have submissions tracked
+    from lms.backend.api.learner.progress import _is_admin_user
+    if _is_admin_user(user):
+        return {"status": "skipped", "reason": "admin user"}
+
     # ── 1. Ensure a tracker exists ────────────────────────────────────────────
     tracker = frappe.get_all(
         "LMS Module Tracker",
         filters={"user": user, "module": module},
         limit=1
+
     )
     if not tracker:
         tracker_doc = frappe.get_doc({
