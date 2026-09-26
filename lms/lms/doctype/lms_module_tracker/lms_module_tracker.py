@@ -18,6 +18,8 @@ class LMSModuleTracker(Document):
 
 		# ── Collect all content items in the module (excluding flashcards) ──────
 		total_items = 0
+		total_scored_items = 0
+		SCORED_TYPES = ("LMS Quiz Content", "LMS Assessment Content")
 		for ml in module_doc.get("lessons", []):
 			if not ml.lesson: continue
 			lesson_doc = frappe.get_doc("LMS Lesson", ml.lesson)
@@ -27,6 +29,8 @@ class LMSModuleTracker(Document):
 				for c in chapter_doc.get("contents", []):
 					if c.content_type != "LMS Flashcard Content":
 						total_items += 1
+					if c.content_type in SCORED_TYPES:
+						total_scored_items += 1
 
 		# ── Build a quick lookup of content_progress by reference ────────────────
 		cp_map = {cp.content_reference: cp for cp in self.get("content_progress", [])}
@@ -35,7 +39,6 @@ class LMSModuleTracker(Document):
 		# Non-scored content (video/text/image) → done when status == "Completed"
 		# Scored content (quiz/assessment)      → done only when score >= passing threshold
 		#   (This means a failed quiz stays uncounted, giving correct progress %)
-		SCORED_TYPES = ("LMS Quiz Content", "LMS Assessment Content")
 		completed_items = 0
 		scored_items = 0
 		total_score_sum = 0.0
@@ -59,8 +62,8 @@ class LMSModuleTracker(Document):
 			self.progress_percentage = round((completed_items / total_items) * 100)
 
 		# ── Total score (average of all scored items) ────────────────────────────
-		if scored_items > 0:
-			self.total_score = round(total_score_sum / scored_items, 2)
+		if total_scored_items > 0:
+			self.total_score = round(total_score_sum / total_scored_items, 2)
 		else:
 			self.total_score = -1
 
