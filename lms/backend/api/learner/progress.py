@@ -402,7 +402,10 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         if doc.is_completed:
             doc.status = "Completed"
             content_just_completed = True
-        doc.insert(ignore_permissions=True)
+        try:
+            doc.insert(ignore_permissions=True)
+        except frappe.LinkValidationError:
+            return {"status": "error", "message": "Content no longer exists"}
     else:
         doc = frappe.get_doc("LMS Content Progress", cp[0].name)
         if content_type:
@@ -421,7 +424,10 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
                 doc.status = "Completed"
                 content_just_completed = True
                 
-        doc.save(ignore_permissions=True)
+        try:
+            doc.save(ignore_permissions=True)
+        except frappe.LinkValidationError:
+            return {"status": "error", "message": "Content no longer exists"}
         
 
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)

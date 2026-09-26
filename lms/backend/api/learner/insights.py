@@ -87,6 +87,19 @@ def get_recently_assigned():
         if len(unique_assignments) == 5:
             break
             
+    # Get module details (title, category)
+    module_names = [a.module for a in unique_assignments]
+    modules_data = frappe.get_all("LMS Module", filters={"name": ["in", module_names]}, fields=["name", "module_name"])
+    module_map = {m.name: m.module_name for m in modules_data}
+    
+    categories_data = frappe.get_all("LMS Module Category", filters={"parent": ["in", module_names]}, fields=["parent", "category"])
+    category_map = {}
+    for c in categories_data:
+        if c.parent not in category_map:
+            category_map[c.parent] = c.category # Just take the first category
+            
+    from frappe.utils import add_days, formatdate
+    
     results = []
     for a in unique_assignments:
         trackers = frappe.get_all("LMS Module Tracker", filters={"module": a.module}, fields=["status"])
@@ -94,12 +107,20 @@ def get_recently_assigned():
         completed = len([t for t in trackers if t.status == "Completed"])
         progress = int((completed / total_assigned) * 100) if total_assigned > 0 else 0
         
+        # Calculate Due Date
+        due_date_str = "No Limit"
+        if a.duration:
+            due_date = add_days(a.creation, a.duration)
+            due_date_str = formatdate(due_date, "MMM d, yyyy")
+            
         results.append({
-            "id": a.name,
-            "name": a.module,
+            "id": a.name, # Assignment ID
+            "moduleId": a.module, # The actual module ID
+            "title": module_map.get(a.module, a.module),
+            "type": "Module",
+            "category": category_map.get(a.module, "General"),
             "assignedLearners": total_assigned,
-            "dueDate": f"{a.duration} Days" if a.duration else "No Limit",
-            "progress": progress,
-            "actions": ["View Progress", "Send Reminder"]
+            "dueDate": due_date_str,
+            "progress": progress
         })
     return results
