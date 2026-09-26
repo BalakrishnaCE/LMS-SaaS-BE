@@ -226,6 +226,16 @@ def get_module_overview(module_id):
     if estimated_hours is None or estimated_hours == 0:
         estimated_hours = get_estimated_hours_from_curriculum(module_id)
 
+    lesson_titles = []
+    if module.get("lessons"):
+        lesson_ids = [l.lesson for l in module.get("lessons") if l.lesson]
+        if lesson_ids:
+            lessons_data = frappe.get_all("LMS Lesson", filters={"name": ("in", lesson_ids)}, fields=["name", "lesson_name"])
+            lesson_map = {d.name: d.lesson_name for d in lessons_data}
+            for l in module.get("lessons"):
+                if l.lesson:
+                    lesson_titles.append({"title": lesson_map.get(l.lesson, l.lesson)})
+
     return {
         "module": {
             "id": module.name,
@@ -243,6 +253,7 @@ def get_module_overview(module_id):
             "version_history": version_history,
             "categories": categories,
             "lesson_count": lesson_count,
+            "lessons": lesson_titles,
             "estimated_hours": estimated_hours,
             "created_by": module.owner,
             "created_by_name": frappe.db.get_value("User", module.owner, "full_name") or module.owner,

@@ -5,6 +5,11 @@ import frappe
 from frappe.model.document import Document
 
 class LMSLearningPathAssignment(Document):
+    def validate(self):
+        if not self.duration:
+            path_duration = frappe.db.get_value("LMS Learning Path", self.learning_path, "duration")
+            self.duration = path_duration or 0
+
     def on_update(self):
         self.create_trackers()
 

@@ -5,6 +5,11 @@ import frappe
 from frappe.model.document import Document
 
 class LMSModuleAssignment(Document):
+    def validate(self):
+        if not self.duration:
+            module_duration = frappe.db.get_value("LMS Module", self.module, "duration")
+            self.duration = module_duration or 0
+
     def on_update(self):
         self.create_trackers()
 
