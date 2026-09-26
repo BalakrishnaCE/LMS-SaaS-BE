@@ -6,6 +6,13 @@ from frappe.model.document import Document
 
 
 class LMSChapter(Document):
+	def validate(self):
+		import frappe
+		if hasattr(self, "contents") and self.contents:
+			for row in reversed(self.contents):
+				if not row.content_type or not row.content_reference or not frappe.db.exists(row.content_type, row.content_reference):
+					self.remove(row)
+
 	def on_update(self):
 		self.update_lessons()
 

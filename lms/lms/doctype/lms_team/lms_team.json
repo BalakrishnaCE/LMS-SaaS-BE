@@ -33,7 +33,8 @@
    "fieldname": "team_leads",
    "fieldtype": "Table",
    "label": "Team Leads",
-   "options": "LMS Team Lead"
+   "options": "LMS Team Lead",
+   "reqd": 1
   },
   {
    "description": "lists all members belonging to this team",
