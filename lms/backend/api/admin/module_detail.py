@@ -35,7 +35,7 @@ def get_ai_insights(module_id):
     else:
         insights.append(f"Only {completion_rate}% completion rate. This module may need attention — consider reviewing its difficulty or length.")
 
-    scores = [t.total_score for t in completed if t.total_score is not None]
+    scores = [t.total_score for t in completed if t.total_score is not None and t.total_score >= 0]
     if scores:
         avg_score = round(sum(scores) / len(scores))
         if avg_score < 60:
@@ -48,7 +48,7 @@ def get_ai_insights(module_id):
     if not_started > 0:
         insights.append(f"{not_started} learner{'s' if not_started > 1 else ''} haven't started yet. A nudge notification could help.")
 
-    stalled = [t for t in in_prog if not t.total_score]
+    stalled = [t for t in in_prog if t.total_score is None or t.total_score < 0]
     if len(stalled) > 0:
         insights.append(f"{len(stalled)} learner{'s' if len(stalled) > 1 else ''} started but haven't completed any assessments.")
 

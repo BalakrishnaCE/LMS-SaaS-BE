@@ -169,21 +169,37 @@ def get_manager_metrics():
         r_trend = f"+{r_pct}% {trend_label}" if r_pct >= 0 else f"{r_pct}% {trend_label}"
 
         # TL's own pending learning (not time-bounded — current state)
+        from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
         today_dt = getdate(today())
+        
+        tl_assigned = get_all_assigned_modules_for_learner(tl_user)
+        assigned_modules = list(set([a["module"] for a in tl_assigned]))
+
         tl_trackers = frappe.get_all(
             "LMS Module Tracker",
-            filters={"user": tl_user, "status": ["!=", "Completed"]},
-            fields=["module", "started_on"],
+            filters={"user": tl_user},
+            fields=["module", "status", "started_on"],
         )
-        pending_count = len(tl_trackers)
-        due_this_week = 0
+        
         for t in tl_trackers:
-            if t.started_on:
-                a = assignment_map.get(t.module)
-                if a and a.duration:
-                    due = add_days(getdate(t.started_on), a.duration)
-                    if today_dt <= getdate(due) <= add_days(today_dt, 7):
-                        due_this_week += 1
+            if t.module not in assigned_modules and t.status != "Unassigned":
+                assigned_modules.append(t.module)
+
+        tracker_map = {t.module: t for t in tl_trackers}
+        pending_modules = [m for m in assigned_modules if tracker_map.get(m, {}).get("status") not in ("Completed", "Unassigned")]
+
+        pending_count = len(pending_modules)
+        due_this_week = 0
+        tl_assigned_map = {a["module"]: a for a in tl_assigned}
+        
+        for m in pending_modules:
+            a = tl_assigned_map.get(m)
+            if a and a.get("duration"):
+                tracker = tracker_map.get(m, {})
+                start = getdate(tracker.get("started_on")) if tracker.get("started_on") else today_dt
+                due = add_days(start, int(a.get("duration")))
+                if today_dt <= getdate(due) <= add_days(today_dt, 7):
+                    due_this_week += 1
 
         labels = [
             getdate(dt).strftime("%b") if timeframe == "year" else f"Week {i+1}"

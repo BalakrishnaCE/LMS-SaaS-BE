@@ -402,6 +402,46 @@ def get_saved_items():
             "isSaved": True
         })
         
+    # 2. Fetch saved learning paths
+    path_trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user, "is_saved": 1},
+        fields=["learning_path", "status", "progress_percentage", "started_on", "name", "creation"],
+        order_by="creation desc"
+    )
+    
+    for p in path_trackers:
+        path_doc = frappe.get_value(
+            "LMS Learning Path",
+            p.learning_path,
+            ["path_name", "status", "image"],
+            as_dict=True
+        )
+        if not path_doc or path_doc.status != 'Published':
+            continue
+            
+        total_items = frappe.db.count("LMS Learning Path Course", {"parent": p.learning_path})
+        progress_val = p.progress_percentage or 0
+        completed_items = round(total_items * (progress_val / 100))
+        
+        results.append({
+            "id": p.learning_path,
+            "title": path_doc.path_name,
+            "category": "Learning Path",
+            "type": "Path",
+            "lessonsCount": total_items,
+            "duration": "0 min",
+            "daysLeft": None,
+            "isOverdue": False,
+            "completionRate": p.progress_percentage or 0,
+            "completedCount": completed_items,
+            "totalCount": total_items,
+            "status": p.status,
+            "isRequired": False,
+            "image": path_doc.image,
+            "isSaved": True
+        })
+
     return results
 
 
@@ -427,7 +467,7 @@ def get_continue_learning(item_type="module"):
             SELECT 'Module' as type, t.module as id, t.name as tracker_name, t.progress_percentage, t.modified
             FROM `tabLMS Module Tracker` t
             INNER JOIN `tabLMS Module` m ON m.name = t.module
-            WHERE t.user = %s AND t.status = 'In Progress' AND m.status = 'Published'
+            WHERE t.user = %s AND t.status = 'In Progress' AND m.status = 'Published' AND t.progress_percentage < 100
         """)
         params.append(user)
         
@@ -436,7 +476,7 @@ def get_continue_learning(item_type="module"):
             SELECT 'Path' as type, t.learning_path as id, t.name as tracker_name, t.progress_percentage, t.modified
             FROM `tabLMS Learning Path Tracker` t
             INNER JOIN `tabLMS Learning Path` lp ON lp.name = t.learning_path
-            WHERE t.user = %s AND t.status = 'In Progress' AND lp.status = 'Published'
+            WHERE t.user = %s AND t.status = 'In Progress' AND lp.status = 'Published' AND t.progress_percentage < 100
         """)
         params.append(user)
         
@@ -468,6 +508,7 @@ def get_continue_learning(item_type="module"):
                 WHERE t.user = %s
                   AND m.status = 'Published'
                   AND t.status = 'Not started'
+                  AND t.progress_percentage < 100
             """)
             ns_params.append(user)
             
@@ -479,6 +520,7 @@ def get_continue_learning(item_type="module"):
                 WHERE t.user = %s
                   AND lp.status = 'Published'
                   AND t.status = 'Not started'
+                  AND t.progress_percentage < 100
             """)
             ns_params.append(user)
             

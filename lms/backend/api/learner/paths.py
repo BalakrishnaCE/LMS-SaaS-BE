@@ -160,7 +160,7 @@ def get_learner_paths():
     user_lp_trackers = frappe.get_all(
         "LMS Learning Path Tracker",
         filters={"user": user},
-        fields=["learning_path", "status", "progress_percentage"]
+        fields=["learning_path", "status", "progress_percentage", "is_saved"]
     )
     assigned_lp_names = [t.learning_path for t in user_lp_trackers]
     lp_tracker_map = {t.learning_path: t for t in user_lp_trackers}
@@ -229,6 +229,10 @@ def get_learner_paths():
             path.learner_status = "In Progress"
         else:
             path.learner_status = "Not Started"
+            
+        # Get is_saved from the tracker
+        tracker = lp_tracker_map.get(path.name)
+        path.isSaved = bool(tracker.is_saved) if tracker else False
             
         path.id = path.name
 
