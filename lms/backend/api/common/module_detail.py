@@ -541,14 +541,13 @@ def revoke_certificates(certificate_ids, reason=None, custom_reason=None):
         certificate_ids = json.loads(certificate_ids)
         
     for cert_id in certificate_ids:
-        cert = frappe.get_doc("LMS Certificate", cert_id)
-        cert.status = "Revoked"
-        cert.revocation_reason = reason
-        cert.custom_revocation_reason = custom_reason
-        cert.revoked_by = frappe.session.user
-        cert.revoked_on = frappe.utils.now_datetime()
-        cert.flags.ignore_links = True
-        cert.save(ignore_permissions=True)
+        frappe.db.set_value("LMS Certificate", cert_id, {
+            "status": "Revoked",
+            "revocation_reason": reason,
+            "custom_revocation_reason": custom_reason,
+            "revoked_by": frappe.session.user,
+            "revoked_on": frappe.utils.now_datetime()
+        })
         
     frappe.db.commit()
     return True

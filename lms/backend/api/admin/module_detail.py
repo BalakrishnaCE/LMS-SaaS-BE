@@ -211,18 +211,25 @@ def update_question(question_id, question_text, options, explanation=""):
     if isinstance(options, str):
         options = json.loads(options)
         
-    doc = frappe.get_doc("LMS Quiz Question", question_id)
-    doc.question_text = question_text
-    doc.explanation = explanation
+    frappe.db.sql("""
+        UPDATE `tabLMS Quiz Question` 
+        SET question_text=%s, explanation=%s, modified=%s, modified_by=%s
+        WHERE name=%s
+    """, (question_text, explanation, frappe.utils.now_datetime(), frappe.session.user, question_id))
     
-    doc.set("options", [])
-    for opt in options:
-        doc.append("options", {
+    frappe.db.sql("DELETE FROM `tabLMS Quiz Question Option` WHERE parent=%s", (question_id,))
+    
+    for idx, opt in enumerate(options):
+        frappe.get_doc({
+            "doctype": "LMS Quiz Question Option",
+            "parent": question_id,
+            "parenttype": "LMS Quiz Question",
+            "parentfield": "options",
             "option_text": opt.get("text"),
-            "is_correct": opt.get("is_correct", 0)
-        })
+            "is_correct": opt.get("is_correct", 0),
+            "idx": idx + 1
+        }).insert(ignore_permissions=True)
         
-    doc.save(ignore_permissions=True)
     frappe.db.commit()
     return "success"
 
@@ -230,11 +237,7 @@ def update_question(question_id, question_text, options, explanation=""):
 @frappe.whitelist()
 def delete_question(quiz_name, question_id):
     if frappe.db.exists("LMS Quiz", quiz_name):
-        quiz = frappe.get_doc("LMS Quiz", quiz_name)
-        new_questions = [q for q in quiz.questions if str(q.quiz_question) != str(question_id)]
-        quiz.set("questions", new_questions)
-        quiz.save(ignore_permissions=True)
-        
+        frappe.db.sql("DELETE FROM `tabLMS Quiz Child` WHERE parent=%s AND quiz_question=%s", (quiz_name, question_id))
     frappe.db.sql("DELETE FROM `tabLMS Quiz Response` WHERE question=%s", (question_id,))
     frappe.delete_doc("LMS Quiz Question", question_id, ignore_permissions=True, force=1)
     frappe.db.commit()

@@ -156,19 +156,21 @@ def add_lesson(module_name, lesson_name, description=""):
     })
     lesson.insert(ignore_permissions=True)
         
-    # Attach to module
-    module = frappe.get_doc("LMS Module", module_name)
-    
     # Check if already attached
-    for ml in module.lessons:
-        if ml.lesson == lesson.name:
-            return {"status": "already_exists", "lesson": lesson.name}
-            
-    module.append("lessons", {
+    if frappe.db.exists("LMS Module Lesson Child", {"parent": module_name, "lesson": lesson.name}):
+        return {"status": "already_exists", "lesson": lesson.name}
+        
+    current_count = frappe.db.count("LMS Module Lesson Child", {"parent": module_name})
+    
+    frappe.get_doc({
+        "doctype": "LMS Module Lesson Child",
+        "parent": module_name,
+        "parenttype": "LMS Module",
+        "parentfield": "lessons",
         "lesson": lesson.name,
-        "order": len(module.lessons) + 1
-    })
-    module.save(ignore_permissions=True)
+        "order": current_count + 1,
+        "idx": current_count + 1
+    }).insert(ignore_permissions=True)
     
     return {"status": "success", "lesson": lesson.name}
 
@@ -221,28 +223,35 @@ def add_chapter(lesson_name, chapter_title, content_type="document", content_dat
                 
                 content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
                 
-                chapter.append("contents", {
+                frappe.get_doc({
+                    "doctype": "LMS Chapter Content",
+                    "parent": chapter.name,
+                    "parenttype": "LMS Chapter",
+                    "parentfield": "contents",
                     "content_type": doctype_name,
                     "content_reference": content_doc.name,
-                    "order": 1
-                })
-                chapter.save(ignore_permissions=True)
+                    "order": 1,
+                    "idx": 1
+                }).insert(ignore_permissions=True)
             except Exception as inner_e:
                 frappe.log_error("Failed to create content doc", str(inner_e))
                 pass # If content creation fails due to strict validations, we still have the Chapter
                 
-        lesson = frappe.get_doc("LMS Lesson", lesson_name)
+        # Check if already attached
+        if frappe.db.exists("LMS Lesson Chapter", {"parent": lesson_name, "chapter": chapter.name}):
+            return {"status": "already_exists", "chapter": chapter.name}
+            
+        current_count = frappe.db.count("LMS Lesson Chapter", {"parent": lesson_name})
         
-        # Check if attached (in rare cases of identical IDs)
-        for ch in lesson.chapters:
-            if ch.chapter == chapter.name:
-                return {"status": "already_exists", "chapter": chapter.name}
-                
-        lesson.append("chapters", {
+        frappe.get_doc({
+            "doctype": "LMS Lesson Chapter",
+            "parent": lesson_name,
+            "parenttype": "LMS Lesson",
+            "parentfield": "chapters",
             "chapter": chapter.name,
-            "order": len(lesson.chapters) + 1
-        })
-        lesson.save(ignore_permissions=True)
+            "order": current_count + 1,
+            "idx": current_count + 1
+        }).insert(ignore_permissions=True)
         
         return {"status": "success", "chapter": chapter.name}
         
@@ -292,14 +301,19 @@ def add_content_block(chapter_name, content_type, title=None, content_data=None)
         
         content_doc.insert(ignore_permissions=True, ignore_mandatory=True)
         
-        new_order = len(chapter.contents) + 1
+        current_count = frappe.db.count("LMS Chapter Content", {"parent": chapter_name})
+        new_order = current_count + 1
         
-        chapter.append("contents", {
+        frappe.get_doc({
+            "doctype": "LMS Chapter Content",
+            "parent": chapter_name,
+            "parenttype": "LMS Chapter",
+            "parentfield": "contents",
             "content_type": doctype_name,
             "content_reference": content_doc.name,
-            "order": new_order
-        })
-        chapter.save(ignore_permissions=True)
+            "order": new_order,
+            "idx": new_order
+        }).insert(ignore_permissions=True)
         
         if quiz_data and doctype_name in ["LMS Quiz Content", "LMS Assessment Content"]:
             chapter.reload()
@@ -321,22 +335,19 @@ def remove_content_block(chapter_name, content_reference):
         if not chapter_name or not content_reference:
             frappe.throw("Chapter Name and Content Reference are required")
             
-        chapter = frappe.get_doc("LMS Chapter", chapter_name)
-        target_row = None
+        content_type = frappe.db.get_value("LMS Chapter Content", {"parent": chapter_name, "content_reference": content_reference}, "content_type")
         
-        for row in chapter.contents:
-            if row.content_reference == content_reference:
-                target_row = row
-                break
-                
-        if target_row:
-            chapter.remove(target_row)
-            chapter.save(ignore_permissions=True)
+        if content_type:
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Chapter Content`
+                WHERE `parent` = %s AND `content_reference` = %s
+            """, (chapter_name, content_reference))
+            frappe.db.commit()
             
             # Also try to delete the actual content document
             try:
-                if frappe.db.exists(target_row.content_type, target_row.content_reference):
-                    frappe.delete_doc(target_row.content_type, target_row.content_reference, ignore_permissions=True)
+                if frappe.db.exists(content_type, content_reference):
+                    frappe.delete_doc(content_type, content_reference, ignore_permissions=True)
             except Exception as inner_e:
                 frappe.log_error("Failed to delete content doc on remove_content_block", str(inner_e))
                 pass
@@ -359,16 +370,17 @@ def reorder_content_blocks(chapter_name, ordered_references):
         if isinstance(ordered_references, str):
             ordered_references = json.loads(ordered_references)
             
-        chapter = frappe.get_doc("LMS Chapter", chapter_name)
-        
         # Update the order of the contents based on the index in ordered_references
         ref_order_map = {ref: idx + 1 for idx, ref in enumerate(ordered_references)}
         
-        for row in chapter.contents:
-            if row.content_reference in ref_order_map:
-                row.order = ref_order_map[row.content_reference]
-                
-        chapter.save(ignore_permissions=True)
+        for ref, order in ref_order_map.items():
+            frappe.db.sql("""
+                UPDATE `tabLMS Chapter Content`
+                SET `order` = %s, `idx` = %s
+                WHERE `parent` = %s AND `content_reference` = %s
+            """, (order, order, chapter_name, ref))
+            
+        frappe.db.commit()
         return {"status": "success"}
     except Exception as e:
         import traceback
@@ -417,9 +429,11 @@ def rename_chapter(chapter_name, new_title):
 
 @frappe.whitelist(allow_guest=False)
 def remove_lesson(module_name, lesson_name):
-    module = frappe.get_doc("LMS Module", module_name)
-    module.lessons = [ml for ml in module.lessons if ml.lesson != lesson_name]
-    module.save(ignore_permissions=True)
+    frappe.db.sql("""
+        DELETE FROM `tabLMS Module Lesson Child`
+        WHERE `parent` = %s AND `lesson` = %s
+    """, (module_name, lesson_name))
+    frappe.db.commit()
     
     if frappe.db.exists("LMS Lesson", lesson_name):
         lesson = frappe.get_doc("LMS Lesson", lesson_name)
@@ -432,10 +446,11 @@ def remove_lesson(module_name, lesson_name):
 
 @frappe.whitelist(allow_guest=False)
 def remove_chapter(lesson_name, chapter_name):
-    if frappe.db.exists("LMS Lesson", lesson_name):
-        lesson = frappe.get_doc("LMS Lesson", lesson_name)
-        lesson.chapters = [ch for ch in lesson.chapters if ch.chapter != chapter_name]
-        lesson.save(ignore_permissions=True)
+    frappe.db.sql("""
+        DELETE FROM `tabLMS Lesson Chapter`
+        WHERE `parent` = %s AND `chapter` = %s
+    """, (lesson_name, chapter_name))
+    frappe.db.commit()
     
     if frappe.db.exists("LMS Chapter", chapter_name):
         chapter = frappe.get_doc("LMS Chapter", chapter_name)
@@ -753,17 +768,22 @@ def reorder_lessons(module_name, lesson_order):
     import json as _json
     try:
         order = _json.loads(lesson_order) if isinstance(lesson_order, str) else lesson_order
-        module = frappe.get_doc("LMS Module", module_name)
-        # Build a lookup: lesson name -> row
-        row_map = {row.lesson: row for row in module.lessons}
-        # Re-assign order field and rebuild the child table in the given order
-        module.lessons = []
+        if order:
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Module Lesson Child`
+                WHERE `parent` = %s AND `lesson` NOT IN %s
+            """, (module_name, tuple(order)))
+        else:
+            frappe.db.sql("DELETE FROM `tabLMS Module Lesson Child` WHERE `parent` = %s", module_name)
+            
         for idx, lesson_name in enumerate(order):
-            if lesson_name in row_map:
-                row = row_map[lesson_name]
-                row.order = idx + 1
-                module.lessons.append(row)
-        module.save(ignore_permissions=True)
+            frappe.db.sql("""
+                UPDATE `tabLMS Module Lesson Child`
+                SET `order` = %s, `idx` = %s
+                WHERE `parent` = %s AND `lesson` = %s
+            """, (idx + 1, idx + 1, module_name, lesson_name))
+            
+        frappe.db.commit()
         return {"status": "success"}
     except Exception as e:
         frappe.log_error("reorder_lessons failed", str(e))
@@ -779,19 +799,30 @@ def reorder_chapters(lesson_name, chapter_order):
     import json as _json
     try:
         order = _json.loads(chapter_order) if isinstance(chapter_order, str) else chapter_order
-        lesson = frappe.get_doc("LMS Lesson", lesson_name)
-        row_map = {row.chapter: row for row in lesson.chapters}
-        lesson.chapters = []
+        if order:
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Lesson Chapter`
+                WHERE `parent` = %s AND `chapter` NOT IN %s
+            """, (lesson_name, tuple(order)))
+        else:
+            frappe.db.sql("DELETE FROM `tabLMS Lesson Chapter` WHERE `parent` = %s", lesson_name)
+            
         for idx, chapter_name in enumerate(order):
-            if chapter_name in row_map:
-                row = row_map[chapter_name]
-                row.order = idx + 1
-                lesson.chapters.append(row)
+            exists = frappe.db.exists("LMS Lesson Chapter", {"parent": lesson_name, "chapter": chapter_name})
+            if exists:
+                frappe.db.sql("""
+                    UPDATE `tabLMS Lesson Chapter`
+                    SET `order` = %s, `idx` = %s
+                    WHERE `parent` = %s AND `chapter` = %s
+                """, (idx + 1, idx + 1, lesson_name, chapter_name))
             else:
-                row = lesson.append("chapters", {})
-                row.chapter = chapter_name
-                row.order = idx + 1
-        lesson.save(ignore_permissions=True)
+                frappe.db.sql("""
+                    UPDATE `tabLMS Lesson Chapter`
+                    SET `order` = %s, `idx` = %s, `parent` = %s
+                    WHERE `chapter` = %s
+                """, (idx + 1, idx + 1, lesson_name, chapter_name))
+                
+        frappe.db.commit()
         return {"status": "success"}
     except Exception as e:
         frappe.log_error("reorder_chapters failed", str(e))
@@ -800,16 +831,10 @@ def reorder_chapters(lesson_name, chapter_order):
 
 @frappe.whitelist()
 def toggle_module_archive(module_name):
-    module = frappe.get_doc("LMS Module", module_name)
-    if module.status == "Archived":
-        # Unarchive
-        module.status = "Unarchived"
-    else:
-        # Archive
-        module.status = "Archived"
-        
-    module.save(ignore_permissions=True)
-    return module.status
+    status = frappe.db.get_value("LMS Module", module_name, "status")
+    new_status = "Unarchived" if status == "Archived" else "Archived"
+    frappe.db.set_value("LMS Module", module_name, "status", new_status)
+    return new_status
 
 @frappe.whitelist(allow_guest=False)
 def get_teams():
@@ -826,29 +851,26 @@ def reissue_certificates(certificate_ids):
         certificate_ids = json.loads(certificate_ids)
         
     for cert_id in certificate_ids:
-        cert = frappe.get_doc("LMS Certificate", cert_id)
-        # Update the issue date to today
-        cert.issued_on = frappe.utils.nowdate()
-        # Ensure the certificate is valid again if it was revoked
-        cert.status = "Reissued"
-        cert.revocation_reason = None
-        cert.custom_revocation_reason = None
-        cert.revoked_by = None
-        cert.revoked_on = None
+        # Update the issue date to today and ensure the certificate is valid again
+        frappe.db.set_value("LMS Certificate", cert_id, {
+            "issued_on": frappe.utils.nowdate(),
+            "status": "Reissued",
+            "revocation_reason": None,
+            "custom_revocation_reason": None,
+            "revoked_by": None,
+            "revoked_on": None,
+            "certificate_pdf": None,
+            "pdf_status": "Pending",
+            "pdf_file_url": None
+        })
+        
         # Delete old generated PDF files from Frappe to save disk space
         old_files = frappe.get_all("File", filters={
             "attached_to_doctype": "LMS Certificate",
-            "attached_to_name": cert.name
+            "attached_to_name": cert_id
         })
         for f in old_files:
             frappe.delete_doc("File", f.name, ignore_permissions=True)
-            
-        # Reset the generated PDF so it regenerates on next download
-        cert.certificate_pdf = None
-        cert.pdf_status = "Pending"
-        cert.pdf_file_url = None
-        cert.flags.ignore_links = True
-        cert.save(ignore_permissions=True)
         
     frappe.db.commit()
     return True

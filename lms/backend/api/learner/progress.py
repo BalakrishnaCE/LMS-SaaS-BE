@@ -350,6 +350,7 @@ def update_content_progress(module, content_reference, content_type=None, status
         tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
+    tracker_doc.flags.ignore_version = True
     tracker_doc.save(ignore_permissions=True)
     frappe.db.commit()
     
@@ -433,6 +434,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
                 content_just_completed = True
                 
         try:
+            doc.flags.ignore_version = True
             doc.save(ignore_permissions=True)
         except frappe.LinkValidationError:
             return {"status": "error", "message": "Content no longer exists"}
@@ -454,6 +456,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
         needs_save = True
 
     if needs_save:
+        tracker_doc.flags.ignore_version = True
         tracker_doc.save(ignore_permissions=True)
         
     frappe.db.commit()
@@ -462,6 +465,7 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
 
 @frappe.whitelist()
 def submit_interaction_response(module, content_reference, interaction_id, interaction_type, response_data, content_type=None):
+    frappe.log_error("submit_interaction args", f"content_type={repr(content_type)}")
     import json
     user = frappe.session.user
 
@@ -517,7 +521,12 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
         tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
-    tracker_doc.save(ignore_permissions=True)
+    tracker_doc.flags.ignore_version = True
+    try:
+        tracker_doc.save(ignore_permissions=True)
+    except frappe.exceptions.ValidationError as e:
+        frappe.log_error("Tracker Doc Debug", str(tracker_doc.as_dict()))
+        raise e
 
     frappe.db.commit()
     return {"status": "success"}

@@ -23,16 +23,21 @@ def update_chapter_flashcards(chapter_name, flashcards_enabled, flashcards):
             
     if not flashcards_enabled:
         if flashcard_content_link:
-            chapter.remove(flashcard_content_link)
-            chapter.save(ignore_permissions=True)
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Chapter Content`
+                WHERE `parent` = %s AND `name` = %s
+            """, (chapter_name, flashcard_content_link.name))
+            frappe.db.commit()
         return {"status": "success"}
         
     # If enabled, update or create
+    is_new = False
     if flashcard_content_link:
         flashcard_doc = frappe.get_doc("LMS Flashcard Content", flashcard_content_link.content_reference)
     else:
         flashcard_doc = frappe.new_doc("LMS Flashcard Content")
         flashcard_doc.title = f"Flashcards for {chapter.title}"
+        is_new = True
         
     # Clear and rebuild interactive_elements
     flashcard_doc.set("interactive_elements", [])
@@ -55,14 +60,23 @@ def update_chapter_flashcards(chapter_name, flashcards_enabled, flashcards):
             "secondary_text": card.get("back", "")
         })
         
-    flashcard_doc.save(ignore_permissions=True)
+    if is_new:
+        flashcard_doc.insert(ignore_permissions=True)
+    else:
+        flashcard_doc.flags.ignore_version = True
+        flashcard_doc.save(ignore_permissions=True)
     
     if not flashcard_content_link:
-        chapter.append("contents", {
+        current_count = frappe.db.count("LMS Chapter Content", {"parent": chapter_name})
+        frappe.get_doc({
+            "doctype": "LMS Chapter Content",
+            "parent": chapter_name,
+            "parenttype": "LMS Chapter",
+            "parentfield": "contents",
             "content_type": "LMS Flashcard Content",
             "content_reference": flashcard_doc.name,
-            "order": 99 # Push to end
-        })
-        chapter.save(ignore_permissions=True)
+            "order": current_count + 1,
+            "idx": current_count + 1
+        }).insert(ignore_permissions=True)
         
     return {"status": "success"}
