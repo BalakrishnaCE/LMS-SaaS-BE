@@ -356,21 +356,23 @@ def get_assessment_performance():
     if published_modules:
         trackers = frappe.get_all("LMS Module Tracker", filters={"module": ["in", published_modules]}, fields=["status", "total_score", "creation", "user", "module"])
     
-    completed_trackers = [t for t in trackers if t.status == "Completed"]
-    failed_trackers = [t for t in trackers if t.status == "Failed"]
+    trackers_with_assessment = [t for t in trackers if t.total_score is not None and t.total_score >= 0]
+    
+    completed_trackers = [t for t in trackers_with_assessment if t.status == "Completed"]
+    failed_trackers = [t for t in trackers_with_assessment if t.status == "Failed"]
     
     total_completed = len(completed_trackers)
     total_failed = len(failed_trackers)
     
     avg_score = 0
     if total_completed > 0:
-        avg_score = sum([t.total_score for t in completed_trackers if t.total_score is not None]) / total_completed
+        avg_score = sum([t.total_score for t in completed_trackers]) / total_completed
         
     total_attempts = total_completed + total_failed
     pass_rate = int((total_completed / total_attempts) * 100) if total_attempts > 0 else 0
     
     user_module_counts = {}
-    for t in trackers:
+    for t in trackers_with_assessment:
         if t.status in ("Completed", "Failed"):
             key = (t.user, t.module)
             user_module_counts[key] = user_module_counts.get(key, 0) + 1
@@ -383,7 +385,7 @@ def get_assessment_performance():
     current_year = getdate(today()).year
     
     monthly_attempts = defaultdict(int)
-    for t in trackers:
+    for t in trackers_with_assessment:
         if t.status in ("Completed", "Failed"):
             t_date = getdate(t.creation)
             if t_date.year == current_year:

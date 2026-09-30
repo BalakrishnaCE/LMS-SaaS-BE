@@ -45,13 +45,13 @@ def get_department_performance():
         
         c_rate = int((completed / total_t) * 100) if total_t > 0 else 0
         
-        completed_trackers = [tr for tr in trackers if tr.status == "Completed" and tr.total_score is not None]
-        avg_score = sum([tr.total_score for tr in completed_trackers]) / len(completed_trackers) if len(completed_trackers) > 0 else 0
+        completed_trackers = [tr for tr in trackers if tr.status == "Completed" and tr.total_score is not None and tr.total_score >= 0]
+        avg_score = sum([tr.total_score for tr in completed_trackers]) / len(completed_trackers) if len(completed_trackers) > 0 else None
         
         results.append({
             "name": t.team_name,
             "completionRate": c_rate,
-            "avgScore": int(avg_score),
+            "avgScore": int(avg_score) if avg_score is not None else None,
             "overdueLearners": len(overdue_users),
             "criticalOverdue": len(overdue_users) > 5
         })
