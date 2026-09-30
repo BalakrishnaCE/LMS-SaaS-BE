@@ -176,9 +176,12 @@ def _migrate_to_interactive_video(chapter, content_id=None):
     )
     new_doc.insert(ignore_permissions=True)
 
-    old_content_link.content_type = "LMS Interactive Video Content"
-    old_content_link.content_reference = new_doc.name
-    chapter.save(ignore_permissions=True)
+    frappe.db.sql("""
+        UPDATE `tabLMS Chapter Content`
+        SET `content_type` = 'LMS Interactive Video Content', `content_reference` = %s
+        WHERE `name` = %s
+    """, (new_doc.name, old_content_link.name))
+    frappe.db.commit()
 
     try:
         frappe.delete_doc("LMS Video Content", old_doc.name, ignore_permissions=True)

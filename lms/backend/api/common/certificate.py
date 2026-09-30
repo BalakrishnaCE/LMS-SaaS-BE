@@ -186,7 +186,7 @@ def generate_pdf_worker(certificate_name, **kwargs):
                 "content": file_content,
                 "is_private": 1
             })
-            file_doc.save(ignore_permissions=True)
+            file_doc.insert(ignore_permissions=True)
             
             cert.db_set("pdf_status", "Completed")
             cert.db_set("pdf_file_url", file_doc.file_url)

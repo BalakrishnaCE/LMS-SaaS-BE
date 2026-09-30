@@ -78,9 +78,17 @@ def add_interaction(
     elif interaction_type_name == "Poll" and options:
         element_data["secondary_text"] = json.dumps(options)
 
-    interactive_content.append("interactive_elements", element_data)
-    interactive_content.save(ignore_permissions=True)
+    current_count = frappe.db.count("LMS Interactive Element", {"parent": interactive_content.name})
+    element_data.update({
+        "doctype": "LMS Interactive Element",
+        "parent": interactive_content.name,
+        "parenttype": interactive_content.doctype,
+        "parentfield": "interactive_elements",
+        "idx": current_count + 1
+    })
+    frappe.get_doc(element_data).insert(ignore_permissions=True)
 
+    interactive_content.reload()
     return _get_all_elements_sorted(interactive_content)
 
 
@@ -188,10 +196,12 @@ def update_interaction(
                             "option_text": opt.get("text") or f"Option {i+1}",
                             "is_correct": 1 if opt.get("isCorrect") else 0
                         })
+                q_doc.flags.ignore_version = True
                 q_doc.save(ignore_permissions=True)
             
             if element_text is not None:
                 quiz_doc.title = element_text
+                quiz_doc.flags.ignore_version = True
                 quiz_doc.save(ignore_permissions=True)
         elif options:
             quiz_doc = _create_quiz_for_knowledge_check(element_text, options, is_required)
@@ -204,7 +214,7 @@ def update_interaction(
     if target.name:
         target.db_update()
 
-    interactive_content.save(ignore_permissions=True)
+    interactive_content.reload()
     return _get_all_elements_sorted(interactive_content)
 
 
@@ -240,11 +250,13 @@ def remove_interaction(chapter_name, element_idx, content_id=None):
         except Exception as e:
             frappe.log_error("Failed to delete linked interaction record", str(e))
 
-    interactive_content.interactive_elements = [
-        el for el in interactive_content.interactive_elements if el.idx != element_idx
-    ]
-    interactive_content.save(ignore_permissions=True)
+    frappe.db.sql("""
+        DELETE FROM `tabLMS Interactive Element`
+        WHERE parent = %s AND idx = %s
+    """, (interactive_content.name, element_idx))
+    frappe.db.commit()
 
+    interactive_content.reload()
     return _get_all_elements_sorted(interactive_content)
 
 
@@ -335,7 +347,15 @@ def duplicate_interaction(chapter_name, element_idx, content_id=None):
         new_data["linked_record_type"] = source.linked_record_type
         new_data["linked_record_name"] = source.linked_record_name
 
-    interactive_content.append("interactive_elements", new_data)
-    interactive_content.save(ignore_permissions=True)
+    current_count = frappe.db.count("LMS Interactive Element", {"parent": interactive_content.name})
+    new_data.update({
+        "doctype": "LMS Interactive Element",
+        "parent": interactive_content.name,
+        "parenttype": interactive_content.doctype,
+        "parentfield": "interactive_elements",
+        "idx": current_count + 1
+    })
+    frappe.get_doc(new_data).insert(ignore_permissions=True)
+    interactive_content.reload()
 
     return _get_all_elements_sorted(interactive_content)

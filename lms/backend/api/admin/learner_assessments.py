@@ -1102,9 +1102,10 @@ def grant_additional_attempt(user_id, quiz_name, attempts, reason):
         
     sub = frappe.get_doc("LMS Quiz Submission", submissions[0].name)
     current_extra = sub.extra_attempts_granted or 0
-    sub.extra_attempts_granted = current_extra + int(attempts)
-    sub.grant_reason = reason
-    sub.save(ignore_permissions=True)
+    frappe.db.set_value("LMS Quiz Submission", sub.name, {
+        "extra_attempts_granted": current_extra + int(attempts),
+        "grant_reason": reason
+    })
     frappe.db.commit()
     
     return {"status": "success"}

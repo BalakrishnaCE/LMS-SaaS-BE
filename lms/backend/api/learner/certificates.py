@@ -109,8 +109,17 @@ def get_learner_certificates():
             pass
             
         if enable_cert:
+            passing_score = mod.certificate_passing_percentage or 60
             is_completed = (tracker.status == "Completed")
-            status = "Pending" if is_completed else "Ongoing"
+            
+            if is_completed:
+                if (tracker.total_score or 0) < passing_score:
+                    # Completed but failed to meet certificate criteria
+                    continue
+                else:
+                    status = "Pending"
+            else:
+                status = "Ongoing"
             
             preview_image = None
             if mod_template:
@@ -151,8 +160,7 @@ def claim_certificate(certificate_name):
         frappe.throw("Not authorized to claim this certificate")
         
     if not cert.is_claimed:
-        cert.is_claimed = 1
-        cert.save(ignore_permissions=True)
+        frappe.db.set_value("LMS Certificate", certificate_name, "is_claimed", 1)
         frappe.db.commit()
         
     return {"status": "success"}

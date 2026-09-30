@@ -156,6 +156,7 @@ def save_qa_evaluation(submission_id, evaluations, overall_feedback=""):
         sub.passed = 1
         
     sub.flags.ignore_links = True
+    sub.flags.ignore_version = True
     sub.save(ignore_permissions=True)
     
     # ── Propagate the evaluated score back to LMS Content Progress ────────────
@@ -183,12 +184,14 @@ def save_qa_evaluation(submission_id, evaluations, overall_feedback=""):
                     cp_doc.score = sub.score
                     cp_doc.status = "Completed"
                     cp_doc.is_completed = 1
+                    cp_doc.flags.ignore_version = True
                     cp_doc.save(ignore_permissions=True)
                     
                     # Re-save tracker so update_progress() recalculates total_score
                     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
                     if tracker_doc.status == "Unassigned":
                         tracker_doc.status = "In Progress"
+                    tracker_doc.flags.ignore_version = True
                     tracker_doc.save(ignore_permissions=True)
     except Exception as e:
         frappe.log_error(f"save_qa_evaluation: failed to propagate score to tracker: {e}", "QA Evaluation")

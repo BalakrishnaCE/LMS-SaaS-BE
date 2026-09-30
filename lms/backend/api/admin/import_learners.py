@@ -67,6 +67,7 @@ def _ensure_user(learner: dict) -> str:
         if not already_member:
             team_doc = frappe.get_doc("LMS Team", team_name)
             team_doc.append("learners", {"user": email})
+            team_doc.flags.ignore_version = True
             team_doc.save(ignore_permissions=True)
 
     return email
@@ -154,6 +155,7 @@ def save_import_assignment(groups_json):
                     if email not in existing_emails:
                         doc.append("learners", {"user": email})
                         newly_added.append(email)
+                doc.flags.ignore_version = True
                 doc.save(ignore_permissions=True)
                 # Restore any Unassigned tracker for re-added learners
                 for email in newly_added:
@@ -206,6 +208,7 @@ def save_import_assignment(groups_json):
                 for email in valid_emails:
                     if email not in existing_emails:
                         doc.append("learners", {"user": email})
+                doc.flags.ignore_version = True
                 doc.save(ignore_permissions=True)
                 created["lp_assignments"].append(existing)
             else:
@@ -261,6 +264,7 @@ def update_single_learner(email, learner_json):
         name_parts = full_name.split(" ", 1)
         user.first_name = name_parts[0] or email.split("@")[0]
         user.last_name = name_parts[1] if len(name_parts) > 1 else ""
+        user.flags.ignore_version = True
         user.save(ignore_permissions=True)
 
     # Update LMS User Settings
@@ -274,6 +278,7 @@ def update_single_learner(email, learner_json):
             settings.designation = designation
         if joining_date is not None:
             settings.joining_date = joining_date
+        settings.flags.ignore_version = True
         settings.save(ignore_permissions=True)
     elif designation or joining_date:
         settings = frappe.new_doc("LMS User Settings")
@@ -302,6 +307,7 @@ def update_single_learner(email, learner_json):
             # Add to new team
             team_doc = frappe.get_doc("LMS Team", team_name)
             team_doc.append("learners", {"user": email})
+            team_doc.flags.ignore_version = True
             team_doc.save(ignore_permissions=True)
 
             # Remove from old teams

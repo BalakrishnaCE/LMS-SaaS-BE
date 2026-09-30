@@ -48,7 +48,7 @@ def get_admin_assignments():
     mod_enrollments = frappe.get_all(
         "LMS Module Tracker",
         filters={"status": ["!=", "Unassigned"]},
-        fields=["name", "module", "user", "status", "progress_percentage", "creation", "assignment"]
+        fields=["name", "module", "user", "status", "progress_percentage", "creation"]
     )
     mod_enroll_map = {}
     for e in mod_enrollments:

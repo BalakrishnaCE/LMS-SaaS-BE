@@ -38,13 +38,15 @@ def get_metrics_summary():
                 module_categories_map[mc.parent] = set()
             module_categories_map[mc.parent].add(mc.category)
         
-        all_learner_roles = frappe.get_all("Has Role", filters={"role": "LMS-Learner"}, fields=["parent", "creation"])
+        admin_users = set(frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent"))
+        all_learner_roles = [r for r in frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent", "creation"]) if r.parent not in admin_users and r.parent != "Administrator"]
         
         def compute_metrics_for_date(dt):
             learners_by_dt = set([r.parent for r in all_learner_roles if getdate(r.creation) <= getdate(dt)])
             thirty_days_before_dt = add_days(dt, -30)
             next_day = add_days(dt, 1)
-            trackers_dt = frappe.get_all("LMS Module Tracker", filters={"creation": ["<", next_day]}, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
+            all_trackers_dt = frappe.get_all("LMS Module Tracker", filters={"creation": ["<", next_day]}, fields=["status", "modified", "module", "started_on", "creation", "completed_on", "user"])
+            trackers_dt = [t for t in all_trackers_dt if t.user in learners_by_dt]
             
             active_users_at_dt = set()
             for t in trackers_dt:
@@ -317,11 +319,12 @@ def get_needs_attention_metrics():
                 
     thirty_days_ago = add_days(today(), -30)
     
-    # Get all users with LMS-Learner role, excluding system accounts
-    current_learners = frappe.get_all("Has Role", filters={
-        "role": "LMS-Learner",
+    # Get all users with learning roles, excluding system accounts and admins
+    admin_users = set(frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent"))
+    current_learners = [r for r in frappe.get_all("Has Role", filters={
+        "role": ["in", ["LMS-Learner", "LMS-TL"]],
         "parent": ["not in", ["Administrator", "Guest"]]
-    }, pluck="parent")
+    }, pluck="parent") if r not in admin_users]
     total_learners = len(set(current_learners))
     
     all_trackers = frappe.get_all("LMS Module Tracker", fields=["user", "status", "modified"])
@@ -410,14 +413,15 @@ def get_assessment_performance():
 @frappe.whitelist(allow_guest=True)
 def get_onboarding_status():
     thirty_days_ago = add_days(today(), -30)
-    new_learner_roles = frappe.get_all(
+    admin_users = set(frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent"))
+    new_learner_roles = [r for r in frappe.get_all(
         "Has Role",
         filters={
-            "role": "LMS-Learner",
+            "role": ["in", ["LMS-Learner", "LMS-TL"]],
             "creation": [">=", thirty_days_ago]
         },
         pluck="parent"
-    )
+    ) if r not in admin_users and r != "Administrator"]
     new_users = len(new_learner_roles)
     
     if new_users == 0:
