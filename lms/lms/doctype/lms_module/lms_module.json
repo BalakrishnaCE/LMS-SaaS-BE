@@ -10,6 +10,7 @@
   "module_name",
   "category",
   "status",
+  "previous_status",
   "module_view",
   "description",
   "image",
@@ -58,8 +59,15 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Draft\nPublished\nArchived\nUnarchived",
+   "options": "Draft\nPublished\nArchived",
    "reqd": 1
+  },
+  {
+   "fieldname": "previous_status",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Previous Status",
+   "options": "Draft\nPublished"
   },
   {
    "default": "Everyone",

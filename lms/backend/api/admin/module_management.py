@@ -831,10 +831,24 @@ def reorder_chapters(lesson_name, chapter_order):
 
 @frappe.whitelist()
 def toggle_module_archive(module_name):
-    status = frappe.db.get_value("LMS Module", module_name, "status")
-    new_status = "Unarchived" if status == "Archived" else "Archived"
-    frappe.db.set_value("LMS Module", module_name, "status", new_status)
-    return new_status
+    doc = frappe.db.get_value("LMS Module", module_name, ["status", "previous_status"], as_dict=True)
+    status = doc.status
+
+    if status == "Archived":
+        # Restore to previous state (Published or Draft), default to Draft if missing
+        restore_status = doc.previous_status or "Draft"
+        frappe.db.set_value("LMS Module", module_name, {
+            "status": restore_status,
+            "previous_status": None
+        })
+        return restore_status
+    else:
+        # Archive: save current status so we can restore later
+        frappe.db.set_value("LMS Module", module_name, {
+            "previous_status": status,
+            "status": "Archived"
+        })
+        return "Archived"
 
 @frappe.whitelist(allow_guest=False)
 def get_teams():

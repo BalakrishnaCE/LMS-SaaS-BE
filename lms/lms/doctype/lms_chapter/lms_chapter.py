@@ -14,7 +14,8 @@ class LMSChapter(Document):
 					self.remove(row)
 
 	def on_update(self):
-		self.update_lessons()
+		if not self.flags.ignore_trackers:
+			self.update_lessons()
 
 	def update_lessons(self):
 		import frappe

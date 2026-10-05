@@ -228,7 +228,7 @@ def get_learner_deadlines():
         due_date = getdate(add_days(start, int(duration)))
         days_left = date_diff(due_date, today_dt)
 
-        if days_left < 0 or days_left > 30:
+        if days_left > 30:
             continue
 
         module_name = frappe.get_value("LMS Module", t.module, "module_name") or t.module
@@ -271,7 +271,7 @@ def get_learner_deadlines():
             due_date = getdate(add_days(start, int(duration)))
             days_left = date_diff(due_date, today_dt)
 
-            if days_left < 0 or days_left > 30:
+            if days_left > 30:
                 continue
 
             path_name = frappe.get_value("LMS Learning Path", t.learning_path, "path_name") or t.learning_path

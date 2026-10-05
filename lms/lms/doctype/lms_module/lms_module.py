@@ -17,7 +17,8 @@ class LMSModule(Document):
 			frappe.throw(f"A Module named '{new_name}' already exists. Please choose a different name.")
 
 	def on_update(self):
-		self.check_and_trigger_trackers()
+		if not self.flags.ignore_trackers:
+			self.check_and_trigger_trackers()
 
 	def check_and_trigger_trackers(self):
 		import frappe

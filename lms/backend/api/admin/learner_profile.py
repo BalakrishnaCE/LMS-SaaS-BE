@@ -305,7 +305,8 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
         })
 
     if status and status.lower() != "all":
-        results = [r for r in results if r["status"].lower() == status.lower()]
+        filter_statuses = [s.strip().lower() for s in status.split(",")]
+        results = [r for r in results if r["status"].lower() in filter_statuses]
         
     if risk and risk.lower() != "all" and risk.lower() != "recent":
         risk_map = {
@@ -314,17 +315,22 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
             "needs attention": ["needs attention"],
             "on track": ["on track"]
         }
-        filter_risk = risk.lower()
-        if filter_risk in risk_map:
-            target_risks = risk_map[filter_risk]
+        filter_risks = [r.strip().lower() for r in risk.split(",")]
+        target_risks = []
+        for fr in filter_risks:
+            if fr in risk_map:
+                target_risks.extend(risk_map[fr])
+        if target_risks:
             results = [r for r in results if r["risk"].lower() in target_risks]
 
     # Filter by department and designation
     if department and department.lower() != "all":
-        results = [r for r in results if r["department"] and department.lower() in r["department"].lower()]
+        filter_depts = [d.strip().lower() for d in department.split(",")]
+        results = [r for r in results if r["department"] and any(d in r["department"].lower() for d in filter_depts)]
         
     if designation and designation.lower() != "all":
-        results = [r for r in results if r["designation"] and designation.lower() == r["designation"].lower()]
+        filter_desigs = [d.strip().lower() for d in designation.split(",")]
+        results = [r for r in results if r["designation"] and any(d == r["designation"].lower() for d in filter_desigs)]
         
     if user_filter is not None:
         # Constrain to teams and designations of the users this manager has access to
