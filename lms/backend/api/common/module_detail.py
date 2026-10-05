@@ -43,19 +43,20 @@ def get_estimated_hours_from_curriculum(module_name):
                 else:
                     total_mins += default_durations.get(content_type, 8)
                     
-        return round(total_mins / 60, 1) if total_mins else 0
+        return (total_mins / 60) if total_mins else 0
     except Exception:
         return 0
 
 @frappe.whitelist(allow_guest=True)
 def get_module_overview(module_id):
+    module_id = str(module_id).strip()
     module = frappe.get_doc("LMS Module", module_id)
     categories = [c.category for c in (module.category or [])]
     lesson_count = len(module.get("lessons", []))
 
     version_history = []
     current_version_val = "v1.0"
-    for v in module.get("version_history", []):
+    for v in (module.get("version_history") or []):
         author_name = frappe.db.get_value("User", v.author, "full_name") or v.author
         ver_str = str(v.version) if v.version else "v1.0"
         if not ver_str.startswith("v") and not ver_str.startswith("V"):

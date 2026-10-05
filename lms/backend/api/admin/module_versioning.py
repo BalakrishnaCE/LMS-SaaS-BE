@@ -112,11 +112,25 @@ def _apply_content_snapshot(module_id, snapshot):
     """
     Applies a content snapshot to restore the module's content to a previous state.
     Updates lesson/chapter/content records in-place using the stored snapshot.
+    Returns the module_id (which may have changed if renamed).
     """
     # Restore module-level settings
     module_settings = snapshot.get("module_settings", {})
     if module_settings:
         module = frappe.get_doc("LMS Module", module_id)
+        old_name = module.name
+        new_name = module_settings.get("module_name")
+        
+        # If the name changed, we must rename the document in Frappe
+        if new_name and old_name != new_name:
+            if frappe.db.exists("LMS Module", new_name):
+                # We can't rename it back if another module took the name, just skip renaming the ID
+                module_settings.pop("module_name", None)
+            else:
+                actual_new_name = frappe.rename_doc("LMS Module", old_name, new_name, force=True)
+                module_id = actual_new_name
+                module = frappe.get_doc("LMS Module", module_id)
+                
         for field, value in module_settings.items():
             if module.meta.has_field(field):
                 setattr(module, field, value)
@@ -130,45 +144,75 @@ def _apply_content_snapshot(module_id, snapshot):
                     "order": idx + 1
                 })
                 
-        module.save(ignore_permissions=True)
+        module.flags.ignore_trackers = True
+        module.flags.ignore_links = True
+        module.save(ignore_permissions=True, ignore_version=True)
 
     # Restore lessons, chapters, and content blocks
     for lesson_data in snapshot.get("lessons", []):
         lesson_name = lesson_data.get("name")
-        if not lesson_name or not frappe.db.exists("LMS Lesson", lesson_name):
+        if not lesson_name:
             continue
         try:
             lesson = frappe.get_doc("LMS Lesson", lesson_name)
-            lesson.lesson_name = lesson_data.get("lesson_name", lesson.lesson_name)
-            lesson.description = lesson_data.get("description", lesson.description or "")
+        except frappe.DoesNotExistError:
+            continue
+            
+        try:
+            lesson_changed = False
+            if lesson.lesson_name != lesson_data.get("lesson_name", lesson.lesson_name):
+                lesson.lesson_name = lesson_data.get("lesson_name", lesson.lesson_name)
+                lesson_changed = True
+            
+            desc = lesson_data.get("description", "")
+            if (lesson.description or "") != desc:
+                lesson.description = desc
+                lesson_changed = True
             
             # Rebuild chapters child table
-            lesson.set("chapters", [])
-            for idx, chapter_data in enumerate(lesson_data.get("chapters", [])):
-                if chapter_data.get("name"):
+            original_chapters = [(c.chapter, c.order) for c in lesson.get("chapters", [])]
+            new_chapters = [(c.get("name"), idx + 1) for idx, c in enumerate(lesson_data.get("chapters", [])) if c.get("name")]
+            
+            if original_chapters != new_chapters:
+                lesson.set("chapters", [])
+                for chap_name, order in new_chapters:
                     lesson.append("chapters", {
-                        "chapter": chapter_data.get("name"),
-                        "order": idx + 1
+                        "chapter": chap_name,
+                        "order": order
                     })
-                    
-            lesson.save(ignore_permissions=True)
+                lesson_changed = True
+                
+            if lesson_changed:
+                lesson.flags.ignore_trackers = True
+                lesson.flags.ignore_links = True
+                lesson.save(ignore_permissions=True, ignore_version=True)
         except Exception:
             pass
 
         for chapter_data in lesson_data.get("chapters", []):
             chapter_name = chapter_data.get("name")
-            if not chapter_name or not frappe.db.exists("LMS Chapter", chapter_name):
+            if not chapter_name:
                 continue
             try:
                 chapter = frappe.get_doc("LMS Chapter", chapter_name)
-                chapter.title = chapter_data.get("title", chapter.title)
+            except frappe.DoesNotExistError:
+                continue
+                
+            try:
+                chapter_changed = False
+                if chapter.title != chapter_data.get("title", chapter.title):
+                    chapter.title = chapter_data.get("title", chapter.title)
+                    chapter_changed = True
 
                 # Build a map of existing content rows by name
                 existing_map = {row.name: row for row in chapter.get("contents", [])}
                 snapshot_names = {c["name"] for c in chapter_data.get("contents", []) if c.get("name")}
 
                 # Remove rows that don't exist in the snapshot
+                original_len = len(chapter.get("contents", []))
                 chapter.set("contents", [row for row in chapter.get("contents", []) if row.name in snapshot_names])
+                if len(chapter.get("contents", [])) != original_len:
+                    chapter_changed = True
 
                 # Update or append each content block from the snapshot
                 for content_row in chapter_data.get("contents", []):
@@ -177,10 +221,16 @@ def _apply_content_snapshot(module_id, snapshot):
                         # Update existing row
                         for existing in chapter.get("contents", []):
                             if existing.name == row_name:
-                                existing.content_type = content_row.get("content_type", existing.content_type)
-                                existing.content_data = content_row.get("content_data", "")
-                                existing.order = content_row.get("order", existing.order)
-                                existing.content_reference = content_row.get("content_reference", "")
+                                if (existing.content_type != content_row.get("content_type", existing.content_type) or
+                                    (existing.content_data or "") != (content_row.get("content_data") or "") or
+                                    existing.order != content_row.get("order", existing.order) or
+                                    (existing.content_reference or "") != (content_row.get("content_reference") or "")):
+                                    
+                                    existing.content_type = content_row.get("content_type", existing.content_type)
+                                    existing.content_data = content_row.get("content_data", "")
+                                    existing.order = content_row.get("order", existing.order)
+                                    existing.content_reference = content_row.get("content_reference", "")
+                                    chapter_changed = True
                                 break
                     else:
                         # Append missing row
@@ -190,24 +240,38 @@ def _apply_content_snapshot(module_id, snapshot):
                             "order": content_row.get("order", 0),
                             "content_reference": content_row.get("content_reference", "")
                         })
+                        chapter_changed = True
 
                     # Restore the actual content document (e.g., LMS Text Content)
                     actual_content = content_row.get("actual_content")
                     c_type = content_row.get("content_type")
                     c_ref = content_row.get("content_reference")
-                    if actual_content and c_type and c_ref and frappe.db.exists(c_type, c_ref):
+                    if actual_content and c_type and c_ref:
                         try:
                             c_doc = frappe.get_doc(c_type, c_ref)
+                            c_doc_changed = False
                             for k, v in actual_content.items():
                                 if c_doc.meta.has_field(k):
-                                    setattr(c_doc, k, v)
-                            c_doc.save(ignore_permissions=True)
+                                    existing_v = getattr(c_doc, k, None)
+                                    if existing_v != v and str(existing_v) != str(v):
+                                        setattr(c_doc, k, v)
+                                        c_doc_changed = True
+                            if c_doc_changed:
+                                c_doc.flags.ignore_links = True
+                                c_doc.save(ignore_permissions=True, ignore_version=True)
+                        except frappe.DoesNotExistError:
+                            pass
                         except Exception:
                             pass
 
-                chapter.save(ignore_permissions=True)
+                if chapter_changed:
+                    chapter.flags.ignore_trackers = True
+                    chapter.flags.ignore_links = True
+                    chapter.save(ignore_permissions=True, ignore_version=True)
             except Exception as e:
                 frappe.log_error(f"Failed to restore chapter {chapter_name}: {str(e)}")
+
+    return module_id
 
     frappe.db.commit()
 
@@ -310,16 +374,18 @@ def restore_module_version(module_id, version):
         frappe.throw(f"Version {version} not found in history.")
 
     # Apply content snapshot if available
+    new_module_id = module_id
     if target_v.content_snapshot:
         try:
             snapshot = json.loads(target_v.content_snapshot)
-            _apply_content_snapshot(module_id, snapshot)
+            new_name = snapshot.get("module_settings", {}).get("module_name")
+            new_module_id = _apply_content_snapshot(module_id, snapshot)
         except Exception as e:
             frappe.log_error(f"Failed to restore snapshot for version {version}: {str(e)}")
             frappe.throw(f"Failed to restore content: {str(e)}")
 
-    # Reload module after snapshot apply (save may have happened inside)
-    module = frappe.get_doc("LMS Module", module_id)
+    # Reload module after snapshot apply (save/rename may have happened inside)
+    module = frappe.get_doc("LMS Module", new_module_id)
     version_history = module.get("version_history", [])
     target_v = next((v for v in version_history if v.version == version), None)
     
@@ -327,7 +393,7 @@ def restore_module_version(module_id, version):
         v.is_current = 1 if (target_v and v.name == target_v.name) else 0
         
     module.save(ignore_permissions=True)
-    return {"message": "success", "restored_version": version}
+    return {"message": "success", "restored_version": version, "new_id": module.name}
 
 
 @frappe.whitelist(allow_guest=False)

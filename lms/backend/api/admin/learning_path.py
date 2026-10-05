@@ -62,7 +62,7 @@ def get_learning_paths():
     }
 
 @frappe.whitelist()
-def get_learning_path_detail(path_id):
+def get_learning_path_detail(path_id, version=None):
     """
     Returns the full detail of a single Learning Path for the details view.
     Includes metadata, categories, and all assigned modules with their details.
@@ -78,12 +78,27 @@ def get_learning_path_detail(path_id):
     category_list = [c.category for c in categories]
 
     # Modules in order
-    path_courses = frappe.get_all(
-        "LMS Learning Path Course",
-        filters={"parent": path_id},
-        fields=["module", "sequence_order"],
-        order_by="sequence_order asc"
-    )
+    if version:
+        import json
+        version_doc = frappe.db.get_value("LMS LP Version", {"parent": path_id, "version": version}, "content_snapshot")
+        if version_doc:
+            snapshot = json.loads(version_doc)
+            path_courses = []
+            for m in snapshot.get("modules", []):
+                # Ensure object notation matches what the loop expects
+                path_courses.append(frappe._dict({
+                    "module": m.get("module"),
+                    "sequence_order": m.get("sequence_order")
+                }))
+        else:
+            path_courses = []
+    else:
+        path_courses = frappe.get_all(
+            "LMS Learning Path Course",
+            filters={"parent": path_id},
+            fields=["module", "sequence_order"],
+            order_by="sequence_order asc"
+        )
 
     modules = []
     for pc in path_courses:
@@ -355,6 +370,18 @@ def get_learning_path_detail(path_id):
                             "status": "Completed" if (completed >= total_assigned and total_assigned > 0) else ("Inprogress" if completed > 0 else "Not Started")
                         })
 
+    # Version history for the settings panel
+    version_history = []
+    for v in (path.get("version_history") or []):
+        version_history.append({
+            "version": v.version,
+            "is_current": v.is_current,
+            "description": v.description or "",
+            "date": str(v.date) if v.date else "",
+            "author": v.author or "",
+            "author_name": v.author_name or frappe.db.get_value("User", v.author, "full_name") or v.author or "",
+        })
+
     return {
         "name": path.name,
         "path_name": path.path_name,
@@ -363,6 +390,8 @@ def get_learning_path_detail(path_id):
         "status": path.status,
         "is_mandatory": path.is_mandatory,
         "is_sequential": path.is_sequential,
+        "enable_discussion": int(getattr(path, "enable_discussion", 0) or 0),
+        "enable_certificate": int(path.enable_certificate or 0),
         "modified": str(path.modified),
         "categories": category_list,
         "category": category_list[0] if category_list else "",
@@ -375,6 +404,7 @@ def get_learning_path_detail(path_id):
         "assessments": assessments,
         "path_completed_learners": path_completed_learners,
         "total_learners": total_assigned,
+        "version_history": version_history,
     }
 
 

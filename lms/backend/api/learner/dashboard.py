@@ -16,6 +16,41 @@ def get_module_category(module_name):
         return "General"
     return ", ".join([r.category for r in rows if r.category])
 
+def get_path_category(path_name):
+    rows = frappe.get_all(
+        "LMS Module Category",
+        filters={"parent": path_name, "parenttype": "LMS Learning Path"},
+        fields=["category"]
+    )
+    if not rows:
+        return "General"
+    return ", ".join([r.category for r in rows if r.category])
+
+def get_path_duration_str(path_name):
+    path_courses = frappe.get_all(
+        "LMS Learning Path Course",
+        filters={"parent": path_name},
+        fields=["module"]
+    )
+    
+    total_duration = 0
+    from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
+    for pc in path_courses:
+        if pc.module:
+            est_hours = get_estimated_hours_from_curriculum(pc.module)
+            total_duration += (est_hours * 60)
+    
+    if total_duration > 0:
+        hours = int(total_duration // 60)
+        mins = int(total_duration % 60)
+        duration_str = ""
+        if hours > 0:
+            duration_str += f"{hours} hr{'s' if hours > 1 else ''} "
+        if mins > 0 or hours == 0:
+            duration_str += f"{mins} min"
+        return duration_str.strip()
+    return "0 min"
+
 # ─── Greeting ──────────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
@@ -326,6 +361,51 @@ def toggle_saved_item(item_id, item_type="Module"):
         frappe.db.commit()
         return {"status": "saved"}
 
+def get_all_assigned_paths_for_learner(user):
+    assigned_paths = {}
+
+    user_roles = frappe.get_all("Has Role", filters={"parent": user}, fields=["role"])
+    role_names = [r.role for r in user_roles]
+    is_learner_or_tl = ("LMS-Learner" in role_names or "LMS-TL" in role_names)
+    is_admin_or_guest = ("Administrator" in role_names or "Guest" in role_names)
+    qualifies_for_everyone = is_learner_or_tl and not is_admin_or_guest
+
+    # 1. Manual
+    manual_rows = frappe.db.sql("""
+        SELECT pa.learning_path, pa.duration, pa.is_mandatory
+        FROM `tabLMS Learning Path Assignment` pa
+        INNER JOIN `tabLMS LP Assignment User` au ON au.parent = pa.name
+        WHERE au.user = %s AND pa.assignment_type = 'Manual'
+    """, user, as_dict=True)
+    for row in manual_rows:
+        if row.learning_path not in assigned_paths:
+            assigned_paths[row.learning_path] = row
+
+    # 2. Team
+    team_rows = frappe.db.sql("""
+        SELECT pa.learning_path, pa.duration, pa.is_mandatory
+        FROM `tabLMS Learning Path Assignment` pa
+        INNER JOIN `tabLMS Assignment Team` at ON at.parent = pa.name
+        INNER JOIN `tabLMS Team Member` tm ON tm.parent = at.team
+        WHERE tm.user = %s AND pa.assignment_type = 'Team'
+    """, user, as_dict=True)
+    for row in team_rows:
+        if row.learning_path not in assigned_paths:
+            assigned_paths[row.learning_path] = row
+
+    # 3. Everyone
+    if qualifies_for_everyone:
+        everyone_rows = frappe.db.sql("""
+            SELECT learning_path, duration, is_mandatory
+            FROM `tabLMS Learning Path Assignment`
+            WHERE assignment_type = 'Everyone'
+        """, as_dict=True)
+        for row in everyone_rows:
+            if row.learning_path not in assigned_paths:
+                assigned_paths[row.learning_path] = row
+
+    return list(assigned_paths.values())
+
 @frappe.whitelist()
 def get_saved_items():
     user = frappe.session.user
@@ -337,6 +417,10 @@ def get_saved_items():
         fields=["module", "status", "progress_percentage", "started_on", "name", "creation"],
         order_by="creation desc"
     )
+    
+    from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
+    assigned_modules = {m["module"]: m for m in get_all_assigned_modules_for_learner(user)}
+    assigned_paths = {p["learning_path"]: p for p in get_all_assigned_paths_for_learner(user)}
     
     results = []
     today_dt = frappe.utils.getdate(frappe.utils.today())
@@ -359,23 +443,17 @@ def get_saved_items():
             duration_str = "0 min"
             
         # Is this module assigned?
-        assignment = frappe.db.sql("""
-            SELECT ma.duration, ma.is_mandatory
-            FROM `tabLMS Module Assignment` ma
-            LEFT JOIN `tabLMS Assignment User` au ON au.parent = ma.name
-            WHERE ma.module = %s AND au.user = %s
-            LIMIT 1
-        """, (t.module, user), as_dict=True)
+        assignment = assigned_modules.get(t.module)
         
         days_left = None
         is_overdue = False
         is_required = False
         if assignment:
-            a = assignment[0]
-            is_required = bool(a.is_mandatory)
-            if a.duration and t.started_on:
+            is_required = bool(assignment.get("is_mandatory"))
+            a_duration = assignment.get("duration")
+            if a_duration and t.started_on:
                 start = frappe.utils.getdate(t.started_on)
-                due_date = frappe.utils.getdate(frappe.utils.add_days(start, int(a.duration)))
+                due_date = frappe.utils.getdate(frappe.utils.add_days(start, int(a_duration)))
                 days_left = frappe.utils.date_diff(due_date, today_dt)
                 is_overdue = days_left < 0
                 
@@ -424,20 +502,35 @@ def get_saved_items():
         progress_val = p.progress_percentage or 0
         completed_items = round(total_items * (progress_val / 100))
         
+        # Is this path assigned?
+        assignment = assigned_paths.get(p.learning_path)
+        
+        days_left = None
+        is_overdue = False
+        is_required = False
+        if assignment:
+            is_required = bool(assignment.get("is_mandatory"))
+            a_duration = assignment.get("duration")
+            if a_duration and p.started_on:
+                start = frappe.utils.getdate(p.started_on)
+                due_date = frappe.utils.getdate(frappe.utils.add_days(start, int(a_duration)))
+                days_left = frappe.utils.date_diff(due_date, today_dt)
+                is_overdue = days_left < 0
+
         results.append({
             "id": p.learning_path,
             "title": path_doc.path_name,
-            "category": "Learning Path",
+            "category": get_path_category(p.learning_path),
             "type": "Path",
             "lessonsCount": total_items,
-            "duration": "0 min",
-            "daysLeft": None,
-            "isOverdue": False,
+            "duration": get_path_duration_str(p.learning_path),
+            "daysLeft": days_left,
+            "isOverdue": is_overdue,
             "completionRate": p.progress_percentage or 0,
             "completedCount": completed_items,
             "totalCount": total_items,
             "status": p.status,
-            "isRequired": False,
+            "isRequired": is_required,
             "image": path_doc.image,
             "isSaved": True
         })
@@ -496,41 +589,7 @@ def get_continue_learning(item_type="module"):
         break
 
     if not t:
-        # Priority 2: first assigned item the user hasn't started at all
-        not_started_queries = []
-        ns_params = []
-        
-        if item_type in ["module", "both"]:
-            not_started_queries.append("""
-                SELECT 'Module' as type, t.module as id, t.creation, t.progress_percentage
-                FROM `tabLMS Module Tracker` t
-                INNER JOIN `tabLMS Module` m ON m.name = t.module
-                WHERE t.user = %s
-                  AND m.status = 'Published'
-                  AND t.status = 'Not started'
-                  AND t.progress_percentage < 100
-            """)
-            ns_params.append(user)
-            
-        if item_type in ["path", "both"]:
-            not_started_queries.append("""
-                SELECT 'Path' as type, t.learning_path as id, t.creation, t.progress_percentage
-                FROM `tabLMS Learning Path Tracker` t
-                INNER JOIN `tabLMS Learning Path` lp ON lp.name = t.learning_path
-                WHERE t.user = %s
-                  AND lp.status = 'Published'
-                  AND t.status = 'Not started'
-                  AND t.progress_percentage < 100
-            """)
-            ns_params.append(user)
-            
-        union_ns_query = " UNION ALL ".join(not_started_queries) + " ORDER BY creation ASC LIMIT 1"
-        not_started = frappe.db.sql(union_ns_query, tuple(ns_params), as_dict=True)
-        
-        if not_started:
-            t = not_started[0]
-        else:
-            return None
+        return None
 
     if t.type == 'Module':
         module_doc = frappe.get_value("LMS Module", t.id, ["module_name", "image"], as_dict=True)

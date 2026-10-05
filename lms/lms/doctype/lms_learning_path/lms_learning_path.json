@@ -19,7 +19,9 @@
   "duration",
   "is_mandatory",
   "enable_certificate",
-  "courses"
+  "enable_discussion",
+  "courses",
+  "version_history"
  ],
  "fields": [
   {
@@ -96,16 +98,29 @@
    "label": "Enable certificate on completion"
   },
   {
+   "default": "0",
+   "fieldname": "enable_discussion",
+   "fieldtype": "Check",
+   "label": "Enable Discussion"
+  },
+  {
    "fieldname": "courses",
    "fieldtype": "Table",
    "label": "Courses",
    "options": "LMS Learning Path Course"
+  },
+  {
+   "description": "Tracks the version history and updates of this learning path.",
+   "fieldname": "version_history",
+   "fieldtype": "Table",
+   "label": "Version History",
+   "options": "LMS Learning Path Version"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-22 08:20:32.872524",
+ "modified": "2026-10-05 16:35:14.442619",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Learning Path",

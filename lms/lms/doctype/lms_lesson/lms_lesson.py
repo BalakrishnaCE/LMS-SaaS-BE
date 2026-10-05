@@ -7,7 +7,8 @@ from frappe.model.document import Document
 
 class LMSLesson(Document):
 	def on_update(self):
-		self.update_module_trackers()
+		if not self.flags.ignore_trackers:
+			self.update_module_trackers()
 
 	def update_module_trackers(self):
 		import frappe

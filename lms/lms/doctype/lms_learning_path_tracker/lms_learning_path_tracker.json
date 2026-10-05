@@ -41,7 +41,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Not started\nIn Progress\nCompleted\nFailed",
+   "options": "Not started\nIn Progress\nCompleted\nFailed\nUnassigned",
    "reqd": 1,
    "description": "Select the overall progress status of the learning path."
   },
