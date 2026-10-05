@@ -217,11 +217,11 @@ def update_question(question_id, question_text, options, explanation=""):
         WHERE name=%s
     """, (question_text, explanation, frappe.utils.now_datetime(), frappe.session.user, question_id))
     
-    frappe.db.sql("DELETE FROM `tabLMS Quiz Question Option` WHERE parent=%s", (question_id,))
+    frappe.db.sql("DELETE FROM `tabLMS Quiz Option` WHERE parent=%s", (question_id,))
     
     for idx, opt in enumerate(options):
         frappe.get_doc({
-            "doctype": "LMS Quiz Question Option",
+            "doctype": "LMS Quiz Option",
             "parent": question_id,
             "parenttype": "LMS Quiz Question",
             "parentfield": "options",

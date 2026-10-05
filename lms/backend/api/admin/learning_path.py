@@ -1,6 +1,49 @@
 import frappe
 from frappe import _
 
+def get_all_overdue_learners_count():
+    from frappe.utils import today, add_days, getdate
+    assignments = frappe.get_all("LMS Learning Path Assignment", fields=["name", "learning_path", "assignment_type", "duration", "creation"])
+    
+    trackers = frappe.get_all("LMS Learning Path Tracker", fields=["learning_path", "user", "status", "started_on"])
+    tracker_map = {(t.learning_path, t.user): t for t in trackers}
+    
+    today_dt = getdate(today())
+    overdue_set = set()
+    
+    for a in assignments:
+        if not a.duration:
+            continue
+            
+        users = []
+        if a.assignment_type == "Everyone":
+            lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
+            valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
+            all_users = frappe.get_all("User", filters={"enabled": 1, "name": ["in", valid_users or ["__nobody__"]]}, fields=["name"])
+            users.extend([u.name for u in all_users])
+        elif a.assignment_type == "Manual":
+            manual_users = frappe.get_all("LMS LP Assignment User", filters={"parent": a.name}, fields=["user"])
+            users.extend([u.user for u in manual_users])
+        else:
+            teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
+            for t in teams:
+                members = frappe.get_all("LMS Team Member", filters={"parent": t.team, "parentfield": "learners"}, fields=["user"])
+                users.extend([m.user for m in members])
+                
+        for u in set(users):
+            if (a.learning_path, u) in overdue_set:
+                continue
+            tracker = tracker_map.get((a.learning_path, u))
+            if tracker and tracker.status == "Completed":
+                continue
+            start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else getdate(a.creation)
+            due_dt = add_days(start_dt, a.duration)
+            if getdate(due_dt) < today_dt:
+                overdue_set.add((a.learning_path, u))
+                
+    unique_overdue_users = set([u for lp, u in overdue_set])
+    return len(unique_overdue_users)
+
 @frappe.whitelist()
 def get_learning_paths():
     """
@@ -48,7 +91,7 @@ def get_learning_paths():
     total_paths = len(paths)
     draft_paths = sum(1 for p in paths if p.status == "Draft")
     
-    overdue_learners = 0 
+    overdue_learners = get_all_overdue_learners_count()
     review_required = 0
 
     return {
@@ -382,6 +425,10 @@ def get_learning_path_detail(path_id, version=None):
             "author_name": v.author_name or frappe.db.get_value("User", v.author, "full_name") or v.author or "",
         })
 
+    # Resolve creator name
+    created_by = path.owner
+    created_by_name = frappe.db.get_value("User", created_by, "full_name") or created_by
+
     return {
         "name": path.name,
         "path_name": path.path_name,
@@ -393,6 +440,9 @@ def get_learning_path_detail(path_id, version=None):
         "enable_discussion": int(getattr(path, "enable_discussion", 0) or 0),
         "enable_certificate": int(path.enable_certificate or 0),
         "modified": str(path.modified),
+        "owner": created_by,
+        "created_by": created_by,
+        "created_by_name": created_by_name,
         "categories": category_list,
         "category": category_list[0] if category_list else "",
         "modules": modules,
