@@ -60,6 +60,9 @@ def get_learner_summary(timeframe="month"):
     - overall progress %, assigned modules, in-progress modules, badges
     """
     user = frappe.session.user
+    
+    from lms.backend.api.learner.tracker_sync import sync_missing_trackers
+    sync_missing_trackers(user)
 
     # Modules assigned to this learner via LMS Module Assignment child table
     from lms.backend.api.common.module_detail import get_all_assigned_modules_for_learner
@@ -409,6 +412,9 @@ def get_all_assigned_paths_for_learner(user):
 @frappe.whitelist()
 def get_saved_items():
     user = frappe.session.user
+    
+    from lms.backend.api.learner.tracker_sync import sync_missing_trackers
+    sync_missing_trackers(user)
     
     # 1. Fetch saved modules
     module_trackers = frappe.get_all(

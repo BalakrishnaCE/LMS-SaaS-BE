@@ -26,5 +26,10 @@ class LMSModule(Document):
 		trackers = frappe.get_all("LMS Module Tracker", filters={"module": self.name}, pluck="name")
 		for t in trackers:
 			tracker = frappe.get_doc("LMS Module Tracker", t)
-			tracker.flags.ignore_version = True
-			tracker.save(ignore_permissions=True)
+			tracker.update_progress()
+			frappe.db.set_value("LMS Module Tracker", tracker.name, {
+				"progress_percentage": tracker.progress_percentage,
+				"total_score": tracker.total_score,
+				"status": tracker.status,
+				"completed_on": tracker.completed_on
+			}, update_modified=False)

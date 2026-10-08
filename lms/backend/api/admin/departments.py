@@ -11,18 +11,26 @@ def get_departments_data():
     total_departments = len(teams)
     
     all_team_members = frappe.get_all("LMS Team Member", fields=["user", "parent"])
-    unique_learners = set([m.user for m in all_team_members])
+    
+    admin_users = set(frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent"))
+    current_learners = [r for r in frappe.get_all("Has Role", filters={
+        "role": ["in", ["LMS-Learner", "LMS-Manager", "LMS-TL"]],
+        "parent": ["not in", ["Administrator", "Guest"]]
+    }, pluck="parent") if r not in admin_users]
+    
+    unique_learners = set(current_learners)
     total_learners = len(unique_learners)
     
-    # Active learners (logged in last 30 days)
     thirty_days_ago = add_days(today(), -30)
-    
-    active_learners = 0
-    if unique_learners:
-        active_learners = frappe.db.count("User", {
-            "name": ("in", list(unique_learners)),
-            "last_login": (">=", thirty_days_ago)
-        })
+    all_trackers = frappe.get_all("LMS Module Tracker", fields=["user", "status", "modified"])
+    active_learners_set = set()
+    for t in all_trackers:
+        if t.user not in unique_learners:
+            continue
+        if t.status and t.status in ("In Progress", "Completed", "Failed"):
+            if t.modified and getdate(t.modified) >= getdate(thirty_days_ago):
+                active_learners_set.add(t.user)
+    active_learners = len(active_learners_set)
         
     # Average completion
     # Average of progress_percentage across all LMS Module Trackers for these users
@@ -523,7 +531,7 @@ def get_department_details(department_id):
                 progress = sum([t.progress_percentage or 0 for t in user_trackers]) / assigned_count
                 
             # Status Logic
-            is_active = bool(u.enabled) and (u.last_login and u.last_login >= getdate(thirty_days_ago))
+            is_active = bool(u.enabled) and (u.last_login and getdate(u.last_login) >= getdate(thirty_days_ago))
             account_status = "Active" if is_active else "Inactive"
             
             progress_status = "On Track"

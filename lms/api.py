@@ -183,6 +183,27 @@ def get_user_profile():
     doc = frappe.get_doc("User", user)
     roles = [r.role for r in doc.roles]
     
+    # Get Departments from LMS Team Lead
+    departments = []
+    
+    team_leads = frappe.get_all("LMS Team Lead", filters={"user": doc.name}, fields=["parent"])
+    for tl in team_leads:
+        team_name = frappe.get_value("LMS Team", tl.parent, "team_name")
+        if team_name and team_name not in departments:
+            departments.append(team_name)
+            
+    department = ", ".join(departments) if departments else "Unassigned"
+    # Fetch LMS User Settings for designation and joining_date
+    designation = doc.get("designation") or "User"
+    joined_date = frappe.utils.formatdate(doc.creation, "medium") if doc.creation else ""
+    
+    lms_settings = frappe.get_all("LMS User Settings", filters={"system_user": doc.name}, fields=["designation", "joining_date"], limit=1)
+    if lms_settings:
+        if lms_settings[0].designation:
+            designation = lms_settings[0].designation
+        if lms_settings[0].joining_date:
+            joined_date = frappe.utils.formatdate(lms_settings[0].joining_date, "medium")
+
     return {
         "name": doc.name,
         "email": doc.email,
@@ -190,5 +211,21 @@ def get_user_profile():
         "first_name": doc.first_name,
         "last_name": doc.last_name,
         "user_image": doc.user_image,
-        "roles": roles
+        "roles": roles,
+        "department": department,
+        "designation": designation,
+        "employee_id": doc.get("employee_id") or "N/A",
+        "joined_date": joined_date,
+        "last_password_reset_date": doc.last_password_reset_date,
+        "creation": doc.creation
     }
+
+@frappe.whitelist()
+def verify_password(password):
+    from frappe.utils.password import check_password
+    import frappe.exceptions
+    try:
+        check_password(frappe.session.user, password)
+        return {"valid": True}
+    except frappe.exceptions.AuthenticationError:
+        return {"valid": False}

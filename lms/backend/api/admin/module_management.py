@@ -496,7 +496,7 @@ def get_admin_dashboard_modules():
     for mod in modules:
         mod.category = cat_map.get(mod.name, [])
         # Get total assigned learners who started
-        total = frappe.db.count("LMS Module Tracker", {"module": mod.name})
+        total = frappe.db.count("LMS Module Tracker", {"module": mod.name, "status": ["!=", "Unassigned"]})
         completed = frappe.db.count("LMS Module Tracker", {"module": mod.name, "status": "Completed"})
         
         # Get lesson count using SQL to avoid any child table ORM quirks
@@ -935,6 +935,14 @@ def get_module_learners(module_name):
                         users[m.user] = {"duration": duration, "assigned_via": "Team", "team": t.team, "creation": creation_date}
 
 
+    if not users:
+        return {
+            "learners": []
+        }
+        
+    enabled_users_set = set(frappe.get_all("User", filters={"enabled": 1, "name": ["in", list(users.keys())]}, pluck="name"))
+    users = {k: v for k, v in users.items() if k in enabled_users_set}
+    
     if not users:
         return {
             "learners": []

@@ -649,7 +649,7 @@ def get_assessment_details(user_id, quiz_name):
         submissions = frappe.get_all(
             "LMS Quiz Submission",
             filters={"user": user_id, "quiz": quiz_name},
-            fields=["name", "score", "passed", "creation", "time_taken"],
+            fields=["name", "score", "passed", "creation", "time_taken", "extra_attempts_granted"],
             order_by="creation asc"
         )
         
@@ -779,7 +779,7 @@ def get_assessment_details(user_id, quiz_name):
             "correct": correct_count,
             "incorrect": incorrect_count,
             "attempts": total_attempts,
-            "maxAttempts": getattr(quiz, "max_attempts", 0),
+            "maxAttempts": getattr(quiz, "max_attempts", 0) + sum(s.get("extra_attempts_granted") or 0 for s in submissions),
             "bestScore": f"{int(best_score)}%" if submissions else "--",
             "passingScore": getattr(quiz, "passing_percentage", "--"),
             "timeTaken": format_time(latest_sub.time_taken) if latest_sub and latest_sub.get("time_taken") else ("--" if not submissions else "14 min"),
