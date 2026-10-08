@@ -204,13 +204,19 @@ def get_learning_path_detail(path_id, version=None):
     # ── Fetch ALL LP Trackers (anyone who has progress, assigned or not) ──────
     all_trackers = frappe.get_all(
         "LMS Learning Path Tracker",
-        filters={"learning_path": path_id},
+        filters={"learning_path": path_id, "status": ["!=", "Unassigned"]},
         fields=["name", "user", "status", "progress_percentage", "total_score"]
     )
     tracker_user_set = {t.user for t in all_trackers}
 
     # Union: assigned learners + anyone who has a tracker (started learning)
     all_relevant_users = assigned_users | tracker_user_set
+    
+    # Exclude disabled users from stats
+    if all_relevant_users:
+        enabled_users = set(frappe.get_all("User", filters={"enabled": 1, "name": ["in", list(all_relevant_users)]}, pluck="name"))
+        all_relevant_users = all_relevant_users.intersection(enabled_users)
+        
     tracker_map = {t.user: t for t in all_trackers}
 
     total_assigned = len(all_relevant_users)
@@ -443,6 +449,7 @@ def get_learning_path_detail(path_id, version=None):
         "owner": created_by,
         "created_by": created_by,
         "created_by_name": created_by_name,
+        "created_by_avatar": frappe.db.get_value("User", created_by, "user_image") or None,
         "categories": category_list,
         "category": category_list[0] if category_list else "",
         "modules": modules,
@@ -455,6 +462,7 @@ def get_learning_path_detail(path_id, version=None):
         "path_completed_learners": path_completed_learners,
         "total_learners": total_assigned,
         "version_history": version_history,
+        "version": next((v["version"] for v in version_history if v["is_current"]), ""),
     }
 
 

@@ -713,7 +713,7 @@ def get_module_details_analytics(module_id, learning_type="module"):
         }
         
     # User info and teams
-    users = frappe.get_all("User", filters={"name": ["in", [t.user for t in trackers]]}, fields=["name", "full_name", "email"])
+    users = frappe.get_all("User", filters={"name": ["in", [t.user for t in trackers]]}, fields=["name", "full_name", "email", "user_image"])
     user_map = {u.name: u for u in users}
     
     team_members = frappe.get_all("LMS Team Member", filters={"user": ["in", [t.user for t in trackers]]}, fields=["user", "parent"])
@@ -771,6 +771,7 @@ def get_module_details_analytics(module_id, learning_type="module"):
         top_learners.append({
             "name": u_info.full_name if u_info else t.user,
             "email": u_info.email if u_info else t.user,
+            "avatar": (u_info.user_image if u_info else None) or "",
             "department": primary_team_name,
             "status": "Completed" if t.status == "Completed" else "In Progress" if t.status == "In Progress" else "Not Started",
             "completionRate": int(t.progress_percentage or 0)
@@ -838,7 +839,7 @@ def get_assessment_performance_list(assessment_type="all"):
     modules = frappe.get_all("LMS Module", filters={"name": ["in", module_names]}, fields=["name", "module_name"], ignore_permissions=True)
     module_map = {m.name: m.module_name for m in modules}
     
-    users = frappe.get_all("User", filters={"name": ["in", [s.user for s in submissions]]}, fields=["name", "full_name", "email"], ignore_permissions=True)
+    users = frappe.get_all("User", filters={"name": ["in", [s.user for s in submissions]]}, fields=["name", "full_name", "email", "user_image"], ignore_permissions=True)
     user_map = {u.name: u for u in users}
 
     user_quiz_attempts = {}
@@ -876,6 +877,7 @@ def get_assessment_performance_list(assessment_type="all"):
             "submissionId": s.name,
             "learnerName": u_info.full_name if u_info else user,
             "learnerEmail": u_info.email if u_info else user,
+            "learnerAvatar": (u_info.user_image if u_info else None) or "",
             "assessmentName": q_doc.title or quiz_id,
             "moduleName": mod_name,
             "type": q_doc.quiz_type or "Quiz",
@@ -1111,7 +1113,7 @@ def get_learning_performance_list():
     if user_filter:
         user_filters["name"] = ["in", user_filter]
         
-    users = frappe.get_all("User", filters=user_filters, fields=["name", "full_name", "email", "enabled"])
+    users = frappe.get_all("User", filters=user_filters, fields=["name", "full_name", "email", "enabled", "user_image"])
     if not users:
         return []
         
@@ -1183,7 +1185,7 @@ def get_learning_performance_list():
             "id": email,
             "learnerName": u.full_name or email,
             "email": email,
-            "avatar": "",
+            "avatar": u.user_image or "",
             "department": dept_name,
             "designation": designation,
             "accountStatus": "Active" if u.enabled else "Inactive",
@@ -1200,7 +1202,7 @@ def get_learner_details(learner_email):
     if user_filter is not None and learner_email not in user_filter:
         return {}
         
-    users = frappe.get_all("User", filters={"name": learner_email}, fields=["name", "full_name", "email", "enabled"])
+    users = frappe.get_all("User", filters={"name": learner_email}, fields=["name", "full_name", "email", "enabled", "user_image"])
     if not users:
         return {}
     u = users[0]
@@ -1221,7 +1223,7 @@ def get_learner_details(learner_email):
     profile = {
         "name": u.full_name or u.email,
         "email": u.email,
-        "avatar": "",
+        "avatar": u.user_image or "",
         "department": department,
         "designation": designation,
         "status": "Active" if u.enabled else "Inactive"

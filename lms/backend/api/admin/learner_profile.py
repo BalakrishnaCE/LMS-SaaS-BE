@@ -285,8 +285,6 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
             import urllib.parse
             encoded_name = urllib.parse.quote(u.full_name or u.name)
             avatar = f"https://ui-avatars.com/api/?name={encoded_name}&background=random&size=32"
-        elif avatar.startswith("/"):
-            avatar = get_url(avatar)
 
         results.append({
             "id": u.name,
@@ -379,8 +377,6 @@ def get_learner_details(user_id):
         import urllib.parse
         encoded_name = urllib.parse.quote(user.full_name or user.name)
         avatar = f"https://ui-avatars.com/api/?name={encoded_name}&background=random&size=32"
-    elif avatar.startswith("/"):
-        avatar = get_url(avatar)
 
     published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
     trackers = frappe.get_all("LMS Module Tracker", filters={"user": user.name, "module": ("in", published_module_ids) if published_module_ids else ("in", [""])}, fields=["name", "module", "status", "creation"], order_by="creation asc")

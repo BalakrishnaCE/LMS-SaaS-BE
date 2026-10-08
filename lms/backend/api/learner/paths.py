@@ -155,6 +155,9 @@ def get_learner_paths():
     Returns all published Learning Paths for the Learner along with their progress.
     """
     user = frappe.session.user
+    
+    from lms.backend.api.learner.tracker_sync import sync_missing_trackers
+    sync_missing_trackers(user)
 
     # Get only learning paths this user has been assigned/enrolled in
     user_lp_trackers = frappe.get_all(

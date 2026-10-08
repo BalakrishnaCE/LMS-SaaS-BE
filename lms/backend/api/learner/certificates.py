@@ -146,7 +146,93 @@ def get_learner_certificates():
                 "sourceType": "Module"
             })
             
+    # 3. Learning Path Certificates (completed paths with enable_certificate=True)
+    lp_trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user},
+        fields=["name", "learning_path", "status", "progress_percentage", "total_score", "completed_on"]
+    )
+    
+    for lp_tracker in lp_trackers:
+        if not lp_tracker.learning_path:
+            continue
+        
+        try:
+            lp = frappe.get_doc("LMS Learning Path", lp_tracker.learning_path)
+        except Exception:
+            continue
+        
+        if not lp.enable_certificate:
+            continue
+        
+        # Get path name and template
+        lp_title = lp.path_name or lp_tracker.learning_path
+        lp_template = getattr(lp, 'certificate_template', None)
+        
+        # Count module certificates earned within this path
+        path_courses = frappe.get_all(
+            "LMS Learning Path Course",
+            filters={"parent": lp_tracker.learning_path},
+            fields=["module"]
+        )
+        module_ids = [pc.module for pc in path_courses]
+        module_certs_earned = 0
+        if module_ids:
+            module_certs_earned = frappe.db.count(
+                "LMS Certificate",
+                filters={"user": user, "module": ("in", module_ids), "status": ("in", ["Issued", "Reissued"])}
+            )
+        
+        # Fetch preview image from LP certificate template
+        lp_preview_image = None
+        if lp_template:
+            try:
+                lp_preview_image = frappe.db.get_value("LMS Certificate Template", lp_template, "preview_image")
+                if not lp_preview_image:
+                    lp_preview_image = frappe.db.get_value("LMS Certificate Template", lp_template, "thumbnail")
+            except Exception:
+                pass
+        
+        is_lp_completed = lp_tracker.status == "Completed"
+        lp_progress = lp_tracker.progress_percentage or 0
+        lp_score = lp_tracker.total_score if (lp_tracker.total_score is not None and lp_tracker.total_score >= 0) else None
+        
+        if is_lp_completed:
+            lp_status = "Issued"
+            lp_earned = True
+        elif lp_progress > 0:
+            lp_status = "Ongoing"
+            lp_earned = False
+        else:
+            continue  # Not started — skip
+        
+        completed_on_str = None
+        if is_lp_completed and lp_tracker.completed_on:
+            try:
+                completed_on_str = lp_tracker.completed_on.strftime("%Y-%m-%d")
+            except Exception:
+                completed_on_str = str(lp_tracker.completed_on)[:10]
+        
+        results.append({
+            "id": f"lp-tracker-{lp_tracker.name}",
+            "certificateId": f"lp-{lp_tracker.learning_path}",
+            "title": lp_title,
+            "subtitle": "Learning Path Certificate",
+            "issueDate": completed_on_str,
+            "pdfUrl": None,
+            "score": lp_score,
+            "status": lp_status,
+            "earned": lp_earned,
+            "progress": lp_progress,
+            "previewImage": lp_preview_image,
+            "isClaimed": False,
+            "sourceType": "Learning Path",
+            "sourceId": lp_tracker.learning_path,
+            "moduleCertificatesEarned": module_certs_earned,
+        })
+        
     return results
+
 
 @frappe.whitelist()
 def claim_certificate(certificate_name):

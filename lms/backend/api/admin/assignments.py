@@ -63,13 +63,25 @@ def get_admin_assignments():
     for e in path_enrollments:
         path_enroll_map[(e.learning_path, e.user)] = e
 
+    enrolled_users = list({e.user for e in mod_enrollments} | {e.user for e in path_enrollments})
+    user_info = {}
+    if enrolled_users:
+        for u in frappe.get_all(
+            "User",
+            filters={"name": ["in", enrolled_users]},
+            fields=["name", "full_name", "user_image"],
+            ignore_permissions=True
+        ):
+            user_info[u.name] = {"full_name": u.full_name, "avatar": u.user_image or None}
+
     return {
         "modules": modules,
         "paths": paths,
         "mod_users": mod_user_map,
         "path_users": path_user_map,
         "mod_enrollments": mod_enrollments, # Just return raw for frontend to map if needed
-        "path_enrollments": path_enrollments
+        "path_enrollments": path_enrollments,
+        "user_info": user_info
     }
 
 @frappe.whitelist()
@@ -185,7 +197,7 @@ def check_assignment_overlap():
     # Fetch user details
     detailed_users = []
     if overlapping_users:
-        user_records = frappe.get_all("User", filters={"name": ["in", list(overlapping_users)]}, fields=["name", "full_name"])
+        user_records = frappe.get_all("User", filters={"name": ["in", list(overlapping_users)]}, fields=["name", "full_name", "user_image"])
         user_map = {u.name: u for u in user_records}
         
         for u in overlapping_users:
@@ -196,6 +208,7 @@ def check_assignment_overlap():
             detailed_users.append({
                 "email": u,
                 "full_name": user_doc.get("full_name") or u.split("@")[0],
+                "avatar": user_doc.get("user_image") or None,
                 "department": dept_name,
                 "role": "Learner" # Defaulting to Learner
             })
