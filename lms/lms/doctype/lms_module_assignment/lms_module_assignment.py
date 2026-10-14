@@ -35,10 +35,17 @@ class LMSModuleAssignment(Document):
             valid_assignment_names.add(self.name)
             
         for assignment_name in valid_assignment_names:
-            if assignment_name == self.name and not is_trash:
+            if assignment_name == self.name:
+                if is_trash:
+                    continue
                 doc = self
             else:
-                doc = frappe.get_doc("LMS Module Assignment", assignment_name)
+                try:
+                    if not frappe.db.exists("LMS Module Assignment", assignment_name):
+                        continue
+                    doc = frappe.get_doc("LMS Module Assignment", assignment_name)
+                except frappe.DoesNotExistError:
+                    continue
                 
             if doc.assignment_type == "Manual":
                 for row in doc.get("learners") or []:

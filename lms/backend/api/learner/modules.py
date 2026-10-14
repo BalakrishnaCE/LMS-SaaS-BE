@@ -363,6 +363,8 @@ def get_learner_module_viewer_data(module_id):
     metadata = {
         "id": module.name,
         "title": module.module_name,
+        "description": module.description or "",
+        "image": module.image or "",
         "category": get_module_category(module.name),
         "lessonsCount": len(module.get("lessons", [])),
         "duration": duration_str,
@@ -413,11 +415,31 @@ def get_learner_module_viewer_data(module_id):
                 "score": cp.score,
                 "last_position": cp.last_position
             }
+
+        chapter_progress = frappe.get_all(
+            "LMS Chapter Progress",
+            filters={"parent": t.name},
+            fields=["chapter", "status", "score"]
+        )
+        for chp in chapter_progress:
+            progress_map[chp.chapter] = {
+                "status": chp.status,
+                "score": chp.score,
+                "last_position": 0
+            }
+
+        lesson_progress = frappe.get_all(
+            "LMS Lesson Progress",
+            filters={"parent": t.name},
+            fields=["lesson", "status"]
+        )
             
     return {
         "metadata": metadata,
         "curriculum": curriculum,
         "overallProgress": tracker[0].progress_percentage if tracker else 0,
         "overallStatus": tracker[0].status if tracker else "Not started",
-        "progressMap": progress_map
+        "progressMap": progress_map,
+        "chapterProgress": {chp.chapter: {"status": chp.status, "score": chp.score} for chp in chapter_progress} if tracker else {},
+        "lessonProgress": {lp.lesson: {"status": lp.status} for lp in lesson_progress} if tracker else {}
     }

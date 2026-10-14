@@ -103,10 +103,15 @@ def get_module_overview(module_id):
     )
 
     assigned_users = {}  # user -> {duration, creation}
+    has_everyone = False
+    assigned_team_ids = []
+    assigned_manual_user_ids = []
+
     for a in assignments:
         duration = a.duration or 0
         creation_date = a.creation
         if a.assignment_type == "Everyone":
+            has_everyone = True
             lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
             valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
             
@@ -121,15 +126,68 @@ def get_module_overview(module_id):
         elif a.assignment_type == "Manual":
             learners = frappe.get_all("LMS Assignment User", filters={"parent": a.name}, fields=["user"])
             for l in learners:
+                if l.user:
+                    assigned_manual_user_ids.append(l.user)
                 if l.user not in assigned_users:
                     assigned_users[l.user] = {"duration": duration, "creation": creation_date}
         else:  # Team
             teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
             for t in teams:
+                if t.team:
+                    assigned_team_ids.append(t.team)
                 members = frappe.get_all("LMS Team Member", filters={"parent": t.team, "parentfield": "learners"}, fields=["user"])
                 for m in members:
                     if m.user not in assigned_users:
                         assigned_users[m.user] = {"duration": duration, "creation": creation_date}
+
+    if not assignments:
+        mv = getattr(module, "module_view", "Everyone")
+        if mv == "Everyone":
+            has_everyone = True
+
+    assigned_team_ids = list(dict.fromkeys(assigned_team_ids))
+    assigned_manual_user_ids = list(dict.fromkeys(assigned_manual_user_ids))
+
+    assigned_dept_names = []
+    if assigned_team_ids:
+        team_docs = frappe.get_all("LMS Team", filters={"name": ["in", assigned_team_ids]}, fields=["name", "team_name"])
+        tmap = {t.name: t.team_name or t.name for t in team_docs}
+        assigned_dept_names = [tmap.get(tid, tid) for tid in assigned_team_ids]
+
+    assigned_learner_objects = []
+    if assigned_manual_user_ids:
+        users = frappe.get_all("User", filters={"name": ["in", assigned_manual_user_ids]}, fields=["name", "full_name", "user_image"])
+        umap = {u.name: u for u in users}
+        for uid in assigned_manual_user_ids:
+            u = umap.get(uid)
+            assigned_learner_objects.append({
+                "name": uid,
+                "full_name": (u.full_name or uid) if u else uid,
+                "avatar": (u.user_image or None) if u else None,
+            })
+
+    if has_everyone:
+        vis_type = "everyone"
+        vis_label = "All Learners"
+    elif assigned_dept_names and not assigned_learner_objects:
+        vis_type = "departments"
+        vis_label = "Selected Departments"
+    elif assigned_learner_objects and not assigned_dept_names:
+        vis_type = "learners"
+        vis_label = f"{len(assigned_learner_objects)} Learners"
+    elif assigned_dept_names and assigned_learner_objects:
+        vis_type = "mixed"
+        vis_label = "Selected Departments"
+    else:
+        vis_type = "everyone"
+        vis_label = "All Learners"
+
+    visibility_info = {
+        "type": vis_type,
+        "label": vis_label,
+        "departments": assigned_dept_names,
+        "learners": assigned_learner_objects,
+    }
 
     # ── Step 2: fetch tracker data for users who have started ───────────────
     trackers = frappe.get_all(
@@ -261,7 +319,8 @@ def get_module_overview(module_id):
             "created_by_avatar": frappe.db.get_value("User", module.owner, "user_image") or None,
             "creation": str(module.creation)[:10],
             "modified": str(module.modified)[:10],
-            "visibility": getattr(module, "visibility", "All Departments"),
+            "visibility": vis_label,
+            "visibility_info": visibility_info,
         },
         "due_date": due_date,
         "days_remaining": days_remaining,

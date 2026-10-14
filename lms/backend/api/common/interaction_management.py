@@ -171,7 +171,6 @@ def _migrate_to_interactive_video(chapter, content_id=None):
             "title": old_doc.title or chapter.title,
             "base_media": getattr(old_doc, "base_media", None),
             "video_url": getattr(old_doc, "video_url", None),
-            "track_progress": getattr(old_doc, "track_progress", 1),
         }
     )
     new_doc.insert(ignore_permissions=True)

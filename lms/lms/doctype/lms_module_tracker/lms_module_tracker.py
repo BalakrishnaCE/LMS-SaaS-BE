@@ -16,24 +16,125 @@ class LMSModuleTracker(Document):
 		module_doc = frappe.get_doc("LMS Module", self.module)
 		passing_score = module_doc.certificate_passing_percentage or 0
 
-		# ── Collect all content items in the module (excluding flashcards) ──────
+		# ── Build a quick lookup of content_progress by reference ────────────────
+		cp_map = {cp.content_reference: cp for cp in self.get("content_progress", [])}
+
+		# ── Collect all content items in the module & calculate chapter/lesson progress ──
 		total_items = 0
 		total_scored_items = 0
 		SCORED_TYPES = ("LMS Quiz Content", "LMS Assessment Content")
-		for ml in module_doc.get("lessons", []):
-			if not ml.lesson: continue
-			lesson_doc = frappe.get_doc("LMS Lesson", ml.lesson)
-			for lc in lesson_doc.get("chapters", []):
-				if not lc.chapter: continue
-				chapter_doc = frappe.get_doc("LMS Chapter", lc.chapter)
-				for c in chapter_doc.get("contents", []):
-					if c.content_type != "LMS Flashcard Content":
-						total_items += 1
-					if c.content_type in SCORED_TYPES:
-						total_scored_items += 1
 
-		# ── Build a quick lookup of content_progress by reference ────────────────
-		cp_map = {cp.content_reference: cp for cp in self.get("content_progress", [])}
+		existing_chapters = {row.chapter: row for row in self.get("chapter_progress", []) if row.chapter}
+		existing_lessons = {row.lesson: row for row in self.get("lesson_progress", []) if row.lesson}
+
+		valid_chapters = set()
+		valid_lessons = set()
+
+		updated_chapter_rows = []
+		updated_lesson_rows = []
+
+		for ml in module_doc.get("lessons", []):
+			if not ml.lesson or not frappe.db.exists("LMS Lesson", ml.lesson):
+				continue
+			lesson_doc = frappe.get_doc("LMS Lesson", ml.lesson)
+			valid_lessons.add(ml.lesson)
+
+			lesson_chapter_statuses = []
+
+			for lc in lesson_doc.get("chapters", []):
+				if not lc.chapter or not frappe.db.exists("LMS Chapter", lc.chapter):
+					continue
+				chapter_doc = frappe.get_doc("LMS Chapter", lc.chapter)
+				valid_chapters.add(lc.chapter)
+
+				ch_total_items = 0
+				ch_completed_items = 0
+				ch_started_items = 0
+				ch_scored_items = 0
+				ch_score_sum = 0.0
+
+				for c in chapter_doc.get("contents", []):
+					is_flashcard = (c.content_type == "LMS Flashcard Content")
+					is_scored = (c.content_type in SCORED_TYPES)
+
+					if not is_flashcard:
+						total_items += 1
+						ch_total_items += 1
+					if is_scored:
+						total_scored_items += 1
+						ch_scored_items += 1
+
+					cp = cp_map.get(c.content_reference)
+					if cp:
+						if cp.status in ("In Progress", "Completed") or (cp.last_position and float(cp.last_position or 0) > 0):
+							ch_started_items += 1
+
+						if is_scored:
+							score_val = float(cp.score or 0)
+							ch_score_sum += score_val
+							if score_val >= passing_score and cp.status == "Completed":
+								ch_completed_items += 1
+						else:
+							if cp.status == "Completed":
+								ch_completed_items += 1
+
+				# Determine chapter status
+				if ch_total_items > 0:
+					if ch_completed_items >= ch_total_items:
+						ch_status = "Completed"
+					elif ch_completed_items > 0 or ch_started_items > 0:
+						ch_status = "In Progress"
+					else:
+						ch_status = "Not Started"
+				else:
+					if ch_started_items > 0:
+						ch_status = "Completed" if ch_completed_items > 0 else "In Progress"
+					else:
+						ch_status = "Completed" if self.status == "Completed" else "Not Started"
+
+				ch_score = round(ch_score_sum / ch_scored_items, 2) if ch_scored_items > 0 else 0.0
+				lesson_chapter_statuses.append(ch_status)
+
+				# Update or append chapter progress row
+				if lc.chapter in existing_chapters:
+					row = existing_chapters[lc.chapter]
+					row.status = ch_status
+					row.score = ch_score
+					updated_chapter_rows.append(row)
+				else:
+					row = self.append("chapter_progress", {
+						"chapter": lc.chapter,
+						"status": ch_status,
+						"score": ch_score
+					})
+					updated_chapter_rows.append(row)
+
+			# Determine lesson status
+			if lesson_chapter_statuses:
+				if all(st == "Completed" for st in lesson_chapter_statuses):
+					les_status = "Completed"
+				elif any(st in ("Completed", "In Progress") for st in lesson_chapter_statuses):
+					les_status = "In Progress"
+				else:
+					les_status = "Not Started"
+			else:
+				les_status = "Completed" if self.status == "Completed" else "Not Started"
+
+			# Update or append lesson progress row
+			if ml.lesson in existing_lessons:
+				row = existing_lessons[ml.lesson]
+				row.status = les_status
+				updated_lesson_rows.append(row)
+			else:
+				row = self.append("lesson_progress", {
+					"lesson": ml.lesson,
+					"status": les_status
+				})
+				updated_lesson_rows.append(row)
+
+		# Retain only valid rows
+		self.set("chapter_progress", [r for r in updated_chapter_rows if r.chapter in valid_chapters])
+		self.set("lesson_progress", [r for r in updated_lesson_rows if r.lesson in valid_lessons])
 
 		# ── Count "effectively completed" items ──────────────────────────────────
 		# Non-scored content (video/text/image) → done when status == "Completed"
@@ -103,6 +204,13 @@ class LMSModuleTracker(Document):
 					"revoked_on": frappe.utils.now_datetime()
 				})
 
+		# If module is completed, mark all child chapter and lesson rows Completed
+		if self.status == "Completed":
+			for cp_row in self.get("chapter_progress", []):
+				cp_row.status = "Completed"
+			for lp_row in self.get("lesson_progress", []):
+				lp_row.status = "Completed"
+
 		if self.status in ["In Progress", "Completed", "Failed"] and not self.started_on:
 			self.started_on = frappe.utils.now_datetime()
 
@@ -126,7 +234,8 @@ class LMSModuleTracker(Document):
 			return
 			
 		passing_score = module.certificate_passing_percentage or 60
-		if (self.total_score or 0) < passing_score:
+		# If total_score is -1, it means there are no scorable items, so passing_score check should be bypassed
+		if self.total_score != -1 and (self.total_score or 0) < passing_score:
 			return
 			
 		# Check if certificate already exists
@@ -173,4 +282,29 @@ class LMSModuleTracker(Document):
 		for lpt in lp_trackers:
 			tracker = frappe.get_doc("LMS Learning Path Tracker", lpt.name)
 			tracker.save(ignore_permissions=True)
+
+
+def backfill_tracker_progress(tracker_name=None):
+	if tracker_name:
+		trackers = [tracker_name]
+	else:
+		trackers = frappe.get_all(
+			"LMS Module Tracker",
+			filters={"status": ("in", ["In Progress", "Completed"])},
+			pluck="name"
+		)
+
+	updated = 0
+	for t_name in trackers:
+		try:
+			doc = frappe.get_doc("LMS Module Tracker", t_name)
+			doc.flags.ignore_version = True
+			doc.save(ignore_permissions=True)
+			updated += 1
+		except Exception as e:
+			frappe.log_error(f"Error backfilling tracker {t_name}", str(e))
+
+	frappe.db.commit()
+	return f"Successfully updated {updated} trackers."
+
 

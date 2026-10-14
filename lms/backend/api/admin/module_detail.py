@@ -80,11 +80,7 @@ def get_assessment_analytics(module_id):
             if quiz:
                 quiz_names.append(quiz)
                 
-    # 2. Get final assessments
-    if getattr(module, "final_assessments", None):
-        for fa in module.final_assessments:
-            if fa.assessment:
-                quiz_names.append(fa.assessment)
+    # Final assessments have been removed from the architecture
                 
     if not quiz_names:
         return {"stats": {"passRate": 0, "averageScore": 0, "learnersRetested": 0, "retestPercentage": 0}, "missedQuestion": None, "analytics": []}

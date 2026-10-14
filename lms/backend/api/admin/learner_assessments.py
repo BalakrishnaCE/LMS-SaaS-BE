@@ -318,14 +318,8 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                             if ac.assessment:
                                 lesson_quiz_map[ac.assessment] = {"lesson_label": lesson_label, "content_type": "Assessment"}
 
-            # Collect final assessment quiz names from the module's final_assessments table
-            final_quiz_names = []
-            for fa_row in getattr(mod, "final_assessments", []):
-                if fa_row.assessment:
-                    final_quiz_names.append(fa_row.assessment)
-
             # Fetch all submissions for these quizzes by this user
-            all_quizzes = list(lesson_quiz_map.keys()) + final_quiz_names
+            all_quizzes = list(lesson_quiz_map.keys())
             if all_quizzes:
                 submissions = frappe.get_all(
                     "LMS Quiz Submission",
@@ -434,10 +428,7 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                 build_assessment_entry(q, lesson_quiz_map[q]["lesson_label"], lesson_quiz_map[q]["content_type"])
                 for q in lesson_quiz_map
             ]
-            final_assessments = [
-                build_assessment_entry(q, "Final Assessment", "Assessment")
-                for q in final_quiz_names
-            ]
+
 
             # Required score: from module's certificate passing percentage
             required_score = getattr(mod, "certificate_passing_percentage", None) or 0
@@ -446,7 +437,7 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
             retake_used = 0
             retake_max = 0
             has_limits = False
-            for a in lesson_assessments + final_assessments:
+            for a in lesson_assessments:
                 if a.get("maxAttempts", 0) > 0:
                     has_limits = True
                     retake_max += max(0, a["maxAttempts"] - 1)
@@ -456,15 +447,15 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                 retake_used = "--"
                 retake_max = "--"
             
-            return lesson_assessments, final_assessments, required_score, retake_used, retake_max
+            return lesson_assessments, required_score, retake_used, retake_max
 
         for t in trackers:
             mod = frappe.get_doc("LMS Module", t.module)
 
             # Retrieve module's due date to pass to its assessments
             module_due_date = due_date_map.get(mod.name, "--")
-            lesson_assessments, final_assessments, required_score, retake_used, retake_max = build_assessments_for_module(mod, t.name, module_due_date)
-            all_assessments = lesson_assessments + final_assessments
+            lesson_assessments, required_score, retake_used, retake_max = build_assessments_for_module(mod, t.name, module_due_date)
+            all_assessments = lesson_assessments
 
             # Determine module result dynamically from all assessments
             assessments_for_status = all_assessments
@@ -536,7 +527,7 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                     "status": mod_status,
                     "assessments": all_assessments,
                     "lessonAssessments": lesson_assessments,
-                    "finalAssessments": final_assessments,
+                    "finalAssessments": [],
                     "lessonsCount": len(mod.lessons),
                     "assessmentsCount": len(all_assessments),
                     "overallScore": int(mod_overall),
@@ -564,7 +555,7 @@ def get_learner_assessments(user_id, categories=None, statuses=None, types=None,
                     "assessmentsCount": len(all_assessments),
                     "assessments": all_assessments,
                     "lessonAssessments": lesson_assessments,
-                    "finalAssessments": final_assessments,
+                    "finalAssessments": [],
                     "overallScore": int(mod_overall),
                     "avgPassScore": int(mod_avg_pass) if mod_avg_pass is not None else "--",
                     "maxAttemptsStr": mod_max_attempts_str,

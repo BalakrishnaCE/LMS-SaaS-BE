@@ -7,7 +7,6 @@
  "field_order": [
   "title",
   "is_assessment",
-  "track_progress",
   "interactive_elements",
   "duration"
  ],
@@ -26,13 +25,6 @@
    "fieldtype": "Check",
    "label": "Is Assessment",
    "description": "Toggle to enable or disable is assessment."
-  },
-  {
-   "default": "1",
-   "fieldname": "track_progress",
-   "fieldtype": "Check",
-   "label": "Track Progress",
-   "description": "Toggle to enable or disable track progress."
   },
   {
    "fieldname": "interactive_elements",

@@ -87,6 +87,51 @@ def _build_content_snapshot(module_doc):
                                 doc = frappe.get_doc(row.content_type, row.content_reference)
                                 # Exclude system fields
                                 actual_content = {k: v for k, v in doc.as_dict().items() if k not in ["name", "creation", "modified", "modified_by", "owner", "docstatus", "idx"]}
+                                
+                                # Deep snapshot quizzes
+                                quiz_field = None
+                                if row.content_type == 'LMS Quiz Content' and getattr(doc, 'quiz', None):
+                                    quiz_field = doc.quiz
+                                elif row.content_type == 'LMS Assessment Content' and getattr(doc, 'assessment', None):
+                                    quiz_field = doc.assessment
+                                    
+                                if quiz_field:
+                                    try:
+                                        quiz_doc = frappe.get_doc("LMS Quiz", quiz_field)
+                                        quiz_data = quiz_doc.as_dict()
+                                        quiz_data['questions'] = []
+                                        for ch_q in getattr(quiz_doc, 'questions', []):
+                                            try:
+                                                q_doc = frappe.get_doc("LMS Quiz Question", ch_q.quiz_question)
+                                                q_data = q_doc.as_dict()
+                                                q_data['options'] = [opt.as_dict() for opt in getattr(q_doc, 'options', [])]
+                                                quiz_data['questions'].append(q_data)
+                                            except Exception:
+                                                pass
+                                        actual_content['quiz_data'] = quiz_data
+                                    except Exception:
+                                        pass
+                                
+                                # Deep snapshot interactive elements (options for Knowledge Checks)
+                                if "interactive_elements" in actual_content:
+                                    for el in actual_content["interactive_elements"]:
+                                        if el.get("interaction_type") == "Knowledge Check" and el.get("linked_record_type") == "LMS Quiz" and el.get("linked_record_name"):
+                                            try:
+                                                quiz = frappe.get_doc("LMS Quiz", el["linked_record_name"])
+                                                if getattr(quiz, 'questions', []):
+                                                    q_link = quiz.questions[0]
+                                                    q_doc = frappe.get_doc("LMS Quiz Question", q_link.quiz_question)
+                                                    if q_doc.question_text:
+                                                        el["element_text"] = q_doc.question_text
+                                                    options = []
+                                                    for opt in getattr(q_doc, 'options', []):
+                                                        options.append({
+                                                            "text": opt.option_text,
+                                                            "isCorrect": bool(opt.is_correct)
+                                                        })
+                                                    el["options"] = options
+                                            except Exception:
+                                                pass
                             except Exception:
                                 pass
                         

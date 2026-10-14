@@ -250,3 +250,85 @@ def claim_certificate(certificate_name):
         frappe.db.commit()
         
     return {"status": "success"}
+
+@frappe.whitelist()
+def get_learning_path_certificates(learning_path):
+    user = frappe.form_dict.get("user_id") or frappe.session.user
+    user_name = frappe.db.get_value("User", user, "full_name") or user
+    
+    try:
+        issuer_name = frappe.db.get_single_value("LMS Settings", "brand_name") or "LEARNING ACADEMY"
+    except Exception:
+        issuer_name = "LEARNING ACADEMY"
+    
+    path_courses = frappe.get_all(
+        "LMS Learning Path Course",
+        filters={"parent": learning_path},
+        fields=["module"]
+    )
+    module_ids = [pc.module for pc in path_courses]
+    
+    module_certs = []
+    if module_ids:
+        certs = frappe.get_all(
+            "LMS Certificate",
+            filters={"user": user, "module": ("in", module_ids), "status": ("in", ["Issued", "Reissued"])},
+            fields=["name", "module", "issued_on", "status", "score", "is_claimed"]
+        )
+        
+        for cert in certs:
+            module_name = frappe.db.get_value("LMS Module", cert.module, "module_name") or cert.module
+            
+            # Fetch signature name for this module
+            signature_name = "Learning & Development"
+            try:
+                sig_by = frappe.db.get_value("LMS Module", cert.module, "certificate_signature_by")
+                if sig_by:
+                    sig_name = frappe.db.get_value("LMS Authorized Signatory", sig_by, "signatory_name")
+                    if sig_name:
+                        signature_name = sig_name
+            except Exception:
+                pass
+                
+            module_certs.append({
+                "id": cert.name,
+                "title": module_name,
+                "issueDate": cert.issued_on,
+                "pdfUrl": cert.name,
+                "score": cert.score,
+                "isClaimed": bool(cert.is_claimed),
+                "issuerName": issuer_name,
+                "authorizationName": signature_name
+            })
+    lp_tracker = frappe.get_value(
+        "LMS Learning Path Tracker",
+        {"user": user, "learning_path": learning_path},
+        ["status", "completed_on", "total_score", "name"],
+        as_dict=True
+    )
+    
+    lp_cert = None
+    if lp_tracker and lp_tracker.status == "Completed":
+        lp_name = frappe.db.get_value("LMS Learning Path", learning_path, "path_name") or learning_path
+        completed_on_str = None
+        if lp_tracker.completed_on:
+            try:
+                completed_on_str = lp_tracker.completed_on.strftime("%Y-%m-%d")
+            except Exception:
+                completed_on_str = str(lp_tracker.completed_on)[:10]
+                
+        lp_cert = {
+            "id": f"lp-tracker-{lp_tracker.name}",
+            "title": lp_name,
+            "issueDate": completed_on_str,
+            "pdfUrl": None,
+            "score": lp_tracker.total_score if (lp_tracker.total_score is not None and lp_tracker.total_score >= 0) else None,
+            "issuerName": issuer_name,
+            "authorizationName": "Learning & Development"
+        }
+        
+    return {
+        "userName": user_name,
+        "moduleCertificates": module_certs,
+        "learningPathCertificate": lp_cert
+    }

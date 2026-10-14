@@ -567,12 +567,60 @@ def duplicate_module(module_name):
         new_name = f"{base_name} (Copy {counter})"
         counter += 1
         
-    # Create copy
+    # Create copy of module shell
     new_module = frappe.copy_doc(original)
-        
     new_module.module_name = new_name
     new_module.status = "Draft"
+    new_module.set("lessons", [])
     new_module.insert(ignore_permissions=True)
+    
+    # Deep copy lessons
+    for old_lesson_row in original.lessons:
+        old_lesson = frappe.get_doc("LMS Lesson", old_lesson_row.lesson)
+        new_lesson = frappe.copy_doc(old_lesson)
+        new_lesson.set("chapters", [])
+        
+        # Deep copy chapters
+        for old_chapter_row in old_lesson.chapters:
+            old_chapter = frappe.get_doc("LMS Chapter", old_chapter_row.chapter)
+            new_chapter = frappe.copy_doc(old_chapter)
+            new_chapter.set("contents", [])
+            
+            # Deep copy contents
+            for old_content_row in old_chapter.contents:
+                old_content = frappe.get_doc(old_content_row.content_type, old_content_row.content_reference)
+                new_content = frappe.copy_doc(old_content)
+                
+                if old_content_row.content_type == "LMS Quiz Content" and getattr(new_content, "quiz", None):
+                    old_quiz = frappe.get_doc("LMS Quiz", new_content.quiz)
+                    new_quiz = frappe.copy_doc(old_quiz)
+                    new_quiz.insert(ignore_permissions=True)
+                    new_content.quiz = new_quiz.name
+                    
+                elif old_content_row.content_type == "LMS Assessment Content" and getattr(new_content, "assessment", None):
+                    old_quiz = frappe.get_doc("LMS Quiz", new_content.assessment)
+                    new_quiz = frappe.copy_doc(old_quiz)
+                    new_quiz.insert(ignore_permissions=True)
+                    new_content.assessment = new_quiz.name
+                    
+                new_content.insert(ignore_permissions=True)
+                new_chapter.append("contents", {
+                    "content_type": old_content_row.content_type,
+                    "content_reference": new_content.name,
+                    "order": old_content_row.order
+                })
+                
+            new_chapter.insert(ignore_permissions=True)
+            new_lesson.append("chapters", {
+                "chapter": new_chapter.name
+            })
+            
+        new_lesson.insert(ignore_permissions=True)
+        new_module.append("lessons", {
+            "lesson": new_lesson.name
+        })
+        
+    new_module.save(ignore_permissions=True)
     
     return {"status": "success", "new_module_id": new_module.name}
 
@@ -695,7 +743,7 @@ def save_chapter_quiz(chapter_name, quiz_data, content_idx=0):
 
 
 @frappe.whitelist(allow_guest=False)
-def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, slides_json=None, duration=None, allow_seeking=None, content_idx=0):
+def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_url=None, slides_json=None, duration=None, allow_skipping=None, track_interaction=None, content_idx=0):
     if not chapter_name:
         frappe.throw("Chapter Name is required")
         
@@ -727,8 +775,12 @@ def update_chapter_media(chapter_name, base_media=None, video_url=None, iframe_u
         except (ValueError, TypeError):
             pass
             
-    if allow_seeking is not None and content_doc.meta.has_field("allow_seeking"):
-        content_doc.allow_seeking = int(allow_seeking)
+    if allow_skipping is not None and content_doc.meta.has_field("allow_skipping"):
+        content_doc.allow_skipping = int(allow_skipping)
+
+
+    if track_interaction is not None and content_doc.meta.has_field("track_interaction"):
+        content_doc.track_interaction = int(track_interaction)
             
     content_doc.save(ignore_permissions=True)
     return {"status": "success"}

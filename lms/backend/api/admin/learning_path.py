@@ -72,10 +72,9 @@ def get_learning_paths():
             filters={"parent": path.name, "parenttype": "LMS Learning Path"},
             fields=["category"]
         )
-        if categories:
-            path["category"] = categories[0].category
-        else:
-            path["category"] = ""
+        cat_list = [c.category for c in categories if c.category]
+        path["categories"] = cat_list
+        path["category"] = cat_list
         
         # Calculate completion rate
         enrollments = frappe.get_all(
@@ -179,9 +178,13 @@ def get_learning_path_detail(path_id, version=None):
     )
 
     assigned_users = set()
+    has_everyone = False
+    assigned_team_ids = []
+    assigned_manual_user_ids = []
 
     for a in assignments:
         if a.assignment_type == "Everyone":
+            has_everyone = True
             # All active non-guest users
             lms_roles = frappe.get_all(
                 "Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"]
@@ -193,13 +196,64 @@ def get_learning_path_detail(path_id, version=None):
         elif a.assignment_type == "Manual":
             lp_learners = frappe.get_all("LMS LP Assignment User", filters={"parent": a.name}, fields=["user"])
             for l in lp_learners:
-                assigned_users.add(l.user)
+                if l.user:
+                    assigned_manual_user_ids.append(l.user)
+                    assigned_users.add(l.user)
         else:  # Team
             teams = frappe.get_all("LMS Assignment Team", filters={"parent": a.name}, fields=["team"])
             for t in teams:
+                if t.team:
+                    assigned_team_ids.append(t.team)
                 members = frappe.get_all("LMS Team Member", filters={"parent": t.team, "parentfield": "learners"}, fields=["user"])
                 for m in members:
                     assigned_users.add(m.user)
+
+    if not assignments:
+        has_everyone = True
+
+    assigned_team_ids = list(dict.fromkeys(assigned_team_ids))
+    assigned_manual_user_ids = list(dict.fromkeys(assigned_manual_user_ids))
+
+    assigned_dept_names = []
+    if assigned_team_ids:
+        team_docs = frappe.get_all("LMS Team", filters={"name": ["in", assigned_team_ids]}, fields=["name", "team_name"])
+        tmap = {t.name: t.team_name or t.name for t in team_docs}
+        assigned_dept_names = [tmap.get(tid, tid) for tid in assigned_team_ids]
+
+    assigned_learner_objects = []
+    if assigned_manual_user_ids:
+        users = frappe.get_all("User", filters={"name": ["in", assigned_manual_user_ids]}, fields=["name", "full_name", "user_image"])
+        umap = {u.name: u for u in users}
+        for uid in assigned_manual_user_ids:
+            u = umap.get(uid)
+            assigned_learner_objects.append({
+                "name": uid,
+                "full_name": (u.full_name or uid) if u else uid,
+                "avatar": (u.user_image or None) if u else None,
+            })
+
+    if has_everyone:
+        vis_type = "everyone"
+        vis_label = "All Learners"
+    elif assigned_dept_names and not assigned_learner_objects:
+        vis_type = "departments"
+        vis_label = "Selected Departments"
+    elif assigned_learner_objects and not assigned_dept_names:
+        vis_type = "learners"
+        vis_label = f"{len(assigned_learner_objects)} Learners"
+    elif assigned_dept_names and assigned_learner_objects:
+        vis_type = "mixed"
+        vis_label = "Selected Departments"
+    else:
+        vis_type = "everyone"
+        vis_label = "All Learners"
+
+    visibility_info = {
+        "type": vis_type,
+        "label": vis_label,
+        "departments": assigned_dept_names,
+        "learners": assigned_learner_objects,
+    }
 
     # ── Fetch ALL LP Trackers (anyone who has progress, assigned or not) ──────
     all_trackers = frappe.get_all(
@@ -463,6 +517,8 @@ def get_learning_path_detail(path_id, version=None):
         "total_learners": total_assigned,
         "version_history": version_history,
         "version": next((v["version"] for v in version_history if v["is_current"]), ""),
+        "visibility": vis_label,
+        "visibility_info": visibility_info,
     }
 
 
@@ -882,3 +938,66 @@ def get_lp_assessment_analytics(path_id, quiz_id):
         "mostMissedQuestion": most_missed,
         "analytics": analytics
     }
+
+
+@frappe.whitelist(allow_guest=True)
+def get_lp_ai_insights(path_id=None, path_name=None):
+    path_id = path_id or path_name
+    if not path_id:
+        return {"insights": []}
+
+    trackers = frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"learning_path": path_id, "status": ["!=", "Unassigned"]},
+        fields=["status", "user", "total_score", "progress_percentage", "started_on", "completed_on"]
+    )
+
+    assigned_data = get_lp_learners(path_id)
+    assigned_learners = assigned_data.get("learners", []) if assigned_data else []
+    total = len(assigned_learners)
+
+    if total == 0:
+        total = len(trackers)
+
+    if total == 0:
+        return {"insights": [
+            "No learner data yet. Assign this learning path to learners to see insights."
+        ]}
+
+    completed = [t for t in trackers if t.status == "Completed"]
+    in_prog   = [t for t in trackers if t.status == "In Progress"]
+    not_started = max(0, total - len(completed) - len(in_prog))
+
+    insights = []
+
+    completion_rate = round(len(completed) / total * 100) if total > 0 else 0
+    if completion_rate >= 80:
+        insights.append(f"{completion_rate}% of learners have completed this learning path — excellent engagement!")
+    elif completion_rate >= 50:
+        insights.append(f"{completion_rate}% completion rate. Consider sending a reminder to the remaining learners.")
+    else:
+        insights.append(f"Only {completion_rate}% completion rate. This learning path may need attention — consider reviewing its duration or modules.")
+
+    scores = [t.total_score for t in completed if t.total_score is not None and t.total_score >= 0]
+    if scores:
+        avg_score = round(sum(scores) / len(scores))
+        if avg_score < 60:
+            insights.append(f"Average assessment score is {avg_score}% — learners may be struggling with assessments.")
+        elif avg_score >= 85:
+            insights.append(f"Strong average assessment score of {avg_score}% among completions.")
+        else:
+            insights.append(f"Average assessment score is {avg_score}%.")
+
+    if not_started > 0:
+        insights.append(f"{not_started} learner{'s' if not_started > 1 else ''} haven't started yet. A nudge notification could help.")
+
+    stats = assigned_data.get("stats", {}) if assigned_data else {}
+    overdue_count = stats.get("overdue", 0)
+    if overdue_count > 0:
+        insights.append(f"{overdue_count} learner{'s' if overdue_count > 1 else ''} overdue. Follow up to keep momentum going.")
+    else:
+        stalled = [t for t in in_prog if (t.progress_percentage is not None and t.progress_percentage == 0)]
+        if len(stalled) > 0:
+            insights.append(f"{len(stalled)} learner{'s' if len(stalled) > 1 else ''} started but haven't made progress across modules.")
+
+    return {"insights": insights[:4]}
