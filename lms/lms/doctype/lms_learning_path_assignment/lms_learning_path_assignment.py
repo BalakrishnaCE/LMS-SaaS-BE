@@ -16,35 +16,63 @@ class LMSLearningPathAssignment(Document):
     def after_insert(self):
         self.create_trackers()
 
-    def create_trackers(self):
+    def on_trash(self):
+        self.create_trackers(is_trash=True)
+
+    def create_trackers(self, is_trash=False):
         users = set()
         
-        if self.assignment_type == "Manual":
-            for row in self.learners:
-                if row.user:
-                    users.add(row.user)
-                    
-        elif self.assignment_type == "Team":
-            for row in self.assigned_teams:
-                if row.team:
-                    members = frappe.get_all("LMS Team Member", filters={"parent": row.team}, fields=["user"])
-                    for member in members:
-                        if member.user:
-                            users.add(member.user)
-                            
-        elif self.assignment_type == "Everyone":
-            lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
-            valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
-            all_users = frappe.get_all(
-                "User",
-                filters={
-                    "enabled": 1,
-                    "name": ["in", valid_users] if valid_users else ["in", ["__nobody__"]]
-                },
-                fields=["name"]
-            )
-            for u in all_users:
-                users.add(u.name)
+        # Get all assignment records for this learning path
+        assignments = frappe.get_all("LMS Learning Path Assignment", 
+            filters={"learning_path": self.learning_path},
+            fields=["name"]
+        )
+        
+        valid_assignment_names = set(a.name for a in assignments)
+        if is_trash and self.name in valid_assignment_names:
+            valid_assignment_names.remove(self.name)
+        elif not is_trash:
+            valid_assignment_names.add(self.name)
+            
+        for assignment_name in valid_assignment_names:
+            if assignment_name == self.name:
+                if is_trash:
+                    continue
+                doc = self
+            else:
+                try:
+                    if not frappe.db.exists("LMS Learning Path Assignment", assignment_name):
+                        continue
+                    doc = frappe.get_doc("LMS Learning Path Assignment", assignment_name)
+                except frappe.DoesNotExistError:
+                    continue
+                
+            if doc.assignment_type == "Manual":
+                for row in doc.get("learners") or []:
+                    if row.user:
+                        users.add(row.user)
+                        
+            elif doc.assignment_type == "Team":
+                for row in doc.get("assigned_teams") or []:
+                    if row.team:
+                        members = frappe.get_all("LMS Team Member", filters={"parent": row.team}, fields=["user"])
+                        for member in members:
+                            if member.user:
+                                users.add(member.user)
+                                
+            elif doc.assignment_type == "Everyone":
+                lms_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, fields=["parent"])
+                valid_users = [r.parent for r in lms_roles if r.parent not in ["Administrator", "Guest"]]
+                all_users = frappe.get_all(
+                    "User",
+                    filters={
+                        "enabled": 1,
+                        "name": ["in", valid_users] if valid_users else ["in", ["__nobody__"]]
+                    },
+                    fields=["name"]
+                )
+                for u in all_users:
+                    users.add(u.name)
                 
         # Find existing trackers
         existing_trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": self.learning_path}, fields=["name", "user", "status", "progress_percentage"])

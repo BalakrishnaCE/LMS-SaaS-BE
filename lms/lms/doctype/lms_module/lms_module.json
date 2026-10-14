@@ -32,8 +32,6 @@
   "enable_ai_flashcards",
   "is_sequential",
   "allow_skip",
-  "total_score",
-  "final_assessments",
   "version_history"
  ],
  "fields": [
@@ -188,21 +186,6 @@
    "fieldname": "enable_module_review",
    "fieldtype": "Check",
    "label": "Enable Module Review"
-  },
-  {
-   "depends_on": "is_score_required",
-   "description": "Auto-calculated by backend from all scored content inside this module",
-   "fieldname": "total_score",
-   "fieldtype": "Float",
-   "label": "Total Score",
-   "read_only": 1
-  },
-  {
-   "description": "supports multiple assessments",
-   "fieldname": "final_assessments",
-   "fieldtype": "Table",
-   "label": "Final Assessments",
-   "options": "LMS Module Assessment"
   },
   {
    "default": "0",

@@ -100,11 +100,55 @@ def get_learner_path_detail(path_id):
             mod_duration = mod.get("duration") or 0
             total_duration += mod_duration
             
-            # Optional: count quizzes/assessments
-            # Assuming QA Assessments are interactive elements or similar, we'll keep it simple for now
-            total_quizzes += 0
-
             modules.append(mod)
+
+    # Count quizzes and QA assessments across all modules in this learning path
+    total_quizzes = 0
+    total_qa_assessments = 0
+    valid_module_names = [m["name"] for m in modules]
+
+    if valid_module_names:
+        # 1. Fetch chapter contents for these modules
+        chapter_contents = frappe.db.sql("""
+            SELECT cc.content_type, cc.content_reference
+            FROM `tabLMS Module Lesson Child` mlc
+            JOIN `tabLMS Lesson Chapter` lc ON lc.parent = mlc.lesson
+            JOIN `tabLMS Chapter Content` cc ON cc.parent = lc.chapter
+            WHERE mlc.parent IN %(modules)s 
+              AND cc.content_type IN ('LMS Quiz Content', 'LMS Assessment Content')
+        """, {"modules": valid_module_names}, as_dict=True)
+
+        for item in chapter_contents:
+            quiz_id = None
+            if item.content_type == "LMS Quiz Content":
+                quiz_id = frappe.db.get_value("LMS Quiz Content", item.content_reference, "quiz")
+            elif item.content_type == "LMS Assessment Content":
+                quiz_id = frappe.db.get_value("LMS Assessment Content", item.content_reference, "assessment")
+
+            if quiz_id:
+                q_type = frappe.db.get_value("LMS Quiz", quiz_id, "quiz_type")
+                if q_type == "QA Assessment":
+                    total_qa_assessments += 1
+                else:
+                    total_quizzes += 1
+            else:
+                if item.content_type == "LMS Assessment Content":
+                    total_qa_assessments += 1
+                else:
+                    total_quizzes += 1
+
+        # 2. Module level assessments (tabLMS Module Assessment)
+        mod_assessments = frappe.get_all(
+            "LMS Module Assessment",
+            filters={"parent": ["in", valid_module_names]},
+            fields=["assessment"]
+        )
+        for ma in mod_assessments:
+            q_type = frappe.db.get_value("LMS Quiz", ma.assessment, "quiz_type")
+            if q_type == "QA Assessment":
+                total_qa_assessments += 1
+            else:
+                total_quizzes += 1
 
     # Format Duration
     hours = total_duration // 60
@@ -144,8 +188,9 @@ def get_learner_path_detail(path_id):
         "includes": {
             "modules": len(modules),
             "quizzes": total_quizzes,
-            "assessments": 0,
-            "certificates": 1 # Assume 1 certificate for now
+            "assessments": total_qa_assessments,
+            "total_assessments": total_quizzes + total_qa_assessments,
+            "certificates": 1 if path.enable_certificate else 0
         }
     }
 
@@ -193,7 +238,9 @@ def get_learner_paths():
             filters={"parent": path.name, "parenttype": "LMS Learning Path"},
             fields=["category"]
         )
-        path.category = ", ".join([c.category for c in categories if c.category]) if categories else "General"
+        cat_list = [c.category for c in categories if c.category]
+        path.categories = cat_list
+        path.category = cat_list if cat_list else "General"
 
         # Get modules for this path (include duration for time estimation)
         modules = frappe.get_all("LMS Learning Path Course", filters={"parent": path.name}, fields=["module"])

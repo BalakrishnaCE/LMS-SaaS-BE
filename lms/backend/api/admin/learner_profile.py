@@ -262,10 +262,10 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
     order_by = "creation desc" if risk and risk.lower() == "recent" else "name asc"
     users = frappe.get_all("User", filters=filters, fields=["name", "email", "full_name", "enabled", "user_image"], order_by=order_by, ignore_permissions=True)
 
-    # Filter by search term against full_name OR email (case-insensitive, in Python)
+    # Filter by search term against full_name OR email OR username (case-insensitive, in Python)
     if search:
         search_lower = search.lower().strip()
-        users = [u for u in users if search_lower in (u.full_name or "").lower() or search_lower in (u.email or "").lower()]
+        users = [u for u in users if search_lower in (u.full_name or "").lower() or search_lower in (u.email or "").lower() or search_lower in (u.name or "").lower()]
 
     user_evals = _evaluate_user_risks(users)
 

@@ -9,7 +9,6 @@
   "base_media",
   "transcript",
   "is_assessment",
-  "track_progress",
   "duration"
  ],
  "fields": [
@@ -39,13 +38,6 @@
    "fieldtype": "Check",
    "label": "Is Assessment",
    "description": "Toggle to enable or disable is assessment."
-  },
-  {
-   "default": "1",
-   "fieldname": "track_progress",
-   "fieldtype": "Check",
-   "label": "Track Progress",
-   "description": "Toggle to enable or disable track progress."
   },
   {
    "fieldname": "duration",

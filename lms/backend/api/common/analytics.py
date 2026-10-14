@@ -6,20 +6,25 @@ from lms.backend.api.manager.metrics import _get_team_member_emails
 
 def _get_filter_for_user():
     user = frappe.session.user
+    if user == "Administrator":
+        return None
+
     roles = frappe.get_roles(user)
+
+    # System Manager and LMS-Admin have global access across all departments and learners
+    if "System Manager" in roles or "LMS-Admin" in roles or "LMS Admin" in roles:
+        return None
     
     # LMS-TL (Team Lead) and LMS Manager are scoped to their own teams.
-    # Check these BEFORE System Manager so that TLs who also have System Manager
-    # are still correctly scoped when using the manager portal.
     if "LMS-TL" in roles or "LMS Manager" in roles:
         member_emails = _get_team_member_emails(user)
         if not member_emails:
             return [] # Returns empty list to indicate no data
         return member_emails
 
-    if "System Manager" in roles or "LMS Admin" in roles:
-        return None # No filter, return all data
-        
+    if user == "Guest":
+        return None
+
     return [] # Default fallback
 
 @frappe.whitelist(allow_guest=True)
