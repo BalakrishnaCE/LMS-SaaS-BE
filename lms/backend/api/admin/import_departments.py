@@ -1,5 +1,6 @@
 import frappe
 import json
+from frappe.utils import getdate
 
 def _validate_manager(email):
     """
@@ -39,16 +40,82 @@ def save_department_import(departments_json, groups_json="[]"):
             team_doc = frappe.new_doc("LMS Team")
             team_doc.team_name = dept_name
             team_doc.is_active = 1
-            team_doc.insert(ignore_permissions=True)
-            team_name = team_doc.name
             
         # Update managers (Team Leads)
-        existing_managers = {row.user for row in team_doc.get("team_leads", [])}
+        existing_managers = {row.user for row in (team_doc.get("team_leads") or [])}
         for email in valid_managers:
             if email not in existing_managers:
                 team_doc.append("team_leads", {"user": email})
+                
+        # Update learners (Team Members)
+        existing_members = {row.user for row in (team_doc.get("learners") or [])}
+        learners = dep.get("learners", [])
+        for l in learners:
+            l_email = l.get("email", "").strip()
+            if not l_email: continue
+            
+            # Create user if doesn't exist
+            if not frappe.db.exists("User", l_email):
+                new_user = frappe.new_doc("User")
+                new_user.email = l_email
+                new_user.first_name = l.get("name", l_email.split("@")[0])
+                
+                base_username = l_email.split("@")[0]
+                username = base_username
+                if frappe.db.exists("User", {"username": username}):
+                    import uuid
+                    username = f"{base_username}_{uuid.uuid4().hex[:6]}"
+                new_user.username = username
+                
+                new_user.send_welcome_email = 0
+                new_user.append("roles", {"role": "LMS-Learner"})
+                new_user.append("roles", {"role": "System Manager"})
+                new_user.insert(ignore_permissions=True)
+            
+            if l_email not in existing_members:
+                team_doc.append("learners", {
+                    "user": l_email
+                })
+                
+            # Update or create LMS User Settings
+            user_settings_name = frappe.db.get_value("LMS User Settings", {"system_user": l_email}, "name")
+            if user_settings_name:
+                settings_doc = frappe.get_doc("LMS User Settings", user_settings_name)
+            else:
+                settings_doc = frappe.new_doc("LMS User Settings")
+                settings_doc.system_user = l_email
+                
+            has_changes = False
+            designation = l.get("designation", "").strip()
+            joined_date_raw = l.get("joined_date", "") if l.get("joined_date") else None
+            
+            parsed_date = None
+            if joined_date_raw:
+                try:
+                    from dateutil.parser import parse as parse_date
+                    parsed_date = parse_date(joined_date_raw, dayfirst=True).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+            
+            if designation and settings_doc.designation != designation:
+                settings_doc.designation = designation
+                has_changes = True
+                
+            if parsed_date and str(settings_doc.joining_date) != str(parsed_date):
+                settings_doc.joining_date = parsed_date
+                has_changes = True
+                
+            if settings_doc.is_new():
+                settings_doc.insert(ignore_permissions=True)
+            elif has_changes:
+                settings_doc.save(ignore_permissions=True)
         
-        team_doc.save(ignore_permissions=True)
+        if team_doc.is_new():
+            team_doc.insert(ignore_permissions=True)
+            team_name = team_doc.name
+        else:
+            team_doc.save(ignore_permissions=True)
+            
         created_teams[dept_name] = team_name
         
     # 2. Process assignment groups for content assignment

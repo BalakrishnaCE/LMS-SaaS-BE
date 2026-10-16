@@ -30,8 +30,53 @@ def _get_filter_for_user():
 @frappe.whitelist(allow_guest=True)
 def get_metrics_summary(learning_type="all"):
     user_filter = _get_filter_for_user()
+
+    def get_empty_data(timeframe):
+        current_year = getdate(now()).year
+        current_month = getdate(now()).month
+        if timeframe == "year":
+            intervals = [getdate(f"{current_year}-{m:02d}-28") for m in range(1, 13)]
+            labels = [getdate(dt).strftime("%b") for dt in intervals]
+            trend_label = "last year"
+        else:
+            num_days = calendar.monthrange(current_year, current_month)[1]
+            intervals = [
+                getdate(f"{current_year}-{current_month:02d}-07"),
+                getdate(f"{current_year}-{current_month:02d}-14"),
+                getdate(f"{current_year}-{current_month:02d}-21"),
+                getdate(f"{current_year}-{current_month:02d}-{num_days}")
+            ]
+            labels = [f"Week {i+1}" for i in range(len(intervals))]
+            trend_label = "last month"
+            
+        zeros = [0] * len(labels)
+        return {
+            "labels": labels,
+            "activeLearners": 0,
+            "activeLearnersTrend": f"+0% {trend_label}",
+            "activeLearnersHistory": zeros,
+            "completionRate": 0,
+            "completionRateTrend": f"vs 0% {trend_label}",
+            "completionRateHistory": zeros,
+            "overdueAssignments": 0,
+            "overdueAssignmentsTrend": f"+0% {trend_label}",
+            "overdueAssignmentsHistory": zeros,
+            "complianceCompletion": 0,
+            "complianceCompletionTrend": f"+0% {trend_label}",
+            "complianceCompletionHistory": zeros,
+            "assessmentScore": 0,
+            "assessmentScoreTrend": f"vs 0% {trend_label}",
+            "assessmentScoreHistory": zeros,
+            "onTimeCompletion": 0,
+            "onTimeCompletionTrend": f"vs 0% {trend_label}",
+            "onTimeCompletionHistory": zeros,
+            "learnersNeedingAttention": 0,
+            "learnersNeedingAttentionTrend": f"+0 {trend_label}",
+            "learnersNeedingAttentionHistory": zeros
+        }
+
     if user_filter == []:
-        return {"month": {}, "year": {}}
+        return {"month": get_empty_data("month"), "year": get_empty_data("year")}
 
     def get_data(timeframe):
         current_year = getdate(now()).year
@@ -407,8 +452,18 @@ def get_department_performance():
     roles = frappe.get_roles(user)
     
     # Check TL/Manager role first so it takes precedence over System Manager
-    if "LMS-TL" in roles or "LMS Manager" in roles:
-        lead_rows = frappe.get_all("LMS Team Lead", filters={"user": user, "parenttype": "LMS Team"}, fields=["parent"])
+    if "LMS-TL" in roles or "LMS Manager" in roles or "LMS-Manager" in roles:
+        user_identifiers = {user}
+        try:
+            user_info = frappe.db.get_value("User", user, ["name", "email"], as_dict=True)
+            if user_info:
+                if user_info.get("name"):
+                    user_identifiers.add(user_info["name"])
+                if user_info.get("email"):
+                    user_identifiers.add(user_info["email"])
+        except Exception:
+            pass
+        lead_rows = frappe.get_all("LMS Team Lead", filters={"user": ["in", list(user_identifiers)], "parenttype": "LMS Team"}, fields=["parent"])
         team_names = list({r.parent for r in lead_rows})
         if not team_names:
             return []
@@ -468,8 +523,18 @@ def get_department_assessment_performance(assessment_type="all"):
     roles = frappe.get_roles(user)
 
     # Check TL/Manager role first so it takes precedence over System Manager
-    if "LMS-TL" in roles or "LMS Manager" in roles:
-        lead_rows = frappe.get_all("LMS Team Lead", filters={"user": user, "parenttype": "LMS Team"}, fields=["parent"])
+    if "LMS-TL" in roles or "LMS Manager" in roles or "LMS-Manager" in roles:
+        user_identifiers = {user}
+        try:
+            user_info = frappe.db.get_value("User", user, ["name", "email"], as_dict=True)
+            if user_info:
+                if user_info.get("name"):
+                    user_identifiers.add(user_info["name"])
+                if user_info.get("email"):
+                    user_identifiers.add(user_info["email"])
+        except Exception:
+            pass
+        lead_rows = frappe.get_all("LMS Team Lead", filters={"user": ["in", list(user_identifiers)], "parenttype": "LMS Team"}, fields=["parent"])
         team_names = list({r.parent for r in lead_rows})
         if not team_names:
             return []

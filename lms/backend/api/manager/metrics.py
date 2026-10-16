@@ -10,10 +10,21 @@ def _get_team_member_emails(tl_user):
     managed directly by the Frappe Desk LMS Team form — so any add/remove in
     Frappe Desk is immediately reflected here without any extra sync step.
     """
+    user_identifiers = {tl_user}
+    try:
+        user_info = frappe.db.get_value("User", tl_user, ["name", "email"], as_dict=True)
+        if user_info:
+            if user_info.get("name"):
+                user_identifiers.add(user_info["name"])
+            if user_info.get("email"):
+                user_identifiers.add(user_info["email"])
+    except Exception:
+        pass
+
     # All teams where this user is listed as a team lead
     lead_rows = frappe.get_all(
         "LMS Team Lead",
-        filters={"user": tl_user, "parenttype": "LMS Team"},
+        filters={"user": ["in", list(user_identifiers)], "parenttype": "LMS Team"},
         fields=["parent"],
     )
     team_names = list({r.parent for r in lead_rows})
@@ -30,7 +41,8 @@ def _get_team_member_emails(tl_user):
             fields=["user"],
         )
         for m in members:
-            member_emails.add(m.user)
+            if m.user:
+                member_emails.add(m.user)
 
     return list(member_emails)
 
