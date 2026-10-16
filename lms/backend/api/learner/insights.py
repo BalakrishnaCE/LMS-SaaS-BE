@@ -66,61 +66,77 @@ def get_upcoming_deadlines():
 
 @frappe.whitelist(allow_guest=True)
 def get_recently_assigned():
-    published_modules = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
-    
-    if not published_modules:
-        return []
-
-    assignments = frappe.get_all("LMS Module Assignment", 
-        filters={"module": ["in", published_modules]},
-        fields=["name", "module", "creation", "duration"],
-        limit=20,
-        order_by="creation desc"
-    )
-    
-    seen_modules = set()
-    unique_assignments = []
-    for a in assignments:
-        if a.module not in seen_modules:
-            seen_modules.add(a.module)
-            unique_assignments.append(a)
-        if len(unique_assignments) == 5:
-            break
-            
-    # Get module details (title, category)
-    module_names = [a.module for a in unique_assignments]
-    modules_data = frappe.get_all("LMS Module", filters={"name": ["in", module_names]}, fields=["name", "module_name"])
-    module_map = {m.name: m.module_name for m in modules_data}
-    
-    categories_data = frappe.get_all("LMS Module Category", filters={"parent": ["in", module_names]}, fields=["parent", "category"])
-    category_map = {}
-    for c in categories_data:
-        if c.parent not in category_map:
-            category_map[c.parent] = c.category # Just take the first category
-            
     from frappe.utils import add_days, formatdate
-    
+
+    # Fetch recent Module and Learning Path assignments
+    mod_assignments = frappe.get_all("LMS Module Assignment",
+        fields=["name", "module as learning_id", "creation", "duration"],
+        order_by="creation desc",
+        limit=50
+    )
+    for a in mod_assignments:
+        a["type"] = "Module"
+
+    lp_assignments = frappe.get_all("LMS Learning Path Assignment",
+        fields=["name", "learning_path as learning_id", "creation", "duration"],
+        order_by="creation desc",
+        limit=50
+    )
+    for a in lp_assignments:
+        a["type"] = "Learning Path"
+
+    all_assignments = mod_assignments + lp_assignments
+    all_assignments.sort(key=lambda x: x.creation, reverse=True)
+
+    seen = set()
+    unique_assignments = []
+    for a in all_assignments:
+        key = (a["type"], a["learning_id"])
+        if key not in seen:
+            seen.add(key)
+            unique_assignments.append(a)
+        if len(unique_assignments) >= 30:
+            break
+
     results = []
     for a in unique_assignments:
-        trackers = frappe.get_all("LMS Module Tracker", filters={"module": a.module}, fields=["status"])
-        total_assigned = len(trackers)
-        completed = len([t for t in trackers if t.status == "Completed"])
+        if a["type"] == "Module":
+            m_doc = frappe.db.get_value("LMS Module", a["learning_id"], ["module_name", "status"], as_dict=True)
+            if not m_doc:
+                continue
+            title = m_doc.module_name or a["learning_id"]
+            cats = frappe.get_all("LMS Module Category", filters={"parent": a["learning_id"]}, pluck="category")
+            cat = cats[0] if cats else "General"
+            trackers = frappe.get_all("LMS Module Tracker", filters={"module": a["learning_id"], "status": ("!=", "Unassigned")}, fields=["status"])
+            total_assigned = len(trackers)
+            completed = len([t for t in trackers if t.status == "Completed"])
+        else:
+            p_doc = frappe.db.get_value("LMS Learning Path", a["learning_id"], ["path_name", "status"], as_dict=True)
+            if not p_doc:
+                continue
+            title = p_doc.path_name or a["learning_id"]
+            cat = "Curriculum"
+            trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": a["learning_id"], "status": ("!=", "Unassigned")}, fields=["status"])
+            total_assigned = len(trackers)
+            completed = len([t for t in trackers if t.status == "Completed"])
+
         progress = int((completed / total_assigned) * 100) if total_assigned > 0 else 0
-        
+
         # Calculate Due Date
         due_date_str = "No Limit"
-        if a.duration:
-            due_date = add_days(a.creation, a.duration)
+        if a.get("duration"):
+            due_date = add_days(a["creation"], a["duration"])
             due_date_str = formatdate(due_date, "MMM d, yyyy")
-            
+
         results.append({
-            "id": a.name, # Assignment ID
-            "moduleId": a.module, # The actual module ID
-            "title": module_map.get(a.module, a.module),
-            "type": "Module",
-            "category": category_map.get(a.module, "General"),
+            "id": a["name"],
+            "moduleId": a["learning_id"],
+            "title": title,
+            "type": a["type"],
+            "category": cat,
             "assignedLearners": total_assigned,
             "dueDate": due_date_str,
             "progress": progress
         })
+
     return results

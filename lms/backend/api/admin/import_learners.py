@@ -32,8 +32,14 @@ def _ensure_user(learner: dict) -> str:
     user.send_welcome_email = 0
     user.enabled = 1
     user.new_password = "Password@123"  # Default password for imported learners
-    user.append("roles", {"role": "LMS-Learner"})
     user.append("roles", {"role": "System Manager"})
+    
+    is_tl = learner.get("is_tl") in [True, "true", 1, "1"]
+    if is_tl:
+        user.append("roles", {"role": "LMS-TL"})
+    else:
+        user.append("roles", {"role": "LMS-Learner"})
+        
     user.insert(ignore_permissions=True)
 
     # Create LMS User Settings
@@ -45,7 +51,12 @@ def _ensure_user(learner: dict) -> str:
         if designation:
             settings.designation = designation
         if joining_date:
-            settings.joining_date = joining_date
+            try:
+                # Handle DD-MM-YYYY or other formats
+                parsed_date = frappe.utils.getdate(joining_date)
+                settings.joining_date = parsed_date.strftime("%Y-%m-%d")
+            except Exception:
+                settings.joining_date = joining_date
         settings.insert(ignore_permissions=True)
 
     # Add to team matching the department
@@ -57,18 +68,49 @@ def _ensure_user(learner: dict) -> str:
             team = frappe.new_doc("LMS Team")
             team.team_name = department
             team.is_active = 1
+            
+            if is_tl:
+                team.append("team_leads", {"user": email})
+            else:
+                # LMS Team requires at least one team lead
+                team.append("team_leads", {"user": frappe.session.user})
+                team.append("learners", {"user": email})
+                
+            team.flags.ignore_mandatory = True
             team.insert(ignore_permissions=True)
             team_name = team.name
+        else:
+            # Add user to team if not already there
+            if is_tl:
+                already_tl = frappe.db.exists(
+                    "LMS Team Lead", {"parent": team_name, "user": email}
+                )
+                if not already_tl:
+                    team_doc = frappe.get_doc("LMS Team", team_name)
+                    team_doc.append("team_leads", {"user": email})
+                    team_doc.flags.ignore_version = True
+                    team_doc.save(ignore_permissions=True)
+            else:
+                already_member = frappe.db.exists(
+                    "LMS Team Member", {"parent": team_name, "user": email}
+                )
+                if not already_member:
+                    team_doc = frappe.get_doc("LMS Team", team_name)
+                    team_doc.append("learners", {"user": email})
+                    team_doc.flags.ignore_version = True
+                    team_doc.save(ignore_permissions=True)
 
-        # Add user to team if not already there
-        already_member = frappe.db.exists(
-            "LMS Team Member", {"parent": team_name, "user": email}
-        )
-        if not already_member:
-            team_doc = frappe.get_doc("LMS Team", team_name)
-            team_doc.append("learners", {"user": email})
-            team_doc.flags.ignore_version = True
-            team_doc.save(ignore_permissions=True)
+    # Process managersTeam for TLs
+    managers_team = (learner.get("managersTeam") or "").strip()
+    if is_tl and managers_team:
+        mt_name = frappe.db.get_value("LMS Team", {"team_name": managers_team}, "name")
+        if mt_name:
+            already_member = frappe.db.exists("LMS Team Member", {"parent": mt_name, "user": email})
+            if not already_member:
+                mt_doc = frappe.get_doc("LMS Team", mt_name)
+                mt_doc.append("learners", {"user": email})
+                mt_doc.flags.ignore_version = True
+                mt_doc.save(ignore_permissions=True)
 
     return email
 
