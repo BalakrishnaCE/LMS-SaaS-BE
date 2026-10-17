@@ -89,7 +89,35 @@ def toggle_assignment_status(tracker_type, tracker_name, status):
     if not frappe.has_permission(tracker_type, "write"):
         frappe.throw("Not permitted", frappe.PermissionError)
     
+    if tracker_type not in ("LMS Module Tracker", "LMS Learning Path Tracker"):
+        frappe.throw("Invalid tracker type")
+
     frappe.db.set_value(tracker_type, tracker_name, "status", status)
+
+    if status == "Unassigned":
+        # Also drop the learner from the manual assignment list so they no longer
+        # show up as "Selected learners" when the module / path is edited.
+        if tracker_type == "LMS Module Tracker":
+            user, target = frappe.db.get_value(tracker_type, tracker_name, ["user", "module"])
+            assignment_doctype = "LMS Module Assignment"
+            target_field = "module"
+        else:
+            user, target = frappe.db.get_value(tracker_type, tracker_name, ["user", "learning_path"])
+            assignment_doctype = "LMS Learning Path Assignment"
+            target_field = "learning_path"
+
+        assignment_names = frappe.get_all(
+            assignment_doctype,
+            filters={target_field: target, "assignment_type": "Manual"},
+            pluck="name",
+        )
+        if assignment_names:
+            frappe.db.sql("""
+                DELETE FROM `tabLMS Assignment User`
+                WHERE parent IN %s AND user = %s
+            """, (tuple(assignment_names), user))
+
+    frappe.db.commit()
     return True
 
 @frappe.whitelist()

@@ -143,6 +143,7 @@ def get_learning_path_detail(path_id, version=None):
         )
 
     modules = []
+    from lms.backend.api.common.module_detail import get_module_duration_mins, format_duration_str
     for pc in path_courses:
         mod = frappe.get_value(
             "LMS Module",
@@ -159,16 +160,16 @@ def get_learning_path_detail(path_id, version=None):
             """, (mod.name,))
             mod["lesson_count"] = lesson_count_res[0][0] if lesson_count_res else 0
             mod["completed_learners"] = 0  # populated below
+
+            # Use the EXACT same estimated time calculation as individual modules
+            curriculum_mins = get_module_duration_mins(mod.name)
+            mod["duration"] = curriculum_mins
+            mod["duration_str"] = format_duration_str(curriculum_mins)
+
             modules.append(mod)
 
     total_duration = sum(m.get("duration") or 0 for m in modules)
-    hours = total_duration // 60
-    mins = total_duration % 60
-    duration_str = ""
-    if hours > 0:
-        duration_str += f"{hours} hrs "
-    if mins > 0 or hours == 0:
-        duration_str += f"{mins} min"
+    duration_str = format_duration_str(total_duration)
 
     # ── Resolve assigned learners from LMS Learning Path Assignment ──────────
     assignments = frappe.get_all(
@@ -499,6 +500,12 @@ def get_learning_path_detail(path_id, version=None):
         "is_sequential": path.is_sequential,
         "enable_discussion": int(getattr(path, "enable_discussion", 0) or 0),
         "enable_certificate": int(path.enable_certificate or 0),
+        "certificate_template": getattr(path, "certificate_template", "") or "",
+        "certificate_reference_number": getattr(path, "certificate_reference_number", "") or "",
+        "certificate_validity_period": getattr(path, "certificate_validity_period", 365) or 365,
+        "certificate_signature_by": getattr(path, "certificate_signature_by", "") or "",
+        "certificate_passing_percentage": getattr(path, "certificate_passing_percentage", 80) or 80,
+        "enable_path_review": int(getattr(path, "enable_path_review", 0) or 0),
         "modified": str(path.modified),
         "owner": created_by,
         "created_by": created_by,

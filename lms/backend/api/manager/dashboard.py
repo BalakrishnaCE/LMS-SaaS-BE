@@ -213,15 +213,9 @@ def get_manager_modules():
             
         total_assigned = 1
         
-        from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
-        est_hours = get_estimated_hours_from_curriculum(a["module"])
-        if est_hours > 0:
-            if est_hours < 1:
-                duration_str = f"{int(est_hours * 60)} min"
-            else:
-                duration_str = f"{est_hours:g} hr"
-        else:
-            duration_str = "0 min"
+        from lms.backend.api.common.module_detail import get_module_duration_mins, format_duration_str
+        total_mins = get_module_duration_mins(a["module"])
+        duration_str = format_duration_str(total_mins)
             
         results.append({
             "id": a["module"],

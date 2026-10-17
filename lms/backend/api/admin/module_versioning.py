@@ -98,13 +98,17 @@ def _build_content_snapshot(module_doc):
                                 if quiz_field:
                                     try:
                                         quiz_doc = frappe.get_doc("LMS Quiz", quiz_field)
-                                        quiz_data = quiz_doc.as_dict()
+                                        SYSTEM_FIELDS = {"name", "creation", "modified", "modified_by", "owner", "docstatus", "idx", "parent", "parentfield", "parenttype", "doctype"}
+                                        quiz_data = {k: v for k, v in quiz_doc.as_dict().items() if k not in SYSTEM_FIELDS}
                                         quiz_data['questions'] = []
                                         for ch_q in getattr(quiz_doc, 'questions', []):
                                             try:
                                                 q_doc = frappe.get_doc("LMS Quiz Question", ch_q.quiz_question)
-                                                q_data = q_doc.as_dict()
-                                                q_data['options'] = [opt.as_dict() for opt in getattr(q_doc, 'options', [])]
+                                                q_data = {k: v for k, v in q_doc.as_dict().items() if k not in SYSTEM_FIELDS}
+                                                q_data['options'] = [
+                                                    {k: v for k, v in opt.as_dict().items() if k not in SYSTEM_FIELDS}
+                                                    for opt in getattr(q_doc, 'options', [])
+                                                ]
                                                 quiz_data['questions'].append(q_data)
                                             except Exception:
                                                 pass
@@ -441,22 +445,58 @@ def restore_module_version(module_id, version):
     return {"message": "success", "restored_version": version, "new_id": module.name}
 
 
+def _clean_snapshot_for_diff(snapshot):
+    """
+    Strips system fields (timestamps, idx, owner, etc.) recursively from quiz/content blocks
+    and excludes non-content configuration (certificates, status, discussion) so that comparing
+    snapshots only triggers for actual content changes.
+    """
+    if not isinstance(snapshot, dict):
+        return snapshot
+
+    EXCLUDED_SETTINGS = (
+        "status",
+        "enable_certificate",
+        "certificate_template",
+        "certificate_reference_number",
+        "certificate_validity_period",
+        "certificate_signature_by",
+        "certificate_passing_percentage",
+        "enable_module_review",
+        "enable_discussion",
+    )
+
+    SYSTEM_FIELDS = {
+        "name", "creation", "modified", "modified_by", "owner",
+        "docstatus", "idx", "parent", "parentfield", "parenttype", "doctype"
+    }
+
+    def _clean_node(d):
+        if not isinstance(d, dict):
+            return d
+        cleaned = {}
+        for k, v in d.items():
+            if k in SYSTEM_FIELDS or k in EXCLUDED_SETTINGS:
+                continue
+            if k == "track_progress":
+                continue
+            elif isinstance(v, dict):
+                cleaned[k] = _clean_node(v)
+            elif isinstance(v, list):
+                cleaned[k] = [_clean_node(item) if isinstance(item, dict) else item for item in v]
+            else:
+                cleaned[k] = v
+        return cleaned
+
+    return _clean_node(snapshot)
+
+
 @frappe.whitelist(allow_guest=False)
 def has_unpublished_changes(module_id):
     """
     Checks if the module, any of its lessons, any of its chapters,
     or any content blocks inside those chapters have been modified
     since the latest published version.
-
-    Doctypes checked:
-      1. LMS Module          - module settings, title, description etc.
-      2. LMS Lesson          - lesson title, order, estimated time etc.
-      3. LMS Chapter         - chapter title, order etc.
-      4. LMS Chapter Content - actual text, video, audio, quiz content blocks
-
-    Uses `creation` (not `modified`) of the version history row as the publish
-    baseline, because `modified` gets re-stamped every time the parent module
-    is saved, making it unreliable as a change-detection anchor.
     """
     module = frappe.get_doc("LMS Module", module_id)
 
@@ -465,22 +505,15 @@ def has_unpublished_changes(module_id):
         # Never published — always treat as having unpublished changes
         return {"has_changes": True}
 
-    # Use the current version's CREATION time as the publish baseline.
-    # `creation` is set once when the row is inserted and never changes.
     latest_v = next((v for v in versions if v.is_current), versions[-1])
-    
-    
+
     try:
         if latest_v.content_snapshot:
-            old_snapshot = json.loads(latest_v.content_snapshot)
-            
-            # Ensure certificate and discussion settings don't trigger "unpublished changes"
-            if "module_settings" in old_snapshot:
-                old_snapshot["module_settings"].pop("enable_certificate", None)
-                old_snapshot["module_settings"].pop("enable_discussion", None)
-                
-            current_snapshot = json.loads(json.dumps(_build_content_snapshot(module), default=str))
-            
+            old_snapshot = _clean_snapshot_for_diff(json.loads(latest_v.content_snapshot))
+            current_snapshot = _clean_snapshot_for_diff(
+                json.loads(json.dumps(_build_content_snapshot(module), default=str))
+            )
+
             if old_snapshot == current_snapshot:
                 return {"has_changes": False}
             else:
