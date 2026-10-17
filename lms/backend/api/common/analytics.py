@@ -669,7 +669,7 @@ def get_recently_assigned_learning(learning_type="all"):
                     completed = len([t for t in mod_trackers if t.status == "Completed"])
                     c_rate = int((completed / assigned) * 100) if assigned > 0 else 0
                     cats = list(module_categories_map.get(mod, []))
-                    cat_str = cats[0] if cats else "General"
+                    cat_str = ", ".join(sorted(cats)) if cats else "General"
                     results.append({
                         "id": mod, "name": module_map.get(mod, mod), "type": "Module",
                         "category": cat_str, "assignedLearners": assigned, "inProgress": in_progress,

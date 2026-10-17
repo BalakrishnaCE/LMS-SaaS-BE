@@ -329,6 +329,45 @@ def add_content_block(chapter_name, content_type, title=None, content_data=None)
         frappe.log_error("add_content_block ERROR", traceback.format_exc())
         raise
 
+ALLOWED_CONTENT_DOCTYPES = {
+    'LMS Text Content',
+    'LMS Document Content',
+    'LMS Video Content',
+    'LMS Audio Content',
+    'LMS Presentation Content',
+    'LMS Quiz Content',
+    'LMS Iframe Content',
+    'LMS Assessment Content',
+    'LMS Interactive Video Content',
+    'LMS Quiz'
+}
+
+def _delete_content_record_sql(content_type, content_reference):
+    """Direct SQL deletion of content records and child tables without triggering Frappe doc events."""
+    if not content_type or not content_reference or content_type not in ALLOWED_CONTENT_DOCTYPES:
+        return
+
+    try:
+        linked_quiz = None
+        if content_type == "LMS Quiz Content":
+            linked_quiz = frappe.db.get_value("LMS Quiz Content", content_reference, "quiz")
+        elif content_type == "LMS Assessment Content":
+            linked_quiz = frappe.db.get_value("LMS Assessment Content", content_reference, "assessment")
+        elif content_type == "LMS Quiz":
+            linked_quiz = content_reference
+
+        frappe.db.sql(f"DELETE FROM `tab{content_type}` WHERE `name` = %s", (content_reference,))
+        frappe.db.sql("DELETE FROM `tabLMS Content Progress` WHERE `content_reference` = %s", (content_reference,))
+
+        if linked_quiz:
+            qc_used = frappe.db.sql("SELECT name FROM `tabLMS Quiz Content` WHERE `quiz` = %s", (linked_quiz,))
+            ac_used = frappe.db.sql("SELECT name FROM `tabLMS Assessment Content` WHERE `assessment` = %s", (linked_quiz,))
+            if not qc_used and not ac_used:
+                frappe.db.sql("DELETE FROM `tabLMS Quiz Child` WHERE `parent` = %s", (linked_quiz,))
+                frappe.db.sql("DELETE FROM `tabLMS Quiz` WHERE `name` = %s", (linked_quiz,))
+    except Exception as e:
+        frappe.log_error("Failed to delete content record via SQL", str(e))
+
 @frappe.whitelist(allow_guest=False)
 def remove_content_block(chapter_name, content_reference):
     try:
@@ -337,21 +376,15 @@ def remove_content_block(chapter_name, content_reference):
             
         content_type = frappe.db.get_value("LMS Chapter Content", {"parent": chapter_name, "content_reference": content_reference}, "content_type")
         
+        frappe.db.sql("""
+            DELETE FROM `tabLMS Chapter Content`
+            WHERE `parent` = %s AND `content_reference` = %s
+        """, (chapter_name, content_reference))
+        
         if content_type:
-            frappe.db.sql("""
-                DELETE FROM `tabLMS Chapter Content`
-                WHERE `parent` = %s AND `content_reference` = %s
-            """, (chapter_name, content_reference))
-            frappe.db.commit()
+            _delete_content_record_sql(content_type, content_reference)
             
-            # Also try to delete the actual content document
-            try:
-                if frappe.db.exists(content_type, content_reference):
-                    frappe.delete_doc(content_type, content_reference, ignore_permissions=True)
-            except Exception as inner_e:
-                frappe.log_error("Failed to delete content doc on remove_content_block", str(inner_e))
-                pass
-                
+        frappe.db.commit()
         return {"status": "success"}
     except Exception as e:
         import traceback
@@ -433,15 +466,23 @@ def remove_lesson(module_name, lesson_name):
         DELETE FROM `tabLMS Module Lesson Child`
         WHERE `parent` = %s AND `lesson` = %s
     """, (module_name, lesson_name))
-    frappe.db.commit()
     
-    if frappe.db.exists("LMS Lesson", lesson_name):
-        lesson = frappe.get_doc("LMS Lesson", lesson_name)
-        if hasattr(lesson, "chapters"):
-            for ch in lesson.chapters:
-                remove_chapter(lesson_name, ch.chapter)
-        frappe.delete_doc("LMS Lesson", lesson_name, ignore_permissions=True)
+    other_modules = frappe.db.sql("""
+        SELECT parent FROM `tabLMS Module Lesson Child`
+        WHERE `lesson` = %s AND `parent` != %s
+    """, (lesson_name, module_name))
+    
+    if not other_modules:
+        chapter_names = frappe.db.sql("""
+            SELECT chapter FROM `tabLMS Lesson Chapter` WHERE `parent` = %s
+        """, (lesson_name,), pluck="chapter")
+        for ch in chapter_names:
+            remove_chapter(lesson_name, ch)
+        frappe.db.sql("DELETE FROM `tabLMS Lesson Chapter` WHERE `parent` = %s", (lesson_name,))
+        frappe.db.sql("DELETE FROM `tabLMS Lesson Progress` WHERE `lesson` = %s", (lesson_name,))
+        frappe.db.sql("DELETE FROM `tabLMS Lesson` WHERE `name` = %s", (lesson_name,))
         
+    frappe.db.commit()
     return {"status": "success"}
 
 @frappe.whitelist(allow_guest=False)
@@ -450,26 +491,29 @@ def remove_chapter(lesson_name, chapter_name):
         DELETE FROM `tabLMS Lesson Chapter`
         WHERE `parent` = %s AND `chapter` = %s
     """, (lesson_name, chapter_name))
-    frappe.db.commit()
     
-    if frappe.db.exists("LMS Chapter", chapter_name):
-        chapter = frappe.get_doc("LMS Chapter", chapter_name)
+    other_lessons = frappe.db.sql("""
+        SELECT parent FROM `tabLMS Lesson Chapter`
+        WHERE `chapter` = %s AND `parent` != %s
+    """, (chapter_name, lesson_name))
+    
+    if not other_lessons:
+        content_rows = frappe.db.sql("""
+            SELECT content_type, content_reference 
+            FROM `tabLMS Chapter Content` 
+            WHERE `parent` = %s
+        """, (chapter_name,), as_dict=True)
         
-        # Gather content references before deleting the chapter to avoid LinkExistsError
-        contents_to_delete = []
-        if hasattr(chapter, "contents"):
-            for content in chapter.contents:
-                if content.content_type and content.content_reference:
-                    contents_to_delete.append((content.content_type, content.content_reference))
+        for crow in content_rows:
+            ctype = crow.get("content_type")
+            cref = crow.get("content_reference")
+            _delete_content_record_sql(ctype, cref)
+                
+        frappe.db.sql("DELETE FROM `tabLMS Chapter Content` WHERE `parent` = %s", (chapter_name,))
+        frappe.db.sql("DELETE FROM `tabLMS Chapter Progress` WHERE `chapter` = %s", (chapter_name,))
+        frappe.db.sql("DELETE FROM `tabLMS Chapter` WHERE `name` = %s", (chapter_name,))
         
-        # Delete the chapter first so the links are removed
-        frappe.delete_doc("LMS Chapter", chapter_name, ignore_permissions=True)
-        
-        # Now safely delete the orphaned content records
-        for ctype, crefe in contents_to_delete:
-            if frappe.db.exists(ctype, crefe):
-                frappe.delete_doc(ctype, crefe, ignore_permissions=True)
-        
+    frappe.db.commit()
     return {"status": "success"}
 
 @frappe.whitelist(allow_guest=False)
@@ -512,6 +556,12 @@ def get_admin_dashboard_modules():
         mod.completionRate = (completed / total * 100) if total > 0 else 0
         mod.lesson_count = lesson_count
         
+        from lms.backend.api.common.module_detail import get_module_duration_mins, format_duration_str
+        curriculum_mins = get_module_duration_mins(mod.name)
+        if curriculum_mins > 0:
+            mod.duration = curriculum_mins
+        mod.duration_str = format_duration_str(mod.duration or 0)
+        
     return modules
 
 @frappe.whitelist(allow_guest=False)
@@ -519,34 +569,108 @@ def delete_module(module_name):
     if not module_name:
         frappe.throw("Module Name is required")
         
-    if frappe.db.exists("LMS Module", module_name):
-        # Check if it's part of a learning path
-        paths = frappe.get_all("LMS Learning Path Course", filters={"module": module_name}, fields=["parent"])
-        if paths:
-            path_names = [p.parent for p in paths]
-            frappe.throw(f"Cannot delete module because it is used in Learning Path(s): {', '.join(path_names)}. Please remove it from the path(s) first.")
+    module_exists = frappe.db.sql("SELECT name FROM `tabLMS Module` WHERE `name` = %s", (module_name,), pluck="name")
+    if not module_exists:
+        return {"status": "not_found"}
 
-        # Delete dependent records
-        dependent_doctypes = [
-            "LMS Module Tracker",
-            "LMS Certificate",
-            "LMS Path Module Progress",
-            "LMS Module Assignment",
-            "LMS Learner Badge",
-            "LMS Learner Note",
-            "LMS Discussion"
-        ]
-        
-        for doctype in dependent_doctypes:
-            # For each doctype, check if it has a module field and delete the linked docs
-            if frappe.db.has_column(doctype, "module"):
-                linked_docs = frappe.get_all(doctype, filters={"module": module_name}, pluck="name")
-                for doc in linked_docs:
-                    frappe.delete_doc(doctype, doc, ignore_permissions=True, force=True)
+    # 1. Check if it's part of a learning path
+    paths = frappe.db.sql("""
+        SELECT DISTINCT parent FROM `tabLMS Learning Path Course`
+        WHERE `module` = %s
+    """, (module_name,), pluck="parent")
+    if paths:
+        frappe.throw(f"Cannot delete module because it is used in Learning Path(s): {', '.join(paths)}. Please remove it from the path(s) first.")
 
-        frappe.delete_doc("LMS Module", module_name, ignore_permissions=True, force=True)
-        return {"status": "success"}
-    return {"status": "not_found"}
+    # 2. Delete Trackers and associated Quiz Submissions + Progress child tables
+    tracker_names = frappe.db.sql("""
+        SELECT name FROM `tabLMS Module Tracker` WHERE `module` = %s
+    """, (module_name,), pluck="name")
+    if tracker_names:
+        sub_names = frappe.db.sql("""
+            SELECT name FROM `tabLMS Quiz Submission` WHERE `enrollment` IN %s
+        """, (tuple(tracker_names),), pluck="name")
+        if sub_names:
+            frappe.db.sql("DELETE FROM `tabLMS Quiz Submission Detail` WHERE `parent` IN %s", (tuple(sub_names),))
+            frappe.db.sql("DELETE FROM `tabLMS Quiz Submission` WHERE `name` IN %s", (tuple(sub_names),))
+
+        frappe.db.sql("DELETE FROM `tabLMS Lesson Progress` WHERE `parent` IN %s", (tuple(tracker_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Chapter Progress` WHERE `parent` IN %s", (tuple(tracker_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Content Progress` WHERE `parent` IN %s", (tuple(tracker_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Interaction Response` WHERE `parent` IN %s", (tuple(tracker_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Module Tracker` WHERE `name` IN %s", (tuple(tracker_names),))
+
+    # 3. Delete Module Assignments and child tables
+    assignment_names = frappe.db.sql("""
+        SELECT name FROM `tabLMS Module Assignment` WHERE `module` = %s
+    """, (module_name,), pluck="name")
+    if assignment_names:
+        frappe.db.sql("DELETE FROM `tabLMS Assignment Team` WHERE `parent` IN %s", (tuple(assignment_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Assignment User` WHERE `parent` IN %s", (tuple(assignment_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Module Assignment` WHERE `name` IN %s", (tuple(assignment_names),))
+
+    # 4. Delete Certificates, Path Module Progress, Badges
+    frappe.db.sql("DELETE FROM `tabLMS Certificate` WHERE `module` = %s", (module_name,))
+    frappe.db.sql("DELETE FROM `tabLMS Path Module Progress` WHERE `module` = %s", (module_name,))
+    frappe.db.sql("DELETE FROM `tabLMS Learner Badge` WHERE `module` = %s", (module_name,))
+
+    # 5. Delete Learner Notes
+    frappe.db.sql("DELETE FROM `tabLMS Learner Note` WHERE `reference_module` = %s", (module_name,))
+
+    # 6. Delete Discussions and messages
+    discussion_names = frappe.db.sql("""
+        SELECT name FROM `tabLMS Discussion` WHERE `reference_module` = %s
+    """, (module_name,), pluck="name")
+    if discussion_names:
+        frappe.db.sql("DELETE FROM `tabLMS Discussion Message` WHERE `parent` IN %s", (tuple(discussion_names),))
+        frappe.db.sql("DELETE FROM `tabLMS Discussion` WHERE `name` IN %s", (tuple(discussion_names),))
+
+    # 7. Delete Lessons, Chapters, and Content blocks attached to this module if not used elsewhere
+    lesson_names = frappe.db.sql("""
+        SELECT lesson FROM `tabLMS Module Lesson Child` WHERE `parent` = %s
+    """, (module_name,), pluck="lesson")
+    for l_name in lesson_names:
+        other_modules = frappe.db.sql("""
+            SELECT parent FROM `tabLMS Module Lesson Child`
+            WHERE `lesson` = %s AND `parent` != %s
+        """, (l_name, module_name))
+        if not other_modules:
+            chapter_names = frappe.db.sql("""
+                SELECT chapter FROM `tabLMS Lesson Chapter` WHERE `parent` = %s
+            """, (l_name,), pluck="chapter")
+            for ch_name in chapter_names:
+                other_lessons = frappe.db.sql("""
+                    SELECT parent FROM `tabLMS Lesson Chapter`
+                    WHERE `chapter` = %s AND `parent` != %s
+                """, (ch_name, l_name))
+                if not other_lessons:
+                    content_rows = frappe.db.sql("""
+                        SELECT content_type, content_reference 
+                        FROM `tabLMS Chapter Content` 
+                        WHERE `parent` = %s
+                    """, (ch_name,), as_dict=True)
+                    for crow in content_rows:
+                        ctype = crow.get("content_type")
+                        cref = crow.get("content_reference")
+                        _delete_content_record_sql(ctype, cref)
+
+                    frappe.db.sql("DELETE FROM `tabLMS Chapter Content` WHERE `parent` = %s", (ch_name,))
+                    frappe.db.sql("DELETE FROM `tabLMS Chapter Progress` WHERE `chapter` = %s", (ch_name,))
+                    frappe.db.sql("DELETE FROM `tabLMS Chapter` WHERE `name` = %s", (ch_name,))
+
+            frappe.db.sql("DELETE FROM `tabLMS Lesson Chapter` WHERE `parent` = %s", (l_name,))
+            frappe.db.sql("DELETE FROM `tabLMS Lesson Progress` WHERE `lesson` = %s", (l_name,))
+            frappe.db.sql("DELETE FROM `tabLMS Lesson` WHERE `name` = %s", (l_name,))
+
+    # 8. Delete Module child tables
+    frappe.db.sql("DELETE FROM `tabLMS Module Category` WHERE `parent` = %s", (module_name,))
+    frappe.db.sql("DELETE FROM `tabLMS Module Lesson Child` WHERE `parent` = %s", (module_name,))
+    frappe.db.sql("DELETE FROM `tabLMS Module Version` WHERE `parent` = %s", (module_name,))
+
+    # 9. Delete the module itself
+    frappe.db.sql("DELETE FROM `tabLMS Module` WHERE `name` = %s", (module_name,))
+    frappe.db.commit()
+
+    return {"status": "success"}
 
 @frappe.whitelist(allow_guest=False)
 def duplicate_module(module_name):
@@ -612,12 +736,14 @@ def duplicate_module(module_name):
                 
             new_chapter.insert(ignore_permissions=True)
             new_lesson.append("chapters", {
-                "chapter": new_chapter.name
+                "chapter": new_chapter.name,
+                "order": old_chapter_row.order or old_chapter_row.idx
             })
             
         new_lesson.insert(ignore_permissions=True)
         new_module.append("lessons", {
-            "lesson": new_lesson.name
+            "lesson": new_lesson.name,
+            "order": old_lesson_row.order or old_lesson_row.idx
         })
         
     new_module.save(ignore_permissions=True)

@@ -48,6 +48,12 @@ def _build_learning_path_snapshot(path_doc):
             "is_mandatory": int(path_doc.is_mandatory or 0),
             "is_sequential": int(path_doc.is_sequential or 0),
             "enable_certificate": int(path_doc.enable_certificate or 0),
+            "certificate_template": getattr(path_doc, "certificate_template", "") or "",
+            "certificate_reference_number": getattr(path_doc, "certificate_reference_number", "") or "",
+            "certificate_validity_period": getattr(path_doc, "certificate_validity_period", 365) or 365,
+            "certificate_signature_by": getattr(path_doc, "certificate_signature_by", "") or "",
+            "certificate_passing_percentage": getattr(path_doc, "certificate_passing_percentage", 80) or 80,
+            "enable_path_review": int(getattr(path_doc, "enable_path_review", 0) or 0),
             "enable_discussion": int(getattr(path_doc, "enable_discussion", 0) or 0),
             "complete_all_modules": int(path_doc.complete_all_modules or 0),
             "is_score_required": int(path_doc.is_score_required or 0),
@@ -250,15 +256,30 @@ def has_learning_path_unpublished_changes(path_id):
     try:
         if latest_v.content_snapshot:
             old_snapshot = json.loads(latest_v.content_snapshot)
-            # Exclude status/certificate/discussion from change detection
-            for field in ("status", "enable_certificate", "enable_discussion"):
-                old_snapshot.get("path_settings", {}).pop(field, None)
-
             current_snapshot = json.loads(
                 json.dumps(_build_learning_path_snapshot(path), default=str)
             )
-            for field in ("status", "enable_certificate", "enable_discussion"):
+
+            EXCLUDED_PATH_SETTINGS = (
+                "status",
+                "enable_certificate",
+                "certificate_template",
+                "certificate_reference_number",
+                "certificate_validity_period",
+                "certificate_signature_by",
+                "certificate_passing_percentage",
+                "enable_path_review",
+                "enable_discussion",
+            )
+            for field in EXCLUDED_PATH_SETTINGS:
+                old_snapshot.get("path_settings", {}).pop(field, None)
                 current_snapshot.get("path_settings", {}).pop(field, None)
+
+            # Normalize module sequence orders to int for reliable comparison
+            for m in old_snapshot.get("modules", []):
+                m["sequence_order"] = int(m.get("sequence_order") or 0)
+            for m in current_snapshot.get("modules", []):
+                m["sequence_order"] = int(m.get("sequence_order") or 0)
 
             return {"has_changes": old_snapshot != current_snapshot}
     except Exception as e:

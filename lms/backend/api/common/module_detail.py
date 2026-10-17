@@ -2,7 +2,7 @@ import frappe
 from frappe.utils import today, add_days, getdate, now
 from frappe.utils.pdf import get_pdf
 
-def get_estimated_hours_from_curriculum(module_name):
+def get_module_duration_mins(module_name):
     from lms.backend.api.admin.module_management import get_curriculum
     try:
         curriculum = get_curriculum(module_name)
@@ -43,9 +43,24 @@ def get_estimated_hours_from_curriculum(module_name):
                 else:
                     total_mins += default_durations.get(content_type, 8)
                     
-        return (total_mins / 60) if total_mins else 0
+        return int(round(total_mins))
     except Exception:
         return 0
+
+def format_duration_str(total_mins):
+    total_mins = int(round(total_mins or 0))
+    hours = total_mins // 60
+    mins = total_mins % 60
+    duration_str = ""
+    if hours > 0:
+        duration_str += f"{hours} hrs "
+    if mins > 0 or hours == 0:
+        duration_str += f"{mins} min"
+    return duration_str.strip()
+
+def get_estimated_hours_from_curriculum(module_name):
+    mins = get_module_duration_mins(module_name)
+    return (mins / 60) if mins else 0
 
 @frappe.whitelist(allow_guest=True)
 def get_module_overview(module_id):
@@ -281,9 +296,9 @@ def get_module_overview(module_id):
     departments.sort(key=lambda x: x["progress"], reverse=True)
 
 
-    estimated_hours = getattr(module, "duration", None)
-    if estimated_hours is None or estimated_hours == 0:
-        estimated_hours = get_estimated_hours_from_curriculum(module_id)
+    total_mins = get_module_duration_mins(module_id)
+    duration_str = format_duration_str(total_mins)
+    estimated_hours = round(total_mins / 60, 2) if total_mins else 0
 
     lesson_titles = []
     if module.get("lessons"):
@@ -314,6 +329,9 @@ def get_module_overview(module_id):
             "lesson_count": lesson_count,
             "lessons": lesson_titles,
             "estimated_hours": estimated_hours,
+            "duration": total_mins,
+            "duration_str": duration_str,
+            "total_duration": total_mins,
             "created_by": module.owner,
             "created_by_name": frappe.db.get_value("User", module.owner, "full_name") or module.owner,
             "created_by_avatar": frappe.db.get_value("User", module.owner, "user_image") or None,

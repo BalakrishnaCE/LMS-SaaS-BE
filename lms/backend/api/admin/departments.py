@@ -420,17 +420,18 @@ def get_department_details(department_id):
         badges = frappe.get_all("LMS Badge", fields=["name as badge_name", "badge_image", "description"])
         
         badge_counts = frappe.db.sql("""
-            SELECT badge, user
+            SELECT DISTINCT badge, user
             FROM `tabLMS Learner Badge`
             WHERE user IN %s
         """, (tuple(learner_ids),), as_dict=True)
         
-        # Group users by badge
+        # Group users by badge (distinct learners per badge)
         badge_users_map = {}
         for b in badge_counts:
             if b.badge not in badge_users_map:
                 badge_users_map[b.badge] = []
-            badge_users_map[b.badge].append(b.user)
+            if b.user not in badge_users_map[b.badge]:
+                badge_users_map[b.badge].append(b.user)
         
         for b in badges:
             earned_by_users = badge_users_map.get(b.badge_name, [])
@@ -1176,13 +1177,15 @@ def delete_department(department_id):
         if not frappe.db.exists("LMS Team", department_id):
             frappe.throw("Department not found")
 
-        # 1. Remove from assignments
-        assign_teams = frappe.get_all("LMS Assignment Team", filters={"team": department_id}, fields=["name", "parent"])
-        for at in assign_teams:
-            frappe.delete_doc("LMS Assignment Team", at.name, ignore_permissions=True, force=1)
+        # 1. Remove from module & learning path assignments
+        frappe.db.sql("DELETE FROM `tabLMS Assignment Team` WHERE `team` = %s", (department_id,))
 
-        # 2. Delete LMS Team
-        frappe.delete_doc("LMS Team", department_id, ignore_permissions=True, force=1)
+        # 2. Remove team members
+        frappe.db.sql("DELETE FROM `tabLMS Team Member` WHERE `parent` = %s", (department_id,))
+
+        # 3. Delete LMS Team
+        frappe.db.sql("DELETE FROM `tabLMS Team` WHERE `name` = %s", (department_id,))
+        frappe.db.commit()
         return {"status": "success", "message": "Department deleted successfully"}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Delete Department")

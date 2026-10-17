@@ -441,12 +441,9 @@ def get_saved_items():
         if not module_doc or module_doc.status != 'Published':
             continue
             
-        from lms.backend.api.common.module_detail import get_estimated_hours_from_curriculum
-        est_hours = get_estimated_hours_from_curriculum(t.module)
-        if est_hours > 0:
-            duration_str = f"{int(est_hours * 60)} min" if est_hours < 1 else f"{est_hours:g} hr"
-        else:
-            duration_str = "0 min"
+        from lms.backend.api.common.module_detail import get_module_duration_mins, format_duration_str
+        total_mins = get_module_duration_mins(t.module)
+        duration_str = format_duration_str(total_mins)
             
         # Is this module assigned?
         assignment = assigned_modules.get(t.module)

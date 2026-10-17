@@ -235,7 +235,7 @@ def delete_question(quiz_name, question_id):
     if frappe.db.exists("LMS Quiz", quiz_name):
         frappe.db.sql("DELETE FROM `tabLMS Quiz Child` WHERE parent=%s AND quiz_question=%s", (quiz_name, question_id))
     frappe.db.sql("DELETE FROM `tabLMS Quiz Response` WHERE question=%s", (question_id,))
-    frappe.delete_doc("LMS Quiz Question", question_id, ignore_permissions=True, force=1)
+    frappe.db.sql("DELETE FROM `tabLMS Quiz Question` WHERE name=%s", (question_id,))
     frappe.db.commit()
     return "success"
 

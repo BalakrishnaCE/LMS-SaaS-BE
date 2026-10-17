@@ -66,6 +66,7 @@ def get_learner_path_detail(path_id):
     total_quizzes = 0
     total_assessments = 0
 
+    from lms.backend.api.common.module_detail import get_module_duration_mins, format_duration_str
     for pc in path_courses:
         mod = frappe.get_value(
             "LMS Module",
@@ -96,9 +97,11 @@ def get_learner_path_detail(path_id):
                 
             total_progress += mod["learner_score"]
                 
-            # Accumulate overall duration
-            mod_duration = mod.get("duration") or 0
-            total_duration += mod_duration
+            # Accumulate overall duration using actual module curriculum duration
+            curriculum_mins = get_module_duration_mins(mod.name)
+            mod["duration"] = curriculum_mins
+            mod["duration_str"] = format_duration_str(curriculum_mins)
+            total_duration += curriculum_mins
             
             modules.append(mod)
 
@@ -151,13 +154,7 @@ def get_learner_path_detail(path_id):
                 total_quizzes += 1
 
     # Format Duration
-    hours = total_duration // 60
-    mins = total_duration % 60
-    duration_str = ""
-    if hours > 0:
-        duration_str += f"{hours} hrs "
-    if mins > 0 or hours == 0:
-        duration_str += f"{mins} min"
+    duration_str = format_duration_str(total_duration)
 
     # Overall progress percentage
     progress_percentage = 0
@@ -256,7 +253,8 @@ def get_learner_paths():
                 continue
                 
             valid_module_count += 1
-            mod_duration = frappe.get_value("LMS Module", m.module, "duration") or 0
+            from lms.backend.api.common.module_detail import get_module_duration_mins
+            mod_duration = get_module_duration_mins(m.module)
             total_duration_minutes += int(mod_duration)
 
             if mt:

@@ -280,17 +280,13 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
         if has_lms_learner and eval_data.get("has_in_progress", False):
             learner_status = "Active"
         
-        avatar = u.user_image
-        if not avatar:
-            import urllib.parse
-            encoded_name = urllib.parse.quote(u.full_name or u.name)
-            avatar = f"https://ui-avatars.com/api/?name={encoded_name}&background=random&size=32"
+        avatar = u.user_image or None
 
         results.append({
             "id": u.name,
             "name": u.full_name or u.name,
             "email": u.email,
-            "avatar": f"url({avatar})",
+            "avatar": avatar,
             "department": eval_data.get("department", "Engineering"),
             "designation": eval_data.get("designation", "LMS Learner"),
             "assignedCount": eval_data.get("assigned", 0),
@@ -372,11 +368,7 @@ def get_learner_details(user_id):
 
     eval_data = _evaluate_user_risks([user]).get(user.name, {})
     
-    avatar = user.user_image
-    if not avatar:
-        import urllib.parse
-        encoded_name = urllib.parse.quote(user.full_name or user.name)
-        avatar = f"https://ui-avatars.com/api/?name={encoded_name}&background=random&size=32"
+    avatar = user.user_image or None
 
     published_module_ids = frappe.get_all("LMS Module", filters={"status": "Published"}, pluck="name")
     trackers = frappe.get_all("LMS Module Tracker", filters={"user": user.name, "module": ("in", published_module_ids) if published_module_ids else ("in", [""])}, fields=["name", "module", "status", "creation"], order_by="creation asc")
