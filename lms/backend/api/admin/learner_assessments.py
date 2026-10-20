@@ -813,14 +813,25 @@ def unassign_learning(user_id, item_id, item_type):
     import hashlib
     if item_type == "Learning Path":
         trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": item_id, "user": user_id})
-        for t in trackers:
-            frappe.db.set_value("LMS Learning Path Tracker", t.name, "status", "Unassigned")
+        if trackers:
+            for t in trackers:
+                frappe.db.set_value("LMS Learning Path Tracker", t.name, "status", "Unassigned")
+        else:
+            # Insert sentinel tracker so the learning path is hidden even if assigned via Team or Everyone
+            excl_name = "EXCL-LP-" + hashlib.md5(f"{user_id}:{item_id}".encode()).hexdigest()[:17]
+            now = frappe.utils.now()
+            frappe.db.sql("""
+                INSERT INTO `tabLMS Learning Path Tracker`
+                    (name, user, learning_path, status, progress_percentage, creation, modified, owner, modified_by, docstatus)
+                VALUES (%s, %s, %s, 'Unassigned', 0, %s, %s, %s, %s, 0)
+                ON DUPLICATE KEY UPDATE status = 'Unassigned', modified = %s
+            """, (excl_name, user_id, item_id, now, now, user_id, user_id, now))
         
         # Remove from Manual Learning Path Assignments
         assignments = frappe.get_all("LMS Learning Path Assignment", filters={"learning_path": item_id, "assignment_type": "Manual"})
         for a in assignments:
             frappe.db.sql("""
-                DELETE FROM `tabLMS Assignment User`
+                DELETE FROM `tabLMS LP Assignment User`
                 WHERE parent = %s AND user = %s
             """, (a.name, user_id))
             
@@ -861,15 +872,19 @@ def unassign_learning(user_id, item_id, item_type):
 
 @frappe.whitelist()
 def reassign_learning(user_id, item_id, item_type):
-    """Re-activates a previously unassigned tracker by setting its status back to Not Started."""
+    """Re-activates a previously unassigned tracker by restoring status based on progress."""
     if item_type == "Learning Path":
-        trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": item_id, "user": user_id, "status": "Unassigned"})
+        trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": item_id, "user": user_id, "status": "Unassigned"}, fields=["name", "progress_percentage"])
         for t in trackers:
-            frappe.db.set_value("LMS Learning Path Tracker", t.name, "status", "Not Started")
+            prog = t.progress_percentage or 0
+            restored = "Completed" if prog >= 100 else ("In Progress" if prog > 0 else "Not started")
+            frappe.db.set_value("LMS Learning Path Tracker", t.name, "status", restored)
     else:
-        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id, "module": item_id, "status": "Unassigned"})
+        trackers = frappe.get_all("LMS Module Tracker", filters={"user": user_id, "module": item_id, "status": "Unassigned"}, fields=["name", "progress_percentage"])
         for t in trackers:
-            frappe.db.set_value("LMS Module Tracker", t.name, "status", "Not Started")
+            prog = t.progress_percentage or 0
+            restored = "Completed" if prog >= 100 else ("In Progress" if prog > 0 else "Not started")
+            frappe.db.set_value("LMS Module Tracker", t.name, "status", restored)
 
     frappe.db.commit()
     return {"status": "success"}

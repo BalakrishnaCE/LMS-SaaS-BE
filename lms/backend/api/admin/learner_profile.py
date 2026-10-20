@@ -194,15 +194,16 @@ def get_learner_kpis():
             "atRiskLearners": 0
         }
         
-    admin_roles_kpi = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
-    admin_users_kpi = set(admin_roles_kpi)
-    learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
     filters = {"name": ("!=", "Administrator")}
-    if learner_roles:
-        allowed_roles = [r for r in learner_roles if r != "Administrator" and r not in admin_users_kpi]
-        if user_filter is not None:
-            allowed_roles = [r for r in allowed_roles if r in user_filter]
-        filters["name"] = ("in", allowed_roles)
+    if user_filter is not None:
+        filters["name"] = ("in", [u for u in user_filter if u != "Administrator"])
+    else:
+        admin_roles_kpi = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
+        admin_users_kpi = set(admin_roles_kpi)
+        learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
+        if learner_roles:
+            allowed_roles = [r for r in learner_roles if r != "Administrator" and r not in admin_users_kpi]
+            filters["name"] = ("in", allowed_roles)
         
     users = frappe.get_all("User", filters=filters, fields=["name", "enabled"], ignore_permissions=True)
     total = len(users)
@@ -216,9 +217,9 @@ def get_learner_kpis():
     
     for u in users:
         eval_data = user_evals.get(u.name, {})
-        has_lms_learner = eval_data.get("has_learner_role", False)
+        has_lms_learner = eval_data.get("has_learner_role", False) or (user_filter is not None)
         
-        # Active = has LMS learner role AND at least one In Progress tracker
+        # Active = has LMS learner role (or is team member) AND at least one In Progress tracker
         if has_lms_learner and eval_data.get("has_in_progress", False):
             active += 1
             
@@ -250,14 +251,15 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
         offset = 0
 
     filters = {"name": ("!=", "Administrator")}
-    admin_roles = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
-    admin_users = set(admin_roles)
-    learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
-    if learner_roles:
-        allowed_roles = [r for r in learner_roles if r != "Administrator" and r not in admin_users]
-        if user_filter is not None:
-            allowed_roles = [r for r in allowed_roles if r in user_filter]
-        filters["name"] = ("in", allowed_roles)
+    if user_filter is not None:
+        filters["name"] = ("in", [u for u in user_filter if u != "Administrator"])
+    else:
+        admin_roles = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
+        admin_users = set(admin_roles)
+        learner_roles = frappe.get_all("Has Role", filters={"role": ["in", ["LMS-Learner", "LMS-TL"]]}, pluck="parent", ignore_permissions=True)
+        if learner_roles:
+            allowed_roles = [r for r in learner_roles if r != "Administrator" and r not in admin_users]
+            filters["name"] = ("in", allowed_roles)
 
     order_by = "creation desc" if risk and risk.lower() == "recent" else "name asc"
     users = frappe.get_all("User", filters=filters, fields=["name", "email", "full_name", "enabled", "user_image"], order_by=order_by, ignore_permissions=True)
@@ -273,10 +275,10 @@ def get_learners(search="", limit=10, status="all", risk="all", department="all"
     for u in users:
         eval_data = user_evals.get(u.name, {})
         
-        has_lms_learner = eval_data.get("has_learner_role", False)
+        has_lms_learner = eval_data.get("has_learner_role", False) or (user_filter is not None)
 
         learner_status = "Inactive"
-        # Active = has LMS learner role AND at least one tracker with "In Progress" status
+        # Active = has LMS learner role (or is team member) AND at least one tracker with "In Progress" status
         if has_lms_learner and eval_data.get("has_in_progress", False):
             learner_status = "Active"
         

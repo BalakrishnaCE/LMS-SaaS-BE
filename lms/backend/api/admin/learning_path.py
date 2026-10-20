@@ -91,7 +91,13 @@ def get_learning_paths():
     draft_paths = sum(1 for p in paths if p.status == "Draft")
     
     overdue_learners = get_all_overdue_learners_count()
-    review_required = 0
+
+    from frappe.utils import add_months, today, getdate
+    six_months_ago = getdate(add_months(today(), -6))
+    review_required = sum(
+        1 for p in paths
+        if p.get("modified") and getdate(p.get("modified")) < six_months_ago
+    )
 
     return {
         "stats": {
@@ -591,7 +597,7 @@ def get_lp_learners(path_id):
                     has_assessment = True
 
     # ── User info ──────────────────────────────────────────────────────────────
-    user_docs = frappe.get_all("User", filters={"name": ["in", list(users.keys())]}, fields=["name", "full_name", "user_image"])
+    user_docs = frappe.get_all("User", filters={"name": ["in", list(users.keys())]}, fields=["name", "full_name", "user_image", "last_login", "last_active"])
     user_map = {u.name: u for u in user_docs}
 
     # ── Team/department for each user ─────────────────────────────────────────
@@ -610,7 +616,7 @@ def get_lp_learners(path_id):
     trackers = frappe.get_all(
         "LMS Learning Path Tracker",
         filters={"learning_path": path_id, "user": ["in", list(users.keys())]},
-        fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "completed_on", "modified"]
+        fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "completed_on", "modified", "modified_by"]
     )
     tracker_map = {t.user: t for t in trackers}
 
@@ -659,7 +665,24 @@ def get_lp_learners(path_id):
                 status_raw = "Not Started"
             learner_info["status"] = status_raw
             learner_info["progress"] = tracker.progress_percentage or 0
-            learner_info["lastActivity"] = str(tracker.modified) if tracker.modified else None
+
+            # Last activity calculation:
+            # Only set lastActivity if the learner has actually started or engaged with the learning path
+            status_clean = status_raw.strip().lower()
+            has_started = status_clean not in ["not started", "unassigned", ""] and (tracker.started_on or (tracker.progress_percentage or 0) > 0)
+            has_logged_in = bool(u_info.get("last_login") or u_info.get("last_active")) if u_info else True
+
+            if has_started and has_logged_in:
+                if tracker.get("modified_by") == user:
+                    learner_info["lastActivity"] = str(tracker.modified)
+                elif tracker.get("completed_on"):
+                    learner_info["lastActivity"] = str(tracker.completed_on)
+                elif tracker.get("started_on"):
+                    learner_info["lastActivity"] = str(tracker.started_on)
+                else:
+                    learner_info["lastActivity"] = None
+            else:
+                learner_info["lastActivity"] = None
 
             # Score from tracker
             if tracker.total_score is not None and float(tracker.total_score) >= 0:

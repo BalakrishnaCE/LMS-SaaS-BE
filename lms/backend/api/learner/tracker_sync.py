@@ -47,7 +47,7 @@ def _do_sync_missing_trackers(user):
             existing_trackers = frappe.db.sql("""
                 SELECT name, module, status, progress_percentage
                 FROM `tabLMS Module Tracker`
-                WHERE user = %s AND module IN %(modules)s
+                WHERE user = %(user)s AND module IN %(modules)s
             """, {"user": user, "modules": tuple(assigned_module_names)}, as_dict=True)
             existing_map = {t.module: t for t in existing_trackers}
 
@@ -71,16 +71,7 @@ def _do_sync_missing_trackers(user):
                     except Exception:
                         pass
                 else:
-                    tracker = existing_map[m]
-                    if tracker.status == "Unassigned":
-                        prog = tracker.progress_percentage or 0
-                        restored = "Completed" if prog >= 100 else ("In Progress" if prog > 0 else "Not started")
-                        frappe.db.sql("""
-                            UPDATE `tabLMS Module Tracker`
-                            SET status = %s, modified = %s, modified_by = %s
-                            WHERE name = %s
-                        """, (restored, now_time, user, tracker.name))
-                        commit_needed = True
+                    pass
 
     # 2. Learning Path Trackers
     assigned_paths = get_all_assigned_paths_for_learner(user)
@@ -90,7 +81,7 @@ def _do_sync_missing_trackers(user):
             existing_lp_trackers = frappe.db.sql("""
                 SELECT name, learning_path, status, progress_percentage
                 FROM `tabLMS Learning Path Tracker`
-                WHERE user = %s AND learning_path IN %(paths)s
+                WHERE user = %(user)s AND learning_path IN %(paths)s
             """, {"user": user, "paths": tuple(assigned_path_names)}, as_dict=True)
             existing_lp_map = {t.learning_path: t for t in existing_lp_trackers}
 
@@ -114,16 +105,7 @@ def _do_sync_missing_trackers(user):
                     except Exception:
                         pass
                 else:
-                    tracker = existing_lp_map[p]
-                    if tracker.status == "Unassigned":
-                        prog = tracker.progress_percentage or 0
-                        restored = "Completed" if prog >= 100 else ("In Progress" if prog > 0 else "Not started")
-                        frappe.db.sql("""
-                            UPDATE `tabLMS Learning Path Tracker`
-                            SET status = %s, modified = %s, modified_by = %s
-                            WHERE name = %s
-                        """, (restored, now_time, user, tracker.name))
-                        commit_needed = True
+                    pass
 
     if commit_needed:
         frappe.db.commit()
