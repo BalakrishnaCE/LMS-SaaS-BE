@@ -65,6 +65,8 @@ def _ensure_user(learner: dict) -> str:
         # Find or create the LMS Team for this department
         team_name = frappe.db.get_value("LMS Team", {"team_name": department}, "name")
         if not team_name:
+            team_name = frappe.db.get_value("LMS Team", {"name": department}, "name")
+        if not team_name:
             team = frappe.new_doc("LMS Team")
             team.team_name = department
             team.is_active = 1

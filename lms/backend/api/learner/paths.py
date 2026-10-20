@@ -41,6 +41,8 @@ def get_learner_path_detail(path_id):
     tracker_doc = None
     if tracker_name:
         tracker_doc = frappe.get_doc("LMS Learning Path Tracker", tracker_name)
+        if tracker_doc.status == "Unassigned":
+            frappe.throw(_("This Learning Path is unassigned"), frappe.PermissionError)
         
     # Get Module Trackers directly as the source of truth
     module_names = [pc.module for pc in path_courses]
@@ -192,23 +194,30 @@ def get_learner_path_detail(path_id):
     }
 
 @frappe.whitelist()
-def get_learner_paths():
+def get_learner_paths(user=None):
     """
     Returns all published Learning Paths for the Learner along with their progress.
     """
-    user = frappe.session.user
+    user = user or frappe.session.user
     
     from lms.backend.api.learner.tracker_sync import sync_missing_trackers
     sync_missing_trackers(user)
 
-    # Get only learning paths this user has been assigned/enrolled in
+    # Get set of explicitly unassigned learning paths for this user
+    unassigned_lps = set(frappe.get_all(
+        "LMS Learning Path Tracker",
+        filters={"user": user, "status": "Unassigned"},
+        pluck="learning_path"
+    ))
+
+    # Get only learning paths this user has been assigned/enrolled in (excluding Unassigned)
     user_lp_trackers = frappe.get_all(
         "LMS Learning Path Tracker",
-        filters={"user": user},
+        filters={"user": user, "status": ["!=", "Unassigned"]},
         fields=["learning_path", "status", "progress_percentage", "is_saved"]
     )
-    assigned_lp_names = [t.learning_path for t in user_lp_trackers]
-    lp_tracker_map = {t.learning_path: t for t in user_lp_trackers}
+    assigned_lp_names = [t.learning_path for t in user_lp_trackers if t.learning_path not in unassigned_lps]
+    lp_tracker_map = {t.learning_path: t for t in user_lp_trackers if t.learning_path not in unassigned_lps}
 
     if not assigned_lp_names:
         return {"paths": []}
@@ -228,7 +237,11 @@ def get_learner_paths():
     )
     module_status_map = {mt.module: mt for mt in module_trackers}
 
+    final_paths = []
     for path in paths:
+        if path.name in unassigned_lps:
+            continue
+
         # Get category from child table
         categories = frappe.get_all(
             "LMS Module Category",
@@ -283,7 +296,8 @@ def get_learner_paths():
         path.isSaved = bool(tracker.is_saved) if tracker else False
             
         path.id = path.name
+        final_paths.append(path)
 
     return {
-        "paths": paths
+        "paths": final_paths
     }

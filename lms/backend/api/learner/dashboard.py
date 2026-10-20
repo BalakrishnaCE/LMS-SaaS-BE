@@ -130,7 +130,7 @@ def get_learner_summary(timeframe="month"):
     try:
         lp_trackers = frappe.get_all(
             "LMS Learning Path Tracker",
-            filters={"user": user},
+            filters={"user": user, "status": ["!=", "Unassigned"]},
             fields=["learning_path", "status"]
         )
     except Exception:
@@ -276,7 +276,7 @@ def get_learner_path_summary():
     # Get all learning path trackers for the user
     trackers = frappe.get_all(
         "LMS Learning Path Tracker",
-        filters={"user": user},
+        filters={"user": user, "status": ["!=", "Unassigned"]},
         fields=["learning_path", "status", "total_score", "modified", "name"]
     )
     
@@ -407,7 +407,14 @@ def get_all_assigned_paths_for_learner(user):
             if row.learning_path not in assigned_paths:
                 assigned_paths[row.learning_path] = row
 
-    return list(assigned_paths.values())
+    # Exclude any learning path explicitly unassigned for this user
+    unassigned_paths = frappe.db.sql("""
+        SELECT learning_path FROM `tabLMS Learning Path Tracker`
+        WHERE user = %s AND status = 'Unassigned'
+    """, user, as_list=True)
+    unassigned_set = {row[0] for row in unassigned_paths}
+
+    return [p for p in assigned_paths.values() if p.learning_path not in unassigned_set]
 
 @frappe.whitelist()
 def get_saved_items():
@@ -486,7 +493,7 @@ def get_saved_items():
     # 2. Fetch saved learning paths
     path_trackers = frappe.get_all(
         "LMS Learning Path Tracker",
-        filters={"user": user, "is_saved": 1},
+        filters={"user": user, "is_saved": 1, "status": ["!=", "Unassigned"]},
         fields=["learning_path", "status", "progress_percentage", "started_on", "name", "creation"],
         order_by="creation desc"
     )

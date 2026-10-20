@@ -11,16 +11,17 @@ def _get_filter_for_user():
 
     roles = frappe.get_roles(user)
 
-    # System Manager and LMS-Admin have global access across all departments and learners
-    if "System Manager" in roles or "LMS-Admin" in roles or "LMS Admin" in roles:
-        return None
-    
     # LMS-TL (Team Lead) and LMS Manager are scoped to their own teams.
-    if "LMS-TL" in roles or "LMS Manager" in roles:
+    # Even if a TL has the Frappe "System Manager" role for Desk access, in the LMS their scope is their assigned teams unless they are an explicit LMS-Admin.
+    if ("LMS-TL" in roles or "LMS Manager" in roles) and not ("LMS-Admin" in roles or "LMS Admin" in roles):
         member_emails = _get_team_member_emails(user)
         if not member_emails:
             return [] # Returns empty list to indicate no data
         return member_emails
+
+    # System Manager and LMS-Admin have global access across all departments and learners
+    if "System Manager" in roles or "LMS-Admin" in roles or "LMS Admin" in roles:
+        return None
 
     if user == "Guest":
         return None

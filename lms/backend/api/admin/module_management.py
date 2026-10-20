@@ -1126,7 +1126,7 @@ def get_module_learners(module_name):
             "learners": []
         }
         
-    user_docs = frappe.get_all("User", filters={"name": ["in", list(users.keys())]}, fields=["name", "full_name", "user_image"])
+    user_docs = frappe.get_all("User", filters={"name": ["in", list(users.keys())]}, fields=["name", "full_name", "user_image", "last_login", "last_active"])
     user_map = {u.name: u for u in user_docs}
     
     team_members = frappe.get_all("LMS Team Member", filters={"user": ["in", list(users.keys())]}, fields=["user", "parent"])
@@ -1142,7 +1142,7 @@ def get_module_learners(module_name):
     # Create final map joining with commas
     user_team_map = {u: ", ".join(teams) for u, teams in user_team_map.items()}
     
-    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_name, "user": ["in", list(users.keys())]}, fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "modified", "completed_on"])
+    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_name, "user": ["in", list(users.keys())]}, fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "modified", "modified_by", "completed_on"])
     tracker_map = {t.user: t for t in trackers}
 
     # ── Resolve passing percentage and quiz submissions ───────────────────
@@ -1238,7 +1238,24 @@ def get_module_learners(module_name):
         if tracker:
             learner_info["status"] = tracker.status
             learner_info["progress"] = tracker.progress_percentage or 0
-            learner_info["lastActivity"] = tracker.modified
+
+            # Last activity calculation:
+            # Only set lastActivity if the learner has actually started or engaged with the module
+            status_clean = (tracker.status or "").strip().lower()
+            has_started = status_clean not in ["not started", "unassigned", ""] and (tracker.started_on or (tracker.progress_percentage or 0) > 0)
+            has_logged_in = bool(u_info.get("last_login") or u_info.get("last_active")) if u_info else True
+
+            if has_started and has_logged_in:
+                if tracker.get("modified_by") == user:
+                    learner_info["lastActivity"] = str(tracker.modified)
+                elif tracker.get("completed_on"):
+                    learner_info["lastActivity"] = str(tracker.completed_on)
+                elif tracker.get("started_on"):
+                    learner_info["lastActivity"] = str(tracker.started_on)
+                else:
+                    learner_info["lastActivity"] = None
+            else:
+                learner_info["lastActivity"] = None
 
             # Score resolution — two-tier:
             #   1. LMS Quiz Submission (accurate per-attempt record)
