@@ -1,15 +1,25 @@
 import frappe
 from frappe.utils import getdate
 
-def get_signature_html(module_name):
+def get_signature_html(module_name=None, learning_path_name=None):
     signature_html = "J. Director" # default fallback
-    if not module_name:
-        return signature_html
-        
-    try:
-        mod = frappe.get_doc("LMS Module", module_name)
-        if mod.certificate_signature_by:
-            sig_doc = frappe.get_doc("LMS Authorized Signatory", mod.certificate_signature_by)
+    signatory = None
+    if module_name:
+        try:
+            mod = frappe.get_doc("LMS Module", module_name)
+            signatory = mod.certificate_signature_by
+        except Exception:
+            pass
+    elif learning_path_name:
+        try:
+            lp = frappe.get_doc("LMS Learning Path", learning_path_name)
+            signatory = getattr(lp, "certificate_signature_by", None)
+        except Exception:
+            pass
+
+    if signatory:
+        try:
+            sig_doc = frappe.get_doc("LMS Authorized Signatory", signatory)
             if sig_doc.signature_image:
                 from frappe.utils.file_manager import get_file_path
                 import base64
@@ -26,8 +36,8 @@ def get_signature_html(module_name):
                     signature_html = f'<img src="{sig_doc.signature_image}" style="max-height: 45px; object-fit: contain;">'
             elif sig_doc.signatory_name:
                 signature_html = sig_doc.signatory_name
-    except Exception:
-        pass
+        except Exception:
+            pass
         
     return signature_html
 
@@ -45,14 +55,21 @@ def get_certificate_html(certificate_name):
     except Exception:
         learner_name = cert.user
 
-    try:
-        module_name = frappe.get_doc("LMS Module", cert.module).module_name
-    except Exception:
-        module_name = cert.module
+    course_name = ""
+    if cert.module:
+        try:
+            course_name = frappe.get_doc("LMS Module", cert.module).module_name
+        except Exception:
+            course_name = cert.module
+    elif getattr(cert, "learning_path", None):
+        try:
+            course_name = frappe.get_doc("LMS Learning Path", cert.learning_path).path_name or cert.learning_path
+        except Exception:
+            course_name = cert.learning_path
 
     html_template = ""
     
-    # 1. Prioritize the Module's currently selected template so admins can dynamically change designs
+    # 1. Prioritize entity's currently selected template so admins can dynamically change designs
     if cert.module:
         try:
             mod = frappe.get_doc("LMS Module", cert.module)
@@ -61,8 +78,16 @@ def get_certificate_html(certificate_name):
                     "LMS Certificate Template", mod.certificate_template, "html_template") or ""
         except Exception:
             pass
+    elif getattr(cert, "learning_path", None):
+        try:
+            lp = frappe.get_doc("LMS Learning Path", cert.learning_path)
+            if getattr(lp, "certificate_template", None):
+                html_template = frappe.db.get_value(
+                    "LMS Certificate Template", lp.certificate_template, "html_template") or ""
+        except Exception:
+            pass
 
-    # 2. Fallback to the template saved on the certificate if the module doesn't have one
+    # 2. Fallback to the template saved on the certificate if entity doesn't have one
     if not html_template and cert.template:
         try:
             html_template = frappe.db.get_value(
@@ -82,16 +107,18 @@ def get_certificate_html(certificate_name):
         except Exception:
             issue_date = str(target_date)
 
-    score_val = str(int(cert.score)) if cert.score else "N/A"
+    score_val = str(int(cert.score)) if cert.score is not None and cert.score >= 0 else "N/A"
     cert_id   = cert.name
     
     # 3. Fetch Signature
-    signature_html = get_signature_html(cert.module)
+    signature_html = get_signature_html(module_name=cert.module, learning_path_name=getattr(cert, "learning_path", None))
 
     # ── Replace placeholders ──────────────────────────────────────────────────
     html_body = html_template
     html_body = html_body.replace("{{learner_name}}",   frappe.utils.escape_html(learner_name))
-    html_body = html_body.replace("{{module_name}}",    frappe.utils.escape_html(module_name))
+    html_body = html_body.replace("{{module_name}}",    frappe.utils.escape_html(course_name))
+    html_body = html_body.replace("{{course_name}}",    frappe.utils.escape_html(course_name))
+    html_body = html_body.replace("{{path_name}}",      frappe.utils.escape_html(course_name))
     html_body = html_body.replace("{{date}}",           frappe.utils.escape_html(issue_date))
     html_body = html_body.replace("{{score}}",          frappe.utils.escape_html(score_val))
     html_body = html_body.replace("{{certificate_id}}", frappe.utils.escape_html(cert_id))
@@ -202,3 +229,25 @@ def generate_pdf_worker(certificate_name, **kwargs):
             os.remove(tmp_html_path)
         if 'tmp_pdf_path' in locals() and os.path.exists(tmp_pdf_path):
             os.remove(tmp_pdf_path)
+
+
+@frappe.whitelist(allow_guest=False)
+def download_certificate_pdf(certificate_name):
+    if not certificate_name:
+        frappe.throw("Certificate name is required")
+        
+    cert = frappe.get_doc("LMS Certificate", certificate_name)
+    if not cert.pdf_file_url or cert.pdf_status != "Completed":
+        generate_pdf_worker(certificate_name)
+        cert.reload()
+        
+    if cert.pdf_file_url:
+        file_name = frappe.db.get_value("File", {"file_url": cert.pdf_file_url}, "name")
+        if file_name:
+            file_doc = frappe.get_doc("File", file_name)
+            frappe.response['type'] = 'binary'
+            frappe.response['filename'] = file_doc.file_name
+            frappe.response['filecontent'] = file_doc.get_content()
+            return
+    frappe.throw("Could not generate or locate certificate PDF")
+

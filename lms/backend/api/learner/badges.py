@@ -239,15 +239,18 @@ def get_learner_badges(user_id=None):
             progress, label, dependency_msg = evaluator.evaluate(b)
             progress = int(round(progress))
             if progress >= 100:
-                doc = frappe.get_doc({
-                    "doctype": "LMS Learner Badge",
-                    "user": user,
-                    "badge": b.name,
-                    "awarded_on": today()
-                })
-                doc.insert(ignore_permissions=True)
-                newly_awarded.append(doc)
-                earned_map[b.name] = doc.awarded_on
+                if not frappe.db.exists("LMS Learner Badge", {"user": user, "badge": b.name}):
+                    doc = frappe.get_doc({
+                        "doctype": "LMS Learner Badge",
+                        "user": user,
+                        "badge": b.name,
+                        "awarded_on": today()
+                    })
+                    doc.insert(ignore_permissions=True)
+                    newly_awarded.append(doc)
+                    earned_map[b.name] = doc.awarded_on
+                else:
+                    earned_map[b.name] = frappe.db.get_value("LMS Learner Badge", {"user": user, "badge": b.name}, "awarded_on")
                 
                 results.append({
                     "id": b.name,

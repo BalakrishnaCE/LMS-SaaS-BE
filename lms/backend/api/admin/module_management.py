@@ -1072,7 +1072,7 @@ def get_module_learners(module_name):
     from frappe.utils import add_days, getdate, today
     
     # Fetch assignments
-    assignments = frappe.get_all("LMS Module Assignment", filters={"module": module_name}, fields=["name", "assignment_type", "duration"])
+    assignments = frappe.get_all("LMS Module Assignment", filters={"module": module_name}, fields=["name", "assignment_type", "duration", "creation"])
     
     # Build set of admin users to exclude (LMS-Admin or System Manager)
     admin_role_entries = frappe.get_all("Has Role", filters={"role": "LMS-Admin"}, pluck="parent", ignore_permissions=True)
@@ -1142,52 +1142,95 @@ def get_module_learners(module_name):
     # Create final map joining with commas
     user_team_map = {u: ", ".join(teams) for u, teams in user_team_map.items()}
     
-    trackers = frappe.get_all("LMS Module Tracker", filters={"module": module_name, "user": ["in", list(users.keys())]}, fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "modified", "modified_by", "completed_on"])
-    tracker_map = {t.user: t for t in trackers}
+    trackers = frappe.get_all(
+        "LMS Module Tracker", 
+        filters={"module": module_name, "user": ["in", list(users.keys())]}, 
+        fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "creation", "modified", "modified_by", "completed_on"],
+        order_by="modified desc"
+    )
+    tracker_map = {}
+    for t in trackers:
+        if t.user not in tracker_map:
+            tracker_map[t.user] = t
+        elif not tracker_map[t.user].started_on and t.started_on:
+            tracker_map[t.user] = t
 
-    # ── Resolve passing percentage and quiz submissions ───────────────────
+    # ── Discover all assessments/quizzes in the module ───────────────────────
     PASSING_PERCENTAGE = 60  # default fallback
-    quiz_name = None
-    try:
-        # Assessments are stored in the LMS Module Assessment child table
-        assessments = frappe.get_all(
-            "LMS Module Assessment",
-            filters={"parent": module_name, "parenttype": "LMS Module"},
-            fields=["assessment"],
-            limit=1
-        )
-        if assessments:
-            quiz_name = assessments[0].assessment
-            quiz_doc = frappe.get_doc("LMS Quiz", quiz_name)
-            if quiz_doc.passing_percentage and quiz_doc.passing_percentage > 0:
-                PASSING_PERCENTAGE = float(quiz_doc.passing_percentage)
-    except Exception:
-        pass
+    module_quizzes = []  # list of dicts: {"id": name, "title": title, "type": "Quiz"|"Assessment", "passing_percentage": float, "is_passing_required": bool}
+    seen_quiz_ids = set()
 
-    # Map user -> best quiz submission score (None if no submission)
-    submission_score_map = {}  # user -> score (0-100) or None
+    try:
+        mod_doc = frappe.get_doc("LMS Module", module_name)
+        if getattr(mod_doc, "certificate_passing_percentage", None):
+            PASSING_PERCENTAGE = float(mod_doc.certificate_passing_percentage)
+
+        # 1. From LMS Module Assessment child table
+        for ma in getattr(mod_doc, "assessments", []):
+            if ma.assessment and ma.assessment not in seen_quiz_ids and frappe.db.exists("LMS Quiz", ma.assessment):
+                q = frappe.get_doc("LMS Quiz", ma.assessment)
+                module_quizzes.append({
+                    "id": q.name,
+                    "title": q.title or q.name,
+                    "type": "Assessment",
+                    "passing_percentage": float(q.passing_percentage or PASSING_PERCENTAGE),
+                    "is_passing_required": bool(q.is_passing_required)
+                })
+                seen_quiz_ids.add(q.name)
+
+        # 2. From curriculum lessons -> chapters -> contents
+        for ml in getattr(mod_doc, "lessons", []):
+            if not ml.lesson or not frappe.db.exists("LMS Lesson", ml.lesson):
+                continue
+            les = frappe.get_doc("LMS Lesson", ml.lesson)
+            for ch in getattr(les, "chapters", []):
+                if not ch.chapter or not frappe.db.exists("LMS Chapter", ch.chapter):
+                    continue
+                chap = frappe.get_doc("LMS Chapter", ch.chapter)
+                for c in getattr(chap, "contents", []):
+                    quiz_ref = None
+                    q_type = "Quiz"
+                    if c.content_type == "LMS Quiz Content" and frappe.db.exists("LMS Quiz Content", c.content_reference):
+                        qc = frappe.get_doc("LMS Quiz Content", c.content_reference)
+                        quiz_ref = qc.quiz
+                        q_type = "Quiz"
+                    elif c.content_type == "LMS Assessment Content" and frappe.db.exists("LMS Assessment Content", c.content_reference):
+                        ac = frappe.get_doc("LMS Assessment Content", c.content_reference)
+                        quiz_ref = ac.assessment
+                        q_type = "Assessment"
+
+                    if quiz_ref and quiz_ref not in seen_quiz_ids and frappe.db.exists("LMS Quiz", quiz_ref):
+                        q = frappe.get_doc("LMS Quiz", quiz_ref)
+                        module_quizzes.append({
+                            "id": q.name,
+                            "title": q.title or q.name,
+                            "type": q_type,
+                            "passing_percentage": float(q.passing_percentage or PASSING_PERCENTAGE),
+                            "is_passing_required": bool(q.is_passing_required)
+                        })
+                        seen_quiz_ids.add(q.name)
+    except Exception as e:
+        frappe.log_error("Error discovering module quizzes", str(e))
+
+    # Map user -> list of submissions for module quizzes
     tracker_name_list = [t.name for t in trackers] if trackers else []
     tracker_name_to_user = {t.name: t.user for t in trackers} if trackers else {}
+    user_submissions_map = {}
 
-    if tracker_name_list:
-        # Fetch submissions for any quiz tied to this module's trackers
-        filters_dict = {"enrollment": ["in", tracker_name_list]}
-        if quiz_name:
-            filters_dict["quiz"] = quiz_name
-            
+    if tracker_name_list and module_quizzes:
+        quiz_ids = [q["id"] for q in module_quizzes]
         submissions = frappe.get_all(
             "LMS Quiz Submission",
-            filters=filters_dict,
-            fields=["enrollment", "score"]
+            filters={
+                "enrollment": ["in", tracker_name_list],
+                "quiz": ["in", quiz_ids]
+            },
+            fields=["enrollment", "quiz", "score", "passed"]
         )
-        # Keep the best (highest) score per tracker/enrollment
         for sub in submissions:
             user_key = tracker_name_to_user.get(sub.enrollment)
             if user_key:
-                current_best = submission_score_map.get(user_key)
-                sub_score = float(sub.score) if sub.score is not None else 0.0
-                if current_best is None or sub_score > current_best:
-                    submission_score_map[user_key] = sub_score
+                user_submissions_map.setdefault(user_key, []).append(sub)
 
     stats = {"totalAssigned": len(users), "notStarted": 0, "inProgress": 0, "completed": 0, "overdue": 0}
     needs_attention = {"overdueLearning": 0, "inactiveLearners": 0, "lowAssessmentScores": 0}
@@ -1218,12 +1261,15 @@ def get_module_learners(module_name):
             "lastActivity": None,
             "isOverdue": False,
             "needsAttention": False,
-            "hasAssessment": bool(quiz_name) or (user in submission_score_map),
-            "assignedDate": data.get("creation"),
-            "trackerName": tracker.name if tracker else None
+            "hasAssessment": bool(module_quizzes),
+            "assessmentSummary": None,
+            "assignedDate": str(data.get("creation")) if data.get("creation") else None,
+            "trackerName": tracker.name if tracker else None,
+            "startedOn": str(tracker.started_on or tracker.creation) if tracker and (tracker.started_on or tracker.creation) else (str(data.get("creation")) if data.get("creation") else None),
+            "completedOn": str(tracker.completed_on or tracker.modified) if tracker and tracker.status == "Completed" and (tracker.completed_on or tracker.modified) else None
         }
         
-        start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else None
+        start_dt = getdate(tracker.started_on or tracker.creation) if tracker and (tracker.started_on or tracker.creation) else (getdate(data.get("creation")) if data.get("creation") else None)
         if data.get("duration") and start_dt:
             due = add_days(start_dt, data["duration"])
             learner_info["dueDate"] = str(due)
@@ -1257,28 +1303,91 @@ def get_module_learners(module_name):
             else:
                 learner_info["lastActivity"] = None
 
-            # Score resolution — two-tier:
-            #   1. LMS Quiz Submission (accurate per-attempt record)
-            #   2. tracker.total_score fallback when status is Completed/Failed
-            #      (legacy path: score was written directly to the tracker)
-            submitted_score = submission_score_map.get(user)  # None if no submission record
-            if submitted_score is not None:
-                learner_info["score"] = float(submitted_score)
-                if learner_info["score"] < PASSING_PERCENTAGE:
-                    needs_attention["lowAssessmentScores"] += 1
-                    learner_info["needsAttention"] = True
-            elif tracker.status in ("Completed", "Failed") and tracker.total_score is not None and float(tracker.total_score) >= 0:
-                # Legacy: score stored only in tracker, not in a submission record
-                learner_info["score"] = float(tracker.total_score)
-                if learner_info["score"] < PASSING_PERCENTAGE:
-                    needs_attention["lowAssessmentScores"] += 1
-                    learner_info["needsAttention"] = True
-            else:
-                # If they completed the module but have absolutely no score,
-                # we don't treat it as "Failed: 0%", we just keep it as None (--)
-                learner_info["score"] = None  # Not attempted
+            # Assessment & score resolution across all module quizzes
+            user_subs = user_submissions_map.get(user, [])
+            quiz_best_map = {}
+            for s in user_subs:
+                qid = s.quiz
+                s_score = float(s.score) if s.score is not None else None
+                s_passed = bool(s.passed)
+                if qid not in quiz_best_map:
+                    quiz_best_map[qid] = {"score": s_score, "passed": s_passed, "attempts": 1}
+                else:
+                    quiz_best_map[qid]["attempts"] += 1
+                    curr_best = quiz_best_map[qid]["score"]
+                    if s_score is not None and (curr_best is None or s_score > curr_best):
+                        quiz_best_map[qid]["score"] = s_score
+                    if s_passed:
+                        quiz_best_map[qid]["passed"] = True
 
-            learner_info["passingPercentage"] = PASSING_PERCENTAGE
+            if module_quizzes:
+                learner_details = []
+                passed_count = 0
+                attempted_count = 0
+                failed_count = 0
+
+                for q_info in module_quizzes:
+                    qid = q_info["id"]
+                    sub_info = quiz_best_map.get(qid)
+                    pass_threshold = q_info["passing_percentage"]
+                    
+                    if sub_info and sub_info["attempts"] > 0:
+                        attempted_count += 1
+                        q_score = sub_info["score"]
+                        is_p = sub_info["passed"] or (q_score is not None and q_score >= pass_threshold)
+                        if is_p:
+                            passed_count += 1
+                            q_status = "Passed"
+                        else:
+                            failed_count += 1
+                            q_status = "Failed"
+                    else:
+                        q_score = None
+                        q_status = "Not Started"
+
+                    learner_details.append({
+                        "id": qid,
+                        "title": q_info["title"],
+                        "type": q_info["type"],
+                        "score": q_score,
+                        "passScore": pass_threshold,
+                        "status": q_status
+                    })
+
+                total_q = len(module_quizzes)
+                is_all_passed = (passed_count == total_q and total_q > 0)
+                is_any_failed = (failed_count > 0)
+
+                learner_info["assessmentSummary"] = {
+                    "total": total_q,
+                    "passed": passed_count,
+                    "attempted": attempted_count,
+                    "failed": failed_count,
+                    "isAllPassed": is_all_passed,
+                    "isAnyFailed": is_any_failed,
+                    "details": learner_details
+                }
+
+                if total_q == 1:
+                    learner_info["score"] = learner_details[0]["score"]
+                    learner_info["passingPercentage"] = module_quizzes[0]["passing_percentage"]
+                    if learner_info["score"] is not None and learner_info["score"] < learner_info["passingPercentage"]:
+                        needs_attention["lowAssessmentScores"] += 1
+                        learner_info["needsAttention"] = True
+                else:
+                    if attempted_count > 0:
+                        learner_info["score"] = float(tracker.total_score) if tracker and tracker.total_score is not None and float(tracker.total_score) >= 0 else None
+                    else:
+                        learner_info["score"] = None
+                    learner_info["passingPercentage"] = PASSING_PERCENTAGE
+                    if attempted_count > 0 and (is_any_failed or (learner_info["score"] is not None and learner_info["score"] < PASSING_PERCENTAGE)):
+                        needs_attention["lowAssessmentScores"] += 1
+                        learner_info["needsAttention"] = True
+            else:
+                learner_info["hasAssessment"] = False
+                learner_info["assessmentSummary"] = None
+                learner_info["score"] = None
+                learner_info["passingPercentage"] = PASSING_PERCENTAGE
 
             if tracker.status == "Completed":
                 stats["completed"] += 1
