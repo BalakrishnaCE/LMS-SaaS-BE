@@ -267,11 +267,11 @@ def get_learner_summary(timeframe="month"):
     }
 
 @frappe.whitelist()
-def get_learner_path_summary():
+def get_learner_path_summary(user=None):
     """
     Returns a summary of the current learner's dashboard stats specifically for Learning Paths.
     """
-    user = frappe.session.user
+    user = user or frappe.session.user
     
     # Get all learning path trackers for the user
     trackers = frappe.get_all(
@@ -289,8 +289,7 @@ def get_learner_path_summary():
     if scored_trackers:
         average_score = sum(t.total_score for t in scored_trackers) / len(scored_trackers)
         
-    # Certificates earned: currently paths do not issue certificates, 
-    # but we can count certificates earned for modules within these assigned paths.
+    # Certificates earned: count certificates earned for modules within these assigned paths, plus learning path certificates
     certificates_earned = 0
     if trackers:
         path_names = [t.learning_path for t in trackers]
@@ -303,7 +302,10 @@ def get_learner_path_summary():
         if path_courses:
             module_names = list(set([pc.module for pc in path_courses if pc.module]))
             if module_names:
-                certificates_earned = frappe.db.count("LMS Certificate", {"user": user, "module": ("in", module_names), "is_valid": 1})
+                certificates_earned = frappe.db.count("LMS Certificate", {"user": user, "module": ("in", module_names), "status": ("in", ["Issued", "Reissued"])})
+        # Add certificates directly issued for these learning paths
+        lp_certs = frappe.db.count("LMS Certificate", {"user": user, "learning_path": ("in", path_names), "status": ("in", ["Issued", "Reissued"])})
+        certificates_earned += lp_certs
 
     # Recently Completed Paths
     recently_completed = []
@@ -314,14 +316,36 @@ def get_learner_path_summary():
     )[:3]
     
     for t in recent_completed_trackers:
-        path_title = frappe.get_value("LMS Learning Path", t.learning_path, "path_name")
+        path_title = frappe.get_value("LMS Learning Path", t.learning_path, "path_name") or t.learning_path
         score = round(t.total_score) if t.total_score is not None else 100
+        
+        # Check if certificate exists for this learning path
+        cert_name = frappe.db.get_value(
+            "LMS Certificate",
+            {"user": user, "learning_path": t.learning_path, "status": ("in", ["Issued", "Reissued"])},
+            "name"
+        )
+        if not cert_name:
+            # Check if this learning path has certificate enabled and learner is eligible
+            try:
+                tracker_doc = frappe.get_doc("LMS Learning Path Tracker", t.name)
+                tracker_doc.issue_lp_certificate_if_eligible()
+                cert_name = frappe.db.get_value(
+                    "LMS Certificate",
+                    {"user": user, "learning_path": t.learning_path, "status": ("in", ["Issued", "Reissued"])},
+                    "name"
+                )
+            except Exception:
+                pass
+
+        pdf_url = f"/api/method/lms.backend.api.common.certificate.download_certificate_pdf?certificate_name={cert_name}" if cert_name else None
+
         recently_completed.append({
             "id": t.learning_path,
             "title": path_title,
             "completedDate": frappe.utils.getdate(t.modified).strftime("%b %d"),
             "score": score,
-            "pdfUrl": None
+            "pdfUrl": pdf_url
         })
         
     return {

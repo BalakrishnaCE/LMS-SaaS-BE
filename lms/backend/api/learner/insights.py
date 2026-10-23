@@ -115,7 +115,8 @@ def get_recently_assigned():
             if not p_doc:
                 continue
             title = p_doc.path_name or a["learning_id"]
-            cat = "Curriculum"
+            cats = frappe.get_all("LMS Module Category", filters={"parent": a["learning_id"]}, pluck="category", order_by="idx asc")
+            cat = ", ".join(dict.fromkeys(c for c in cats if c)) if cats else "General"
             trackers = frappe.get_all("LMS Learning Path Tracker", filters={"learning_path": a["learning_id"], "status": ("!=", "Unassigned")}, fields=["status"])
             total_assigned = len(trackers)
             completed = len([t for t in trackers if t.status == "Completed"])

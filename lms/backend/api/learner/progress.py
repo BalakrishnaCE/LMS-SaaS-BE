@@ -344,10 +344,11 @@ def update_content_progress(module, content_reference, content_type=None, status
             existing_cp.is_completed = 1
             
 
-    # If the tracker was previously marked "Unassigned" (admin unassign sentinel),
-    # reset it so Frappe's Select validation doesn't reject the save.
-    if tracker_doc.status == "Unassigned":
-        tracker_doc.status = "In Progress"
+    # If the tracker was previously marked "Unassigned" or "Not started",
+    # transition to "In Progress" and set started_on as soon as the learner begins
+    if tracker_doc.status in ["Unassigned", "Not started"] or not tracker_doc.started_on:
+        if tracker_doc.status in ["Unassigned", "Not started"]:
+            tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
     tracker_doc.flags.ignore_version = True
@@ -443,10 +444,11 @@ def heartbeat(module, content_reference, content_type, current_position=0, total
     tracker_doc = frappe.get_doc("LMS Module Tracker", tracker_name)
     needs_save = False
 
-    # If the tracker was previously marked "Unassigned" (admin unassign sentinel),
-    # reset it so Frappe's Select validation doesn't reject the save.
-    if tracker_doc.status == "Unassigned":
-        tracker_doc.status = "In Progress"
+    # If the tracker was previously marked "Unassigned" or "Not started",
+    # transition to "In Progress" and set started_on as soon as the learner begins
+    if tracker_doc.status in ["Unassigned", "Not started"] or not tracker_doc.started_on:
+        if tracker_doc.status in ["Unassigned", "Not started"]:
+            tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
         needs_save = True
@@ -515,10 +517,11 @@ def submit_interaction_response(module, content_reference, interaction_id, inter
     })
 
 
-    # If the tracker was previously marked "Unassigned" (admin unassign sentinel),
-    # reset it so Frappe's Select validation doesn't reject the save.
-    if tracker_doc.status == "Unassigned":
-        tracker_doc.status = "In Progress"
+    # If the tracker was previously marked "Unassigned" or "Not started",
+    # transition to "In Progress" and set started_on as soon as the learner begins
+    if tracker_doc.status in ["Unassigned", "Not started"] or not tracker_doc.started_on:
+        if tracker_doc.status in ["Unassigned", "Not started"]:
+            tracker_doc.status = "In Progress"
         if not tracker_doc.started_on:
             tracker_doc.started_on = frappe.utils.now_datetime()
     tracker_doc.flags.ignore_version = True

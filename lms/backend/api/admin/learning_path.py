@@ -616,9 +616,15 @@ def get_lp_learners(path_id):
     trackers = frappe.get_all(
         "LMS Learning Path Tracker",
         filters={"learning_path": path_id, "user": ["in", list(users.keys())]},
-        fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "completed_on", "modified", "modified_by"]
+        fields=["name", "user", "status", "progress_percentage", "total_score", "started_on", "completed_on", "creation", "modified", "modified_by"],
+        order_by="modified desc"
     )
-    tracker_map = {t.user: t for t in trackers}
+    tracker_map = {}
+    for t in trackers:
+        if t.user not in tracker_map:
+            tracker_map[t.user] = t
+        elif not tracker_map[t.user].started_on and t.started_on:
+            tracker_map[t.user] = t
 
     stats = {"totalAssigned": len(users), "notStarted": 0, "inProgress": 0, "completed": 0, "overdue": 0}
     results = []
@@ -645,11 +651,13 @@ def get_lp_learners(path_id):
             "needsAttention": False,
             "hasAssessment": has_assessment,
             "assignedDate": str(data.get("creation")) if data.get("creation") else None,
-            "trackerName": tracker.name if tracker else None
+            "trackerName": tracker.name if tracker else None,
+            "startedOn": str(tracker.started_on or tracker.creation) if tracker and (tracker.started_on or tracker.creation) else (str(data.get("creation")) if data.get("creation") else None),
+            "completedOn": str(tracker.completed_on or tracker.modified) if tracker and tracker.status == "Completed" and (tracker.completed_on or tracker.modified) else None
         }
 
         # Due date calculation
-        start_dt = getdate(tracker.started_on) if tracker and tracker.started_on else (getdate(data.get("creation")) if data.get("creation") else None)
+        start_dt = getdate(tracker.started_on or tracker.creation) if tracker and (tracker.started_on or tracker.creation) else (getdate(data.get("creation")) if data.get("creation") else None)
         if data.get("duration") and start_dt:
             due = add_days(start_dt, data["duration"])
             learner_info["dueDate"] = str(due)

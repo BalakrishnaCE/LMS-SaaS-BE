@@ -179,8 +179,11 @@ class LMSModuleTracker(Document):
 
 			if is_pending_eval:
 				target_status = "In Progress"
-			elif module_doc.is_score_required and scored_items > 0:
-				target_status = "Failed" if self.total_score < passing_score else "Completed"
+			elif completed_items < total_items:
+				# All content was submitted, but one or more scored items failed passing threshold
+				target_status = "Failed"
+			elif module_doc.is_score_required and scored_items > 0 and self.total_score < passing_score:
+				target_status = "Failed"
 			else:
 				target_status = "Completed"
 
@@ -188,19 +191,42 @@ class LMSModuleTracker(Document):
 				self.status = target_status
 				if target_status == "Completed":
 					self.completed_on = frappe.utils.now_datetime()
+				else:
+					self.completed_on = None
+			elif target_status != "Completed":
+				self.completed_on = None
+
+			if not self.started_on:
+				self.started_on = self.completed_on or frappe.utils.now_datetime()
 		else:
 			if self.progress_percentage > 0 or len(self.get("content_progress", [])) > 0:
 				if self.status != "In Progress":
 					self.status = "In Progress"
-					
-			# Always revoke certificates if progress is below 100%
-			certs = frappe.get_all("LMS Certificate", filters={"enrollment": self.name, "status": ("in", ["Issued", "Reissued"])})
+				if not self.started_on:
+					self.started_on = frappe.utils.now_datetime()
+			self.completed_on = None
+
+		# Always revoke certificates if tracker is not Completed or progress is below 100%
+		if self.status != "Completed" or (self.progress_percentage or 0) < 100:
+			certs = frappe.get_all(
+				"LMS Certificate",
+				filters={
+					"status": ("in", ["Issued", "Reissued"]),
+					"user": self.user,
+					"module": self.module,
+				}
+			)
+			if not certs and self.name:
+				certs = frappe.get_all(
+					"LMS Certificate",
+					filters={"enrollment": self.name, "status": ("in", ["Issued", "Reissued"])}
+				)
 			for c in certs:
 				frappe.db.set_value("LMS Certificate", c.name, {
 					"status": "Revoked",
 					"revocation_reason": "Certification requirements changed",
-					"custom_revocation_reason": "Module content was updated. Learner must complete the new requirements to regain certification.",
-					"revoked_by": frappe.session.user,
+					"custom_revocation_reason": "Module requirements not met or quiz not passed. Learner must complete all requirements to regain certification.",
+					"revoked_by": frappe.session.user if frappe.session and frappe.session.user else "Administrator",
 					"revoked_on": frappe.utils.now_datetime()
 				})
 
@@ -229,6 +255,9 @@ class LMSModuleTracker(Document):
 			self.issue_certificate_if_eligible()
 
 	def issue_certificate_if_eligible(self):
+		if self.status != "Completed" or (self.progress_percentage or 0) < 100:
+			return
+
 		module = frappe.get_doc("LMS Module", self.module)
 		if not module.enable_certificate:
 			return

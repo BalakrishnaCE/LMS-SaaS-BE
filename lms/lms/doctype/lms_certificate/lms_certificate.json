@@ -10,7 +10,9 @@
  "field_order": [
   "user",
   "module",
+  "learning_path",
   "enrollment",
+  "lp_tracker",
   "template",
   "score",
   "pdf_status",
@@ -21,7 +23,8 @@
   "revocation_reason",
   "custom_revocation_reason",
   "revoked_by",
-  "revoked_on"
+  "revoked_on",
+  "is_claimed"
  ],
  "fields": [
   {
@@ -39,31 +42,48 @@
    "in_list_view": 1,
    "label": "Module",
    "options": "LMS Module",
-   "reqd": 1,
-   "description": "The module they completed."
+   "reqd": 0,
+   "description": "The module they completed. Mutually exclusive with learning_path."
+  },
+  {
+   "fieldname": "learning_path",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Learning Path",
+   "options": "LMS Learning Path",
+   "reqd": 0,
+   "description": "The learning path they completed. Mutually exclusive with module."
   },
   {
    "fieldname": "enrollment",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Enrollment",
+   "label": "Enrollment (Module Tracker)",
    "options": "LMS Module Tracker",
-   "reqd": 1,
-   "description": "Links to the learner's completion record. Used to fetch score and completion date."
+   "reqd": 0,
+   "description": "Links to the learner's module completion record."
+  },
+  {
+   "fieldname": "lp_tracker",
+   "fieldtype": "Link",
+   "label": "Enrollment (LP Tracker)",
+   "options": "LMS Learning Path Tracker",
+   "reqd": 0,
+   "description": "Links to the learner's learning path completion record."
   },
   {
    "fieldname": "template",
    "fieldtype": "Link",
    "label": "Template",
    "options": "LMS Certificate Template",
-   "reqd": 1,
+   "reqd": 0,
    "description": "Which design template was used."
   },
   {
    "fieldname": "score",
    "fieldtype": "Float",
    "label": "Score",
-   "description": "The learner's final score. Auto-fetched from LMS Module Tracker."
+   "description": "The learner's final score."
   },
   {
    "fieldname": "pdf_status",
@@ -87,7 +107,7 @@
    "fieldname": "certificate_pdf",
    "fieldtype": "Attach",
    "label": "Certificate PDF",
-   "description": "The generated PDF file of the certificate. Backend generates this using the HTML template and attaches it here automatically."
+   "description": "The generated PDF file of the certificate."
   },
   {
    "default": "Issued",
@@ -129,7 +149,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 11:00:51.815362",
+ "modified": "2026-10-20 06:00:00.000000",
  "modified_by": "Administrator",
  "module": "LMS",
  "name": "LMS Certificate",
